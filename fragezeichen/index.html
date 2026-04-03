@@ -8,7 +8,6 @@
     <style>
         body {
             font-family: 'Courier New', Courier, monospace;
-            /* Mysteriöser Look */
             background-color: #1a1a1a;
             color: #f0f0f0;
             display: flex;
@@ -23,27 +22,20 @@
         h1 {
             font-size: 2.5rem;
             margin-bottom: 20px;
-            /* Hintergrundfarbe der Überschrift entfernen, falls vorhanden */
             background: none;
         }
 
-        /* Die einzelnen Farben */
         .color-blue {
             color: #0056b3;
-            /* Ein kräftiges Blau */
         }
 
         .color-white {
             color: #ffffff;
-            /* Weiß */
-            /* Optional: Weiß auf dunklem Hintergrund schwer lesbar? 
-       Dann einen leichten Schatten hinzufügen: */
             text-shadow: 0 0 2px #000;
         }
 
         .color-red {
             color: #d32f2f;
-            /* Ein kräftiges Rot */
         }
 
         .container {
@@ -55,28 +47,18 @@
             box-shadow: 0 0 20px rgba(255, 204, 0, 0.2);
         }
 
-        /* Container um das Ergebnis */
         #result {
-            /* margin-top: 30px; */
-            min-height: 350px;
-            /* Erhöht von 150px auf 350px */
-            min-width: 450px;
-            /* Erhöht von 150px auf 350px */
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
         }
 
-        /* Der Spotify Player selbst */
         iframe {
             border-radius: 12px;
             width: 100%;
-            /* 100% der Container-Breite */
             max-width: 500px;
-            /* Erhöht von 400px auf 500px */
             height: 380px;
-            /* Erhöht von 152px auf 380px */
             border: none;
         }
 
@@ -102,8 +84,6 @@
     </div>
 
     <script>
-        // HIER DEINE LINKS EINFÜGEN
-        // Ersetze die Beispiel-Links mit den echten Spotify-Links deiner Alben
         const albumLinks = [
             "https://open.spotify.com/embed/album/4N9tvSjWfZXx3eHKblYEWQ",
             "https://open.spotify.com/embed/album/0xldqK4Ocdt8dwQSxUzt6x",
@@ -324,7 +304,26 @@
             "https://open.spotify.com/embed/album/2WwOKZLpFWrvw3O9CISod1",
             "https://open.spotify.com/embed/album/6ewdyVIW2LurJhYGU0UBAa",
             "https://open.spotify.com/embed/album/01i4iyB40EU7Qgd6EgKoZt",
-            "https://open.spotify.com/embed/album/1KpVSqapKAUAtAepWWxPWs"
+            "https://open.spotify.com/embed/album/1KpVSqapKAUAtAepWWxPWs",
+            "https://open.spotify.com/embed/album/3o2Gwvg8lqLNRnlV1v1s5K",
+            "https://open.spotify.com/embed/album/451jKBwuSNrNgLlqEAZfra",
+            "https://open.spotify.com/embed/album/7JhdaReI98XYFrzb3jJPFa",
+            "https://open.spotify.com/embed/album/0FuC7q4bJG41g1naKBx4ot",
+            "https://open.spotify.com/embed/album/3Sv5tE8PcAlGY6Ys2ISQXF",
+            "https://open.spotify.com/embed/album/2CMXywsh8wVXXCmr2bLTZ6",
+            "https://open.spotify.com/embed/album/6sNAlohza1ZTWVMGhFTGJW",
+            "https://open.spotify.com/embed/album/6SMOmIWODrO1gND2YPpjHf",
+            "https://open.spotify.com/embed/album/154I9rUwPuFHj6snU4amYg",
+            "https://open.spotify.com/embed/album/6isiJbL3hh7e60KigIgKuY",
+            "https://open.spotify.com/embed/album/1Qnn3AAN3Nquv7GlNk41YQ",
+            "https://open.spotify.com/embed/album/0qZ0R61AqoD2i8GnzUk91C",
+            "https://open.spotify.com/embed/album/4sQsFeHojdbFPB07vSg3Rd",
+            "https://open.spotify.com/embed/album/031exGT0P6IWBYY6faqoLV",
+            "https://open.spotify.com/embed/album/09pBOlMa7AxGh1JbdXmrgc",
+            "https://open.spotify.com/embed/album/5yCEzMfmMnSG97SXDFGjR8",
+            "https://open.spotify.com/embed/album/1IkEurD7s47M9ukevi0bWA",
+            "https://open.spotify.com/embed/album/7pkVk9UgZBBcc2D2ySHaRM",
+            "https://open.spotify.com/embed/album/00Pxqrupz6xjkI0vd4Otxb",
         ];
 
         const resultDiv = document.getElementById('result');
