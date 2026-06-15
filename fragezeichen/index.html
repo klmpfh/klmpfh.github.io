@@ -19,25 +19,6 @@
             text-align: center;
         }
 
-        h1 {
-            font-size: 2.5rem;
-            margin-bottom: 20px;
-            background: none;
-        }
-
-        .color-blue {
-            color: #0056b3;
-        }
-
-        .color-white {
-            color: #ffffff;
-            text-shadow: 0 0 2px #000;
-        }
-
-        .color-red {
-            color: #d32f2f;
-        }
-
         .container {
             max-width: 600px;
             padding: 20px;
@@ -54,23 +35,35 @@
             justify-content: center;
         }
 
-        iframe {
-            border-radius: 12px;
-            width: 100%;
-            max-width: 500px;
-            height: 380px;
-            border: none;
+        .spotify-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            background-color: #1DB954;
+            color: #000;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 1.1rem;
+            font-weight: bold;
+            text-decoration: none;
+            padding: 14px 28px;
+            border-radius: 50px;
+            margin-top: 16px;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        .spotify-link:hover {
+            background-color: #1ed760;
+            transform: scale(1.04);
+        }
+
+        .spotify-logo {
+            width: 28px;
+            height: 28px;
         }
     </style>
 </head>
 
 <body>
-
-    <h1>
-        <span class="color-blue">?</span>
-        <span class="color-white">?</span>
-        <span class="color-red">?</span>
-    </h1>
 
     <div class="container">
         <div id="result">
@@ -318,6 +311,7 @@
             "https://open.spotify.com/embed/album/1IkEurD7s47M9ukevi0bWA",
             "https://open.spotify.com/embed/album/7pkVk9UgZBBcc2D2ySHaRM",
             "https://open.spotify.com/embed/album/00Pxqrupz6xjkI0vd4Otxb",
+            "https://open.spotify.com/embed/album/2mh0BDhRAJFa7clABwut3L", // 239
         ];
 
         const resultDiv = document.getElementById('result');
@@ -326,10 +320,36 @@
         const randomIndex = Math.floor(Math.random() * albumLinks.length);
         const selectedLink = albumLinks[randomIndex];
 
-        // HTML für den Spotify Player erstellen
-        resultDiv.innerHTML = `
-                <iframe style="border-radius:12px" src="${selectedLink}" width="100%" frameBorder="0" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
-            `;
+        // Embed-URL → Album-ID → direkter Spotify-Link
+        const albumId = selectedLink.split('/album/')[1];
+        const spotifyUrl = `https://open.spotify.com/album/${albumId}`;
+
+        const spotifyLogoSvg = `<svg class="spotify-logo" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.494 17.278a.75.75 0 0 1-1.032.25c-2.824-1.726-6.376-2.116-10.564-1.16a.75.75 0 1 1-.334-1.462c4.582-1.047 8.512-.597 11.68 1.34a.75.75 0 0 1 .25 1.032zm1.466-3.26a.938.938 0 0 1-1.29.308c-3.23-1.985-8.154-2.56-11.974-1.402a.937.937 0 1 1-.544-1.794c4.368-1.325 9.8-.683 13.5 1.598a.937.937 0 0 1 .308 1.29zm.126-3.395c-3.873-2.3-10.262-2.511-13.953-1.39a1.124 1.124 0 1 1-.652-2.151c4.243-1.287 11.297-1.038 15.752 1.608a1.124 1.124 0 0 1-1.147 1.933z"/>
+        </svg>`;
+
+        // Albumtitel und Coverbild über oEmbed laden
+        fetch(`https://open.spotify.com/oembed?url=${spotifyUrl}`)
+            .then(r => r.json())
+            .then(data => {
+                resultDiv.innerHTML = `
+                    <img src="${data.thumbnail_url}" alt="${data.title}" style="width:220px;height:220px;border-radius:10px;object-fit:cover;margin-bottom:14px;box-shadow:0 4px 20px rgba(0,0,0,0.5);">
+                    <p style="margin:0 0 14px;font-size:1rem;font-weight:bold;">${data.title}</p>
+                    <a class="spotify-link" href="${spotifyUrl}" target="_blank" rel="noopener">
+                        ${spotifyLogoSvg}
+                        In Spotify öffnen
+                    </a>
+                `;
+            })
+            .catch(() => {
+                // Fallback ohne Bild/Titel
+                resultDiv.innerHTML = `
+                    <a class="spotify-link" href="${spotifyUrl}" target="_blank" rel="noopener">
+                        ${spotifyLogoSvg}
+                        In Spotify öffnen
+                    </a>
+                `;
+            });
 
     </script>
 </body>
