@@ -1,7 +1,124 @@
 <!DOCTYPE html>
-<html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>klmpfh</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #111;
+            color: #ccc;
+            min-height: 100vh;
+            padding: 60px 24px;
+        }
+
+        header {
+            margin-bottom: 48px;
+        }
+
+        header h1 {
+            font-size: 2.1rem;
+            letter-spacing: 6px;
+            text-transform: uppercase;
+        }
+
+        header h1 span {
+            transition: color 1.5s ease;
+        }
+
+        ul {
+            list-style: none;
+            max-width: 560px;
+        }
+
+        li {
+            padding: 24px 0;
+            border-top: 1px solid #222;
+        }
+
+        li:last-child {
+            border-bottom: 1px solid #222;
+        }
+
+        a {
+            color: #eee;
+            text-decoration: none;
+            font-size: 1.1rem;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+
+        a:hover {
+            color: #fff;
+            text-decoration: underline;
+        }
+
+        p {
+            margin-top: 6px;
+            font-size: 0.85rem;
+            color: #666;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+
 <body>
-<h1>Hello World</h1>
-<p>I'm hosted with GitHub Pages.</p>
+    <header>
+        <h1 id="title"></h1>
+    </header>
+
+    <script>
+        const letters = 'klmpfh'.split('');
+        const h1 = document.getElementById('title');
+
+        const colors = [
+            '#e05', '#e80', '#0b8', '#08e', '#a3e', '#e43',
+            '#0cc', '#c0c', '#cc0', '#f66', '#6f6', '#66f'
+        ];
+
+        function randomColor() {
+            return colors[Math.floor(Math.random() * colors.length)];
+        }
+
+        letters.forEach(l => {
+            const span = document.createElement('span');
+            span.textContent = l;
+            span.style.color = randomColor();
+            h1.appendChild(span);
+
+            function cycle() {
+                const delay = 1400 + Math.random() * 800;
+                setTimeout(() => {
+                    span.style.color = randomColor();
+                    cycle();
+                }, delay);
+            }
+            cycle();
+        });
+    </script>
+
+    <ul>
+        <li>
+            <a href="/fragezeichen/">??? Album</a>
+            <p>Zeigt ein zufälliges Spotify-Album aus einer kuratierten Liste.</p>
+        </li>
+        <li>
+            <a href="/laserfeelings/">Laser &amp; Feelings</a>
+            <p>Szenario-Generator für das Sci-Fi-Rollenspiel Laser &amp; Feelings – würfelt Bedrohungen, Ziele und Konsequenzen.</p>
+        </li>
+        <li>
+            <a href="/zauberkloppen/">Zaubern &amp; Kloppen</a>
+            <p>Szenario-Generator für Fantasy-Rollenspiele – würfelt Antagonisten, Pläne und Konsequenzen im mittelalterlichen Setting.</p>
+        </li>
+    </ul>
 </body>
+
 </html>
