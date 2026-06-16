@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laser &amp; Feelings – Szenario-Generator</title>
+    <style>
+        * {
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #141a14;
+            color: #a8bfa8;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            color: #7aab7a;
+            font-size: 1.6rem;
+            margin-bottom: 6px;
+            text-align: center;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+        }
+
+        .subtitle {
+            color: #4d6b4d;
+            font-size: 0.85rem;
+            margin-bottom: 30px;
+            text-align: center;
+            letter-spacing: 2px;
+        }
+
+        .container {
+            max-width: 600px;
+            width: 100%;
+            padding: 28px;
+            border: 2px solid #3d5c3d;
+            border-radius: 0;
+            background-color: #1a211a;
+            box-shadow: 0 0 16px rgba(80, 120, 80, 0.1);
+        }
+
+        .scenario {
+            font-size: 1.15rem;
+            line-height: 2.2;
+            text-align: center;
+            margin-bottom: 28px;
+        }
+
+        .scenario .label {
+            color: #4d6b4d;
+            font-size: 0.75rem;
+            display: block;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-top: 12px;
+        }
+
+        .scenario .value {
+            color: #8fba8f;
+            font-weight: bold;
+            font-size: 1.2rem;
+            display: block;
+        }
+
+        .dice {
+            font-size: 0.75rem;
+            color: #3d5c3d;
+            letter-spacing: 2px;
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            background-color: #3d5c3d;
+            color: #c8d8c8;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 1rem;
+            font-weight: bold;
+            border: none;
+            padding: 14px 0;
+            border-radius: 0;
+            cursor: pointer;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            transition: background-color 0.15s;
+        }
+
+        .btn:hover {
+            background-color: #4d724d;
+        }
+
+        .btn:active {
+            background-color: #2e462e;
+        }
+
+        .separator {
+            border: none;
+            border-top: 1px solid #2a3a2a;
+            margin: 16px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Laser &amp; Feelings</h1>
+    <p class="subtitle">Szenario-Generator</p>
+
+    <div class="container">
+        <div class="scenario" id="scenario"></div>
+        <hr class="separator">
+        <button class="btn" onclick="roll()">&#9654; Neu würfeln</button>
+    </div>
+
+    <script>
+        const threats = [
+            "Zorgon, galaktische Tyrannin",
+            "eine endlose Kriegsflotte aus dem Nebel",
+            "eine verräterische Kapitänin auf Rachefeldzug",
+            "eine gnadenlose Piratenflotte",
+            "bewusstlose Maschinensoldatinnen",
+            "Parasitinnen, die fremde Körper übernehmen",
+            "die Sterneninquisition",
+            "die mutierte KI NEXUS",
+            "dimensionsreisende Söldnerinnen",
+            "die dunkle Sekte der Leere",
+            "eine Parasiten-Kolonie aus dem All",
+            "die unsterbliche Kriegsherrin Keth'ar"
+        ];
+
+        const wants = [
+            "auslöschen und verseuchen",
+            "rauben und entführen",
+            "fusionieren mit",
+            "unter ihren Schutz stellen",
+            "aus dem Nichts erschaffen",
+            "unterwerfen und in Besitz nehmen",
+            "erwecken / entfesseln",
+            "klonen / replizieren",
+            "sabotieren / infiltrieren",
+            "verbannen / versiegeln",
+            "verschmelzen mit",
+            "kontrollieren / manipulieren"
+        ];
+
+        const targets = [
+            "die Anführerin der Weltraumpiraten",
+            "uralte Kristalle aus der Leere",
+            "ein gewaltiges Schlachtschiff",
+            "einen instabilen Quantentunnel",
+            "eine vergessene Ruine im tiefen All",
+            "ein rätselhaftes außerirdisches Objekt",
+            "die letzte galaktische Flotte",
+            "den Gedächtniskristall der Götter",
+            "die sterbende Sonne",
+            "die KI-Prophetin ORACLE",
+            "den Nexus aller Dimensionen",
+            "die eingefrorene Zeit"
+        ];
+
+        const consequences = [
+            "ein ganzes Sonnensystem auslöschen wird",
+            "den Lauf der Zeit umkehren wird",
+            "die Bevölkerung eines Planeten versklaven wird",
+            "einen galaktischen Krieg entfachen wird",
+            "das Gewebe der Realität zerreißen wird",
+            "auf wundersame Weise alles heilen wird",
+            "das Universum neu erschaffen wird",
+            "alle Lebewesen in Energie auflösen wird",
+            "eine neue dominierende Spezies erschaffen wird",
+            "den Tod für immer abschaffen wird",
+            "alle Erinnerungen im All löschen wird",
+            "zwei Galaxien zum Kollaps bringen wird"
+        ];
+
+        function d12() {
+            return Math.floor(Math.random() * 12);
+        }
+
+        function roll() {
+            const t = d12(), w = d12(), g = d12(), k = d12();
+
+            document.getElementById('scenario').innerHTML = `
+                <span class="label">Bedrohung</span>
+                <span class="value">${threats[t]}</span>
+
+                <span class="label">will</span>
+                <span class="value">${wants[w]}</span>
+
+                <span class="label">…</span>
+                <span class="value">${targets[g]}</span>
+
+                <span class="label">was</span>
+                <span class="value">${consequences[k]}</span>
+
+                <span class="dice" style="margin-top:18px;">
+                    [W12: ${(t+1).toString().padStart(2,'0')}] [W12: ${(w+1).toString().padStart(2,'0')}] [W12: ${(g+1).toString().padStart(2,'0')}] [W12: ${(k+1).toString().padStart(2,'0')}]
+                </span>
+            `;
+        }
+
+        roll();
+    </script>
+</body>
+
+</html>
