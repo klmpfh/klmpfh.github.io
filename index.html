@@ -18,10 +18,14 @@
             color: #ccc;
             min-height: 100vh;
             padding: 60px 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         header {
             margin-bottom: 48px;
+            text-align: center;
         }
 
         header h1 {
@@ -40,12 +44,13 @@
         }
 
         li {
-            padding: 24px 0;
-            border-top: 1px solid #222;
+            padding: 20px 24px;
+            margin-bottom: 10px;
+            border-radius: 8px;
         }
 
         li:last-child {
-            border-bottom: 1px solid #222;
+            margin-bottom: 0;
         }
 
         a {
@@ -103,12 +108,35 @@
             }
             cycle();
         });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('ul li').forEach(li => {
+                const hue = Math.floor(Math.random() * 360);
+                li.style.backgroundColor = `hsl(${hue}, 25%, 15%)`;
+            });
+        });
     </script>
 
     <ul>
         <li>
             <a href="/fragezeichen/">??? Album</a>
             <p>Zeigt ein zufälliges Spotify-Album aus einer kuratierten Liste.</p>
+        </li>
+        <li>
+            <a href="/abz/">Arbeitszeit-Tracker</a>
+            <p>Erfasst und verwaltet Arbeitszeiten für den Tag, ohne Daten zu speichern.</p>
+        </li>
+        <li>
+            <a href="https://t.me/choose_wisely_bot?start=info">Choose Wisely Bot</a>
+            <p>Hilft dir, Entscheidungen zu treffen (random).</p>
+        </li>
+        <li>
+            <a href="https://github.com/klmpfh">GitHub</a>
+            <p>Mehr komische Projekte auf GitHub.</p>
+        </li>
+        <li>
+            <a href="https://t.me/knall_bumm_bot?help=info">Knall Bumm Bot</a>
+            <p>Berechnet aus Preisen an der Bar die beste Option mit dem Optimierungsziel Alk/€.</p>
         </li>
         <li>
             <a href="/laserfeelings/">Laser &amp; Feelings</a>

@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arbeitszeit-Tracker</title>
+    <style>
+        :root {
+            --bg-color: #f4f6f9;
+            --container-bg: #ffffff;
+            --text-color: #2d3748;
+            --text-muted: #718096;
+            --primary: #3182ce;
+            --primary-light: #ebf8ff;
+            --success: #38a169;
+            --success-light: #f0fff4;
+            --danger: #e53e3e;
+            --warning: #dd6b20;
+            --warning-light: #fffaf0;
+            --border-color: #e2e8f0;
+            --highlight-bg: #f7fafc;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            padding: 30px 15px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1000px;
+            background: var(--container-bg);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            padding: 30px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 20px;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        /* ── Eingabefelder ── */
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        input[type="time"],
+        .duration-input {
+            padding: 10px 14px;
+            font-size: 20px;
+            font-weight: 600;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-color);
+            background-color: #fff;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input[type="time"] { width: 130px; }
+        .duration-input   { width: 110px; }
+
+        input[type="time"]:focus,
+        .duration-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-light);
+        }
+
+        .duration-input.invalid {
+            border-color: var(--danger);
+        }
+
+        /* Arbeitszeit-Eingaben */
+        .work-inputs {
+            display: flex;
+            align-items: flex-end;
+            gap: 12px;
+            padding: 16px;
+            background: var(--highlight-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .link-indicator {
+            font-size: 20px;
+            color: var(--text-muted);
+            padding-bottom: 8px;
+            line-height: 1;
+            user-select: none;
+        }
+
+        .work-inputs-hint {
+            font-size: 12px;
+            color: var(--text-muted);
+            align-self: flex-end;
+            padding-bottom: 10px;
+        }
+
+        /* ── Pausen-Bereich ── */
+        .pause-section {
+            background: var(--highlight-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 14px 16px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .pause-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .pause-controls-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-right: 4px;
+        }
+
+        .btn-pause-start {
+            background-color: var(--warning);
+            color: #fff;
+            border: none;
+            padding: 7px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .btn-pause-start:hover { opacity: 0.85; }
+
+        .btn-pause-stop {
+            background-color: var(--success);
+            color: #fff;
+            border: none;
+            padding: 7px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .btn-pause-stop:hover { opacity: 0.85; }
+
+        .btn-add-pause {
+            background-color: #fff;
+            color: var(--primary);
+            border: 1px solid var(--primary);
+            padding: 7px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-add-pause:hover { background-color: var(--primary); color: #fff; }
+
+        .running-pause-info {
+            font-size: 13px;
+            color: var(--success);
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .running-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            flex-shrink: 0;
+            animation: pulse 1.2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50%       { opacity: 0.25; }
+        }
+
+        .add-pause-form {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 10px 12px;
+            background: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+        }
+
+        .add-pause-form .form-label {
+            font-size: 13px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .add-pause-form input[type="time"] {
+            width: auto;
+            padding: 5px 10px;
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        .btn-confirm {
+            background-color: var(--success);
+            color: #fff;
+            border: none;
+            padding: 6px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .btn-cancel {
+            background-color: #fff;
+            color: var(--text-muted);
+            border: 1px solid var(--border-color);
+            padding: 6px 14px;
+            font-size: 13px;
+            font-weight: 500;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .pause-items-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .pause-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .pause-done    { background: #edf2f7; color: var(--text-muted); }
+        .pause-running { background: var(--success-light); color: var(--success); }
+        .pause-future  { background: var(--primary-light); color: var(--primary); }
+
+        .pause-edit-btn {
+            background: none;
+            border: none;
+            color: #a0aec0;
+            font-size: 12px;
+            line-height: 1;
+            padding: 0 2px;
+            cursor: pointer;
+        }
+        .pause-edit-btn:hover { color: var(--primary); }
+
+        .pause-delete-btn {
+            background: none;
+            border: none;
+            color: #a0aec0;
+            font-size: 14px;
+            line-height: 1;
+            padding: 0 2px;
+            cursor: pointer;
+        }
+        .pause-delete-btn:hover { color: var(--danger); }
+
+        /* ── Warnungen ── */
+        .warning-banner {
+            background: var(--warning-light);
+            border: 1px solid #f6ad55;
+            border-left: 4px solid var(--warning);
+            border-radius: 6px;
+            padding: 9px 14px;
+            font-size: 13px;
+            color: #744210;
+            font-weight: 500;
+        }
+
+        /* ── Timeline ── */
+        .timeline-container {
+            position: relative;
+            margin-bottom: 24px;
+            background: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px;
+            overflow: visible;
+        }
+
+        .timeline-svg {
+            width: 100%;
+            height: 120px;
+            display: block;
+            overflow: visible;
+        }
+
+        /* ── Stat-Cards ── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 640px) {
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        .stat-card {
+            background: var(--highlight-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            font-family: monospace;
+            color: var(--text-color);
+            line-height: 1.1;
+        }
+
+        .stat-value.pos { color: var(--danger); }
+        .stat-value.neg { color: var(--text-muted); }
+        .stat-value.muted { color: var(--text-muted); font-size: 22px; }
+
+        .stat-progress-bar {
+            margin-top: 8px;
+            background: var(--border-color);
+            border-radius: 20px;
+            height: 6px;
+            overflow: hidden;
+        }
+
+        .stat-progress-fill {
+            background: var(--success);
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 20px;
+        }
+
+        .footer-info {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-align: right;
+        }
+
+        .label-bg { fill: #fff; opacity: 0.85; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>Arbeitszeit-Tracker</h1>
+        <div class="input-group">
+            <label for="startTime">Startzeit</label>
+            <input type="time" id="startTime">
+        </div>
+    </header>
+
+    <!-- Arbeitszeitfelder -->
+    <div class="work-inputs">
+        <div class="input-group">
+            <label for="dailyTime">Tagesarbeitszeit</label>
+            <input type="text" id="dailyTime" class="duration-input" placeholder="7:36" maxlength="6">
+        </div>
+        <div class="link-indicator" title="Die Felder sind verknüpft (Woche ÷ 5 = Tag)">⇄</div>
+        <div class="input-group">
+            <label for="weeklyTime">Wochenarbeitszeit</label>
+            <input type="text" id="weeklyTime" class="duration-input" placeholder="38:00" maxlength="6">
+        </div>
+        <span class="work-inputs-hint">Format: Stunden:Minuten&ensp;(z.&nbsp;B. 7:36 oder 38:00)</span>
+    </div>
+
+    <!-- Pausen -->
+    <div class="pause-section">
+        <div class="pause-controls">
+            <span class="pause-controls-label">Pausen</span>
+            <button id="pauseToggleBtn" onclick="togglePause()" class="btn-pause-start">Pause starten</button>
+            <span id="runningPauseDisplay" style="display:none" class="running-pause-info">
+                <span class="running-dot"></span>
+                Läuft seit <span id="runningPauseStartLabel">--:--</span>
+                (<span id="runningPauseDuration">0</span> min)
+            </span>
+            <button onclick="toggleAddPauseForm()" class="btn-add-pause">+ Eintragen</button>
+        </div>
+
+        <div id="addPauseForm" class="add-pause-form" style="display:none">
+            <span id="addPauseFormTitle" class="form-label" style="font-weight:600;margin-right:4px">Pause eintragen:</span>
+            <span class="form-label">Von:</span>
+            <input type="time" id="pauseFromInput">
+            <span class="form-label">Bis:</span>
+            <input type="time" id="pauseToInput">
+            <button id="addPauseConfirmBtn" onclick="addPauseFromForm()" class="btn-confirm">Hinzufügen</button>
+            <button onclick="toggleAddPauseForm()" class="btn-cancel">Abbrechen</button>
+        </div>
+
+        <div id="pauseList"></div>
+        <div id="legalWarnings"></div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="timeline-container">
+        <svg class="timeline-svg" id="timelineSvg"></svg>
+    </div>
+
+    <!-- Ergebnisse -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">Zielzeit</div>
+            <div class="stat-value muted" id="statTargetTime">–</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Netto-Arbeitszeit</div>
+            <div class="stat-value" id="statNetWork">–</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Rest / Überziehung</div>
+            <div class="stat-value" id="statDiff">–</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Fortschritt</div>
+            <div class="stat-value" id="statProgress">–</div>
+            <div class="stat-progress-bar">
+                <div class="stat-progress-fill" id="statProgressBar"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden.</div>
+</div>
+
+<script>
+    // ── ZUSTAND ───────────────────────────────────────────────────────────
+    let pauses             = [];     // [{ startMin, durationMin }] – Minuten ab Mitternacht
+    let runningPauseStart  = null;   // Date.now() wenn Pause läuft, sonst null
+    let addPauseFormVisible= false;
+    let editingPauseIndex  = null;   // null = neue Pause, number = Bearbeitung
+
+    const maxTimelineDuration = 660; // 11h – visuelle X-Achsen-Länge in Minuten
+
+    // ── DOM ───────────────────────────────────────────────────────────────
+    const startTimeInput  = document.getElementById('startTime');
+    const dailyTimeInput  = document.getElementById('dailyTime');
+    const weeklyTimeInput = document.getElementById('weeklyTime');
+    const svg             = document.getElementById('timelineSvg');
+
+    // ── INITIALISIERUNG ───────────────────────────────────────────────────
+    window.addEventListener('DOMContentLoaded', () => {
+        startTimeInput.focus();
+        startTimeInput.select();
+        updateTracker();
+        setInterval(updateTracker, 10000);
+    });
+
+    // Eingabe-Events
+    startTimeInput.addEventListener('input', updateTracker);
+
+    dailyTimeInput.addEventListener('input', () => {
+        const min = parseDuration(dailyTimeInput.value);
+        weeklyTimeInput.value = min > 0 ? formatDuration(min * 5) : '';
+        markValid(dailyTimeInput, min > 0 || !dailyTimeInput.value.trim());
+        updateTracker();
+    });
+
+    weeklyTimeInput.addEventListener('input', () => {
+        const min = parseDuration(weeklyTimeInput.value);
+        dailyTimeInput.value = min > 0 ? formatDuration(Math.round(min / 5)) : '';
+        markValid(weeklyTimeInput, min > 0 || !weeklyTimeInput.value.trim());
+        updateTracker();
+    });
+
+    function markValid(input, valid) {
+        input.classList.toggle('invalid', !valid);
+    }
+
+    // ── PAUSEN-STEUERUNG ──────────────────────────────────────────────────
+
+    function togglePause() {
+        const btn     = document.getElementById('pauseToggleBtn');
+        const display = document.getElementById('runningPauseDisplay');
+
+        if (runningPauseStart === null) {
+            runningPauseStart = Date.now();
+            btn.textContent       = 'Pause beenden';
+            btn.className         = 'btn-pause-stop';
+            display.style.display = 'inline-flex';
+            const now = new Date(runningPauseStart);
+            document.getElementById('runningPauseStartLabel').textContent =
+                `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        } else {
+            const durationMin   = Math.round((Date.now() - runningPauseStart) / 60000);
+            const now           = new Date();
+            const endTotalMin   = now.getHours() * 60 + now.getMinutes();
+            const startTotalMin = endTotalMin - durationMin;
+            if (durationMin > 0) pauses.push({ startMin: startTotalMin, durationMin });
+            runningPauseStart       = null;
+            btn.textContent         = 'Pause starten';
+            btn.className           = 'btn-pause-start';
+            display.style.display   = 'none';
+        }
+        updateTracker();
+    }
+
+    function toggleAddPauseForm() {
+        editingPauseIndex   = null;
+        addPauseFormVisible = !addPauseFormVisible;
+        const form = document.getElementById('addPauseForm');
+        form.style.display = addPauseFormVisible ? 'flex' : 'none';
+
+        if (addPauseFormVisible) {
+            document.getElementById('addPauseFormTitle').textContent  = 'Pause eintragen:';
+            document.getElementById('addPauseConfirmBtn').textContent = 'Hinzufügen';
+            const now = new Date();
+            document.getElementById('pauseFromInput').value =
+                `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+            document.getElementById('pauseToInput').value = '';
+            document.getElementById('pauseToInput').focus();
+        }
+    }
+
+    function editPause(index) {
+        editingPauseIndex   = index;
+        addPauseFormVisible = true;
+        const p = pauses[index];
+        document.getElementById('addPauseForm').style.display          = 'flex';
+        document.getElementById('addPauseFormTitle').textContent        = 'Pause bearbeiten:';
+        document.getElementById('addPauseConfirmBtn').textContent       = 'Speichern';
+        document.getElementById('pauseFromInput').value = formatMinutesToTime(p.startMin);
+        document.getElementById('pauseToInput').value   = formatMinutesToTime(p.startMin + p.durationMin);
+        document.getElementById('pauseFromInput').focus();
+    }
+
+    function addPauseFromForm() {
+        const from = document.getElementById('pauseFromInput').value;
+        const to   = document.getElementById('pauseToInput').value;
+        if (!from || !to) { alert('Bitte Von- und Bis-Uhrzeit eingeben.'); return; }
+
+        const fromMin = parseTimeToMinutes(from);
+        let   toMin   = parseTimeToMinutes(to);
+        if (toMin <= fromMin) toMin += 1440;
+
+        const durationMin = toMin - fromMin;
+        if (durationMin <= 0) { alert('Die Endzeit muss nach der Startzeit liegen.'); return; }
+
+        if (editingPauseIndex !== null) {
+            pauses[editingPauseIndex] = { startMin: fromMin, durationMin };
+            editingPauseIndex = null;
+        } else {
+            pauses.push({ startMin: fromMin, durationMin });
+        }
+        addPauseFormVisible = false;
+        document.getElementById('addPauseForm').style.display = 'none';
+        updateTracker();
+    }
+
+    function deletePause(index) {
+        if (editingPauseIndex === index) {
+            addPauseFormVisible = false;
+            editingPauseIndex   = null;
+            document.getElementById('addPauseForm').style.display = 'none';
+        }
+        pauses.splice(index, 1);
+        updateTracker();
+    }
+
+    // ── PAUSENLISTE RENDERN ───────────────────────────────────────────────
+    function renderPauseList(currentMinOfDay) {
+        const list  = document.getElementById('pauseList');
+        const items = [];
+
+        pauses.forEach((p, i) => {
+            const endMin   = p.startMin + p.durationMin;
+            const startStr = formatMinutesToTime(p.startMin);
+            const endStr   = formatMinutesToTime(endMin);
+            const isFuture = p.startMin > currentMinOfDay;
+            const cls      = isFuture ? 'pause-future' : 'pause-done';
+            const tag      = isFuture ? ' <em>(geplant)</em>' : '';
+
+            items.push(
+                `<span class="pause-item ${cls}">`
+                + `${startStr}–${endStr} · ${p.durationMin} min${tag}`
+                + ` <button class="pause-edit-btn" onclick="editPause(${i})" title="Bearbeiten">✎</button>`
+                + ` <button class="pause-delete-btn" onclick="deletePause(${i})" title="Entfernen">×</button>`
+                + `</span>`
+            );
+        });
+
+        if (runningPauseStart !== null) {
+            const runningMin = Math.floor((Date.now() - runningPauseStart) / 60000);
+            items.push(`<span class="pause-item pause-running"><span class="running-dot"></span> Läuft (${runningMin} min)</span>`);
+        }
+
+        list.innerHTML = items.length > 0
+            ? `<div class="pause-items-list">${items.join('')}</div>`
+            : '';
+    }
+
+    // ── WARNUNGEN ─────────────────────────────────────────────────────────
+    function renderWarnings(netWorkMin, elapsedPauseMin) {
+        const container = document.getElementById('legalWarnings');
+        const warnings  = [];
+
+        if (netWorkMin > 360 && elapsedPauseMin < 30) {
+            const missing = Math.ceil(30 - elapsedPauseMin);
+            warnings.push(`&#9888; Bei über 6h Arbeitszeit sind mindestens 30 min Pause vorgeschrieben. Es fehlen noch <strong>${missing} min</strong>.`);
+        }
+        if (netWorkMin > 570 && elapsedPauseMin < 45) {
+            const missing = Math.ceil(45 - elapsedPauseMin);
+            warnings.push(`&#9888; Bei über 9h30 Arbeitszeit sind mindestens 45 min Pause vorgeschrieben. Es fehlen noch <strong>${missing} min</strong>.`);
+        }
+        if (netWorkMin > 600) {
+            warnings.push(`&#9888; Die gesetzliche Höchstarbeitszeit von 10h pro Tag ist überschritten.`);
+        }
+
+        container.innerHTML = warnings
+            .map(w => `<div class="warning-banner">${w}</div>`)
+            .join('');
+    }
+
+    // ── HAUPT-UPDATE ──────────────────────────────────────────────────────
+    function updateTracker() {
+        const now             = new Date();
+        const currentMinOfDay = now.getHours() * 60 + now.getMinutes();
+
+        const startMin      = parseTimeToMinutes(startTimeInput.value);
+        const targetWorkMin = parseDuration(dailyTimeInput.value); // Netto-Ziel
+
+        // Vergangene Zeit seit Arbeitsbeginn (Uhr-Minuten)
+        let elapsedMin = currentMinOfDay - startMin;
+        if (elapsedMin < -120) elapsedMin += 1440;
+        if (elapsedMin < 0)    elapsedMin = 0;
+
+        // Vergangene Pausenminuten
+        let elapsedPauseMin = 0;
+        pauses.forEach(p => {
+            const pEnd = p.startMin + p.durationMin;
+            if (currentMinOfDay >= pEnd) {
+                elapsedPauseMin += p.durationMin;
+            } else if (currentMinOfDay > p.startMin) {
+                elapsedPauseMin += currentMinOfDay - p.startMin;
+            }
+        });
+
+        let runningPauseMin = 0;
+        if (runningPauseStart !== null) {
+            runningPauseMin  = (Date.now() - runningPauseStart) / 60000;
+            elapsedPauseMin += runningPauseMin;
+            document.getElementById('runningPauseDuration').textContent = Math.floor(runningPauseMin);
+        }
+
+        const netWorkMin  = Math.max(0, elapsedMin - elapsedPauseMin);
+        const allPauseMin = pauses.reduce((s, p) => s + p.durationMin, 0) + runningPauseMin;
+
+        // Stat-Cards befüllen
+        document.getElementById('statNetWork').textContent = formatDuration(netWorkMin) + ' h';
+        document.getElementById('statNetWork').className   = 'stat-value';
+
+        if (targetWorkMin > 0 && startTimeInput.value) {
+            const targetEndMin = startMin + targetWorkMin + allPauseMin;
+            const remaining    = netWorkMin - targetWorkMin;
+            const progress     = Math.min(100, Math.max(0, (netWorkMin / targetWorkMin) * 100));
+
+            document.getElementById('statTargetTime').textContent = formatMinutesToTime(targetEndMin);
+            document.getElementById('statTargetTime').className   = 'stat-value';
+
+            const diffEl = document.getElementById('statDiff');
+            diffEl.textContent = formatDifference(remaining);
+            diffEl.className   = 'stat-value ' + (remaining >= 0 ? 'pos' : 'neg');
+
+            document.getElementById('statProgress').textContent = `${progress.toFixed(1)} %`;
+            document.getElementById('statProgress').className   = 'stat-value';
+            document.getElementById('statProgressBar').style.width = `${progress}%`;
+
+            document.title = `${progress.toFixed(1)} % – Tagesziel`;
+        } else {
+            document.getElementById('statTargetTime').textContent = '–';
+            document.getElementById('statTargetTime').className   = 'stat-value muted';
+            document.getElementById('statDiff').textContent       = '–';
+            document.getElementById('statDiff').className         = 'stat-value muted';
+            document.getElementById('statProgress').textContent   = '–';
+            document.getElementById('statProgress').className     = 'stat-value muted';
+            document.getElementById('statProgressBar').style.width = '0%';
+            document.title = 'Arbeitszeit-Tracker';
+        }
+
+        renderPauseList(currentMinOfDay);
+        renderWarnings(netWorkMin, elapsedPauseMin);
+        drawTimeline(elapsedMin, startMin, currentMinOfDay, allPauseMin, runningPauseMin, targetWorkMin);
+    }
+
+    // ── TIMELINE ──────────────────────────────────────────────────────────
+    function drawTimeline(elapsedMin, startMinOfDay, currentMinOfDay, allPauseMin, runningPauseMin, targetWorkMin) {
+        const width        = svg.clientWidth || 940;
+        const paddingLeft  = 30;
+        const paddingRight = 30;
+        const chartWidth   = width - paddingLeft - paddingRight;
+        const barY         = 40;
+        const barHeight    = 24;
+
+        function getX(minutes) {
+            return paddingLeft + (Math.min(Math.max(minutes, 0), maxTimelineDuration) / maxTimelineDuration) * chartWidth;
+        }
+
+        svg.innerHTML = '';
+
+        // 1. Hintergrundbalken
+        svg.appendChild(svgEl('rect', { x: paddingLeft, y: barY, width: chartWidth, height: barHeight, fill: '#edf2f7', rx: 4 }));
+
+        // 2. Grüner Fortschrittsbalken (verstrichene Uhr-Zeit)
+        const elapsedX = getX(elapsedMin);
+        if (elapsedX > paddingLeft) {
+            svg.appendChild(svgEl('rect', {
+                x: paddingLeft, y: barY + 2,
+                width: Math.min(elapsedX - paddingLeft, chartWidth),
+                height: barHeight - 4,
+                fill: '#48bb78', opacity: 0.85, rx: 2
+            }));
+        }
+
+        // 3. Pausenblöcke
+        pauses.forEach(p => {
+            const offsetMin = p.startMin - startMinOfDay;
+            if (offsetMin > maxTimelineDuration || offsetMin + p.durationMin < 0) return;
+            const pX1      = getX(Math.max(0, offsetMin));
+            const pX2      = getX(offsetMin + p.durationMin);
+            const isFuture = p.startMin > currentMinOfDay;
+            svg.appendChild(svgEl('rect', {
+                x: pX1, y: barY,
+                width: Math.max(0, pX2 - pX1), height: barHeight,
+                fill: isFuture ? 'rgba(49,130,206,0.22)' : 'rgba(113,128,150,0.5)'
+            }));
+        });
+
+        // Laufende Pause
+        if (runningPauseStart !== null && runningPauseMin > 0) {
+            const runStart    = new Date(runningPauseStart);
+            const runStartMin = runStart.getHours() * 60 + runStart.getMinutes();
+            const offsetMin   = runStartMin - startMinOfDay;
+            if (offsetMin >= 0) {
+                svg.appendChild(svgEl('rect', {
+                    x: getX(offsetMin), y: barY,
+                    width: Math.max(0, getX(offsetMin + runningPauseMin) - getX(offsetMin)),
+                    height: barHeight, fill: 'rgba(56,161,105,0.4)'
+                }));
+            }
+        }
+
+        // 4. X-Achse
+        const maxHours = Math.floor(maxTimelineDuration / 60);
+        for (let h = 0; h <= maxHours; h++) {
+            const tX  = getX(h * 60);
+            svg.appendChild(svgEl('line', { x1: tX, y1: barY - 5, x2: tX, y2: barY, stroke: '#cbd5e0', 'stroke-width': 1.5 }));
+            const txt = svgEl('text', { x: tX, y: barY - 9, 'text-anchor': 'middle', 'font-size': '11px', fill: '#718096', 'font-weight': 500 });
+            txt.textContent = `${h}h`;
+            svg.appendChild(txt);
+        }
+
+        // 5. Zielmarker (nur wenn Tagesziel eingegeben)
+        if (targetWorkMin > 0 && startMinOfDay > 0) {
+            const totalDuration = targetWorkMin + allPauseMin;
+            const mX            = getX(totalDuration);
+            const labelTime     = formatMinutesToTime(startMinOfDay + totalDuration);
+            const fullText      = `Tagesziel (${labelTime})`;
+            const levelY        = barY + barHeight + 20;
+
+            svg.appendChild(svgEl('line', { x1: mX, y1: barY - 2, x2: mX, y2: levelY - 8, stroke: '#e53e3e', 'stroke-width': 2, 'stroke-dasharray': '3,2' }));
+            svg.appendChild(svgEl('circle', { cx: mX, cy: levelY - 9, r: 3, fill: '#e53e3e' }));
+
+            const approxW = fullText.length * 6 + 10;
+            const bgRect  = svgEl('rect', { x: mX - approxW / 2, y: levelY - 8, width: approxW, height: 14, class: 'label-bg' });
+            svg.appendChild(bgRect);
+
+            const lTxt = svgEl('text', { x: mX, y: levelY + 3, 'text-anchor': 'middle', 'font-size': '11px', 'font-weight': 600, fill: '#c53030' });
+            lTxt.textContent = fullText;
+            svg.appendChild(lTxt);
+        }
+
+        // 6. „Jetzt"-Marker
+        if (elapsedMin >= 0 && elapsedMin <= maxTimelineDuration && startMinOfDay > 0) {
+            const nowX       = getX(elapsedMin);
+            const nowTimeStr = formatMinutesToTime(startMinOfDay + elapsedMin);
+
+            svg.appendChild(svgEl('line', { x1: nowX, y1: barY - 12, x2: nowX, y2: barY + barHeight + 8, stroke: '#3182ce', 'stroke-width': 2.5 }));
+
+            svg.appendChild(svgEl('rect', { x: nowX - 36, y: barY - 26, width: 72, height: 14, fill: '#3182ce', rx: 4 }));
+
+            const nowTxt = svgEl('text', { x: nowX, y: barY - 16, 'text-anchor': 'middle', 'font-size': '10px', 'font-weight': 'bold', fill: '#ffffff' });
+            nowTxt.textContent = `Jetzt: ${nowTimeStr}`;
+            svg.appendChild(nowTxt);
+        }
+    }
+
+    // ── HILFSFUNKTIONEN ───────────────────────────────────────────────────
+
+    /** Erstellt ein SVG-Element mit Attributen */
+    function svgEl(tag, attrs) {
+        const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+        for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+        return el;
+    }
+
+    /** "H:MM" oder "HH:MM" Dauer → Minuten (kein Bezug auf Uhrzeit) */
+    function parseDuration(str) {
+        if (!str || !str.trim()) return 0;
+        str = str.trim().replace(',', '.');
+        if (str.includes(':')) {
+            const [h, m] = str.split(':').map(s => parseInt(s, 10) || 0);
+            return h * 60 + m;
+        }
+        // Reine Zahl → als Stunden interpretieren
+        const hours = parseFloat(str);
+        return isNaN(hours) ? 0 : Math.round(hours * 60);
+    }
+
+    /** Minuten → "H:MM" Dauer-String */
+    function formatDuration(totalMin) {
+        totalMin = Math.round(totalMin);
+        const h = Math.floor(totalMin / 60);
+        const m = totalMin % 60;
+        return `${h}:${String(m).padStart(2, '0')}`;
+    }
+
+    /** "HH:MM" Uhrzeit → Minuten ab Mitternacht */
+    function parseTimeToMinutes(timeStr) {
+        if (!timeStr) return 0;
+        const [h, m] = timeStr.split(':').map(Number);
+        return h * 60 + m;
+    }
+
+    /** Minuten ab Mitternacht → "HH:MM" Uhrzeit (mit 24h-Wrap) */
+    function formatMinutesToTime(totalMin) {
+        const norm = (Math.round(totalMin) % 1440 + 1440) % 1440;
+        return `${String(Math.floor(norm / 60)).padStart(2, '0')}:${String(norm % 60).padStart(2, '0')}`;
+    }
+
+    /** Differenz in Minuten → "+H:MM" oder "-H:MM" */
+    function formatDifference(diffMin) {
+        const sign = diffMin >= 0 ? '+' : '-';
+        const abs  = Math.abs(diffMin);
+        return `${sign}${Math.floor(abs / 60)}:${String(Math.floor(abs % 60)).padStart(2, '0')}`;
+    }
+</script>
+
+</body>
+</html>
+
+
+
+<!--
+
+Anforderungen:
+
+Erstelle eine einzelne, eigenständige HTML-Datei (kein Backend, keine externen Abhängigkeiten), die als interaktiver Arbeitszeit-Tracker dient.
+
+### Grundanforderungen
+- Nur eine Datei (HTML + CSS + JavaScript inline)
+- Moderne, klare Darstellung
+- Responsiv und gut lesbar
+- Aktualisierung automatisch alle ~10 Sekunden
+
+---
+
+### Eingaben (Header und Arbeitszeit-Zeile)
+
+#### Startzeit
+- input[type="time"], wird beim Laden fokussiert und selektiert
+
+#### Tagesarbeitszeit ⇄ Wochenarbeitszeit
+- Zwei verknüpfte Textfelder im Format "H:MM" (z. B. "7:36" oder "38:00")
+- Wird Tagesarbeitszeit eingegeben → Wochenarbeitszeit = Tageswert × 5
+- Wird Wochenarbeitszeit eingegeben → Tagesarbeitszeit = Wochenwert ÷ 5
+- Akzeptiert auch reine Stundenzahlen (z. B. "38" → "38:00")
+- Ungültige Eingaben werden rot markiert
+
+---
+
+### Pausen
+- Keine festen automatischen Pausen – nur manuelle Pausen werden getrackt
+- Drei Wege eine Pause hinzuzufügen:
+  1. „Pause starten" / „Pause beenden" – trackt eine laufende Pause live
+  2. „+ Eintragen" – Formular mit Von/Bis-Uhrzeit
+  3. Bearbeiten über ✎-Button an bestehenden Einträgen
+- Pausenliste: Von–Bis, Dauer, ✎ (Bearbeiten), × (Löschen)
+- Farben: vergangene grau, geplante blau, laufende grün mit Puls-Animation
+
+#### Auswirkung auf Berechnungen
+- Netto-Arbeitszeit = verstrichene Uhr-Zeit − vergangene Pausenminuten
+- Zielzeit = Startzeit + Tagesarbeitszeit + alle Pausenminuten (inkl. zukünftige)
+- Fortschritt und Rest basieren auf Netto-Arbeitszeit
+
+---
+
+### Gesetzliche Pausenprüfung (§4 ArbZG)
+- Netto > 6h  UND Pausen bisher < 30 min → Warnung
+- Netto > 9h30 UND Pausen bisher < 45 min → Warnung
+- Netto > 10h → Warnung Höchstarbeitszeit
+- Warnungen zeigen die fehlenden Minuten an
+
+---
+
+### Diagramm / Timeline
+- Grüner Balken = verstrichene Uhr-Zeit (inkl. Pausen)
+- Graue / blaue Blöcke = vergangene / geplante Pausen
+- Marker „Tagesziel" an der berechneten Zielzeit (dynamisch)
+- Marker „Jetzt" mit aktueller Uhrzeit (blau)
+- X-Achse: Stunden-Ticks 0h–11h
+
+---
+
+### Ergebnisanzeige (4 Stat-Cards)
+- Zielzeit (berechnete Endzeit)
+- Netto-Arbeitszeit (H:MM h)
+- Rest / Überziehung (+H:MM oder -H:MM)
+- Fortschritt in % mit Mini-Fortschrittsbalken
+
+Alle Cards zeigen „–" wenn noch kein Tagesziel eingegeben wurde.
+
+---
+
+### Seitentitel
+- Zeigt automatisch den Fortschritt: "84.7 % – Tagesziel"
+- Ohne Tagesziel-Eingabe: "Arbeitszeit-Tracker"
+
+---
+
+### Technische Anforderungen
+- Reines Vanilla JavaScript, keine Libraries
+- SVG-Elemente werden komplett neu gerendert (keine DOM-Mutationen)
+- Hilfsfunktion svgEl() für SVG-Erstellung
+- Responsive (2-Spalten-Grid auf schmalen Bildschirmen)
+
+-->
