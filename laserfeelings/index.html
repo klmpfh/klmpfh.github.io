@@ -4,14 +4,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Szenario-Generator für das Sci-Fi-Rollenspiel Laser & Feelings – würfelt Bedrohungen, Ziele und Konsequenzen.">
     <title>Laser &amp; Feelings – Szenario-Generator</title>
+    <link rel="stylesheet" href="../assets/css/reset.css">
+    <link rel="stylesheet" href="../assets/css/back-link.css">
     <style>
         * {
             font-family: 'Courier New', Courier, monospace;
         }
 
         body {
-            font-family: 'Courier New', Courier, monospace;
             background-color: #141a14;
             color: #a8bfa8;
             display: flex;
@@ -19,9 +21,7 @@
             align-items: center;
             justify-content: center;
             min-height: 100vh;
-            margin: 0;
             padding: 20px;
-            box-sizing: border-box;
         }
 
         h1 {
@@ -114,6 +114,7 @@
 </head>
 
 <body>
+    <button type="button" class="back-link" onclick="location.href='../index.html'">← Zurück</button>
     <h1>Laser &amp; Feelings</h1>
     <p class="subtitle">Szenario-Generator</p>
 
@@ -123,94 +124,66 @@
         <button class="btn" onclick="roll()">&#9654; Neu würfeln</button>
     </div>
 
+    <script src="../assets/js/scenario-generator.js"></script>
     <script>
-        const threats = [
-            "Zorgon, galaktische Tyrannin",
-            "eine endlose Kriegsflotte aus dem Nebel",
-            "eine verräterische Kapitänin auf Rachefeldzug",
-            "eine gnadenlose Piratenflotte",
-            "bewusstlose Maschinensoldatinnen",
-            "Parasitinnen, die fremde Körper übernehmen",
-            "die Sterneninquisition",
-            "die mutierte KI NEXUS",
-            "dimensionsreisende Söldnerinnen",
-            "die dunkle Sekte der Leere",
-            "eine Parasiten-Kolonie aus dem All",
-            "die unsterbliche Kriegsherrin Keth'ar"
-        ];
-
-        const wants = [
-            "auslöschen und verseuchen",
-            "rauben und entführen",
-            "fusionieren mit",
-            "unter ihren Schutz stellen",
-            "aus dem Nichts erschaffen",
-            "unterwerfen und in Besitz nehmen",
-            "erwecken / entfesseln",
-            "klonen / replizieren",
-            "sabotieren / infiltrieren",
-            "verbannen / versiegeln",
-            "verschmelzen mit",
-            "kontrollieren / manipulieren"
-        ];
-
-        const targets = [
-            "die Anführerin der Weltraumpiraten",
-            "uralte Kristalle aus der Leere",
-            "ein gewaltiges Schlachtschiff",
-            "einen instabilen Quantentunnel",
-            "eine vergessene Ruine im tiefen All",
-            "ein rätselhaftes außerirdisches Objekt",
-            "die letzte galaktische Flotte",
-            "den Gedächtniskristall der Götter",
-            "die sterbende Sonne",
-            "die KI-Prophetin ORACLE",
-            "den Nexus aller Dimensionen",
-            "die eingefrorene Zeit"
-        ];
-
-        const consequences = [
-            "ein ganzes Sonnensystem auslöschen wird",
-            "den Lauf der Zeit umkehren wird",
-            "die Bevölkerung eines Planeten versklaven wird",
-            "einen galaktischen Krieg entfachen wird",
-            "das Gewebe der Realität zerreißen wird",
-            "auf wundersame Weise alles heilen wird",
-            "das Universum neu erschaffen wird",
-            "alle Lebewesen in Energie auflösen wird",
-            "eine neue dominierende Spezies erschaffen wird",
-            "den Tod für immer abschaffen wird",
-            "alle Erinnerungen im All löschen wird",
-            "zwei Galaxien zum Kollaps bringen wird"
-        ];
-
-        function d12() {
-            return Math.floor(Math.random() * 12);
-        }
-
-        function roll() {
-            const t = d12(), w = d12(), g = d12(), k = d12();
-
-            document.getElementById('scenario').innerHTML = `
-                <span class="label">Bedrohung</span>
-                <span class="value">${threats[t]}</span>
-
-                <span class="label">will</span>
-                <span class="value">${wants[w]}</span>
-
-                <span class="label">…</span>
-                <span class="value">${targets[g]}</span>
-
-                <span class="label">was</span>
-                <span class="value">${consequences[k]}</span>
-
-                <span class="dice" style="margin-top:18px;">
-                    [W12: ${(t+1).toString().padStart(2,'0')}] [W12: ${(w+1).toString().padStart(2,'0')}] [W12: ${(g+1).toString().padStart(2,'0')}] [W12: ${(k+1).toString().padStart(2,'0')}]
-                </span>
-            `;
-        }
-
-        roll();
+        initScenarioGenerator({
+            threats: [
+                "Zorgon, galaktische Tyrannin",
+                "eine endlose Kriegsflotte aus dem Nebel",
+                "eine verräterische Kapitänin auf Rachefeldzug",
+                "eine gnadenlose Piratenflotte",
+                "bewusstlose Maschinensoldatinnen",
+                "Parasitinnen, die fremde Körper übernehmen",
+                "die Sterneninquisition",
+                "die mutierte KI NEXUS",
+                "dimensionsreisende Söldnerinnen",
+                "die dunkle Sekte der Leere",
+                "eine Parasiten-Kolonie aus dem All",
+                "die unsterbliche Kriegsherrin Keth'ar"
+            ],
+            wants: [
+                "auslöschen und verseuchen",
+                "rauben und entführen",
+                "fusionieren mit",
+                "unter ihren Schutz stellen",
+                "aus dem Nichts erschaffen",
+                "unterwerfen und in Besitz nehmen",
+                "erwecken / entfesseln",
+                "klonen / replizieren",
+                "sabotieren / infiltrieren",
+                "verbannen / versiegeln",
+                "verschmelzen mit",
+                "kontrollieren / manipulieren"
+            ],
+            targets: [
+                "die Anführerin der Weltraumpiraten",
+                "uralte Kristalle aus der Leere",
+                "ein gewaltiges Schlachtschiff",
+                "einen instabilen Quantentunnel",
+                "eine vergessene Ruine im tiefen All",
+                "ein rätselhaftes außerirdisches Objekt",
+                "die letzte galaktische Flotte",
+                "den Gedächtniskristall der Götter",
+                "die sterbende Sonne",
+                "die KI-Prophetin ORACLE",
+                "den Nexus aller Dimensionen",
+                "die eingefrorene Zeit"
+            ],
+            consequences: [
+                "ein ganzes Sonnensystem auslöschen wird",
+                "den Lauf der Zeit umkehren wird",
+                "die Bevölkerung eines Planeten versklaven wird",
+                "einen galaktischen Krieg entfachen wird",
+                "das Gewebe der Realität zerreißen wird",
+                "auf wundersame Weise alles heilen wird",
+                "das Universum neu erschaffen wird",
+                "alle Lebewesen in Energie auflösen wird",
+                "eine neue dominierende Spezies erschaffen wird",
+                "den Tod für immer abschaffen wird",
+                "alle Erinnerungen im All löschen wird",
+                "zwei Galaxien zum Kollaps bringen wird"
+            ]
+        });
     </script>
 </body>
 

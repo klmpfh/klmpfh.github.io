@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Hilft dir, Entscheidungen zu treffen (random).">
 <title>Choose Wisely</title>
+<link rel="stylesheet" href="../assets/css/reset.css">
+<link rel="stylesheet" href="../assets/css/back-link.css">
 <style>
     :root {
         --cork: #ab7c4f;
@@ -20,12 +23,6 @@
         --pin-yellow: #e8c547;
         --pin-green: #4c8c5b;
         --shadow: rgba(30, 18, 8, 0.4);
-    }
-
-    * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
     }
 
     body {
@@ -368,6 +365,7 @@
 <body>
 
 <div class="board">
+    <button type="button" class="back-link" onclick="location.href='../index.html'">← Zurück</button>
     <header>
         <span class="pin"></span>
         <h1><span class="dice">🎲</span> Choose Wisely</h1>
@@ -417,6 +415,7 @@
     <footer>An die Pinnwand geheftet von klmpfh 📌</footer>
 </div>
 
+<script src="../assets/js/escape-html.js"></script>
 <script>
     // ---------- Tabs ----------
     const tabBtns = document.querySelectorAll('.tab-btn');
@@ -432,13 +431,6 @@
             views[btn.dataset.view].classList.add('active');
         });
     });
-
-    function escapeHtml(str) {
-        return str
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-    }
 
     function randBetween(min, max) {
         return Math.floor(Math.random() * (max - min) + min);

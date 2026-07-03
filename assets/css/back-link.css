@@ -1,0 +1,31 @@
+/* "Zurück"-Button auf allen Unterseiten, im Look der Startseite
+   (index.html): nutzt deren Farbvariablen aus reset.css statt eigener
+   fest verdrahteter Werte, damit er immer im Ton der Startseite bleibt. */
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 16px;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 10px;
+    background-color: var(--site-bg);
+    color: var(--site-text);
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.85rem;
+    font-weight: bold;
+    letter-spacing: 1px;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+    transition: transform 0.08s ease, box-shadow 0.15s ease, color 0.15s ease;
+}
+
+.back-link:hover {
+    color: var(--site-text-strong);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+}
+
+.back-link:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}

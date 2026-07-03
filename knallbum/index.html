@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Berechnet aus Preisen an der Bar die beste Option mit dem Optimierungsziel Alk/€.">
 <title>Knall-Bumm</title>
+<link rel="stylesheet" href="../assets/css/reset.css">
+<link rel="stylesheet" href="../assets/css/back-link.css">
 <style>
     :root {
         --bg-color: #16121a;
@@ -23,9 +26,6 @@
     }
 
     * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
 
@@ -356,6 +356,7 @@
 <body>
 
 <div class="container">
+    <button type="button" class="back-link" onclick="location.href='../index.html'">← Zurück</button>
     <header>
         <h1><span>🥂 Knall-Bumm</span></h1>
         <p>Errechnet aus Menge, Alkoholgehalt und Preis den Knall-Bumm-Wert (ml Alkohol pro Euro).</p>
@@ -372,6 +373,7 @@
     <footer>Bewusst genießen! 🎉</footer>
 </div>
 
+<script src="../assets/js/escape-html.js"></script>
 <script>
     const REF_ALC = 40 * 20; // 40% * 20ml -> Referenz für 1 "Shot"
 
@@ -423,13 +425,6 @@
 
     function round(x) {
         return Math.round(x * 100) / 100;
-    }
-
-    function escapeHtml(str) {
-        return str
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
     }
 
     // errechnet Ergebnis-Objekt für ein Getränk (Logik 1:1 vom Telegram-Bot übernommen)

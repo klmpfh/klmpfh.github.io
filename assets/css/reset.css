@@ -1,0 +1,20 @@
+/* Gemeinsamer Reset für alle Seiten. Seiten-eigene <style>-Bloecke
+   koennen Regeln fuer bestimmte Selektoren ueberschreiben, da diese
+   spezifischer sind als der universelle Selektor hier. */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+/* Kernfarben der Startseite (index.html), als Variablen statt an
+   mehreren Stellen fest verdrahteter Hex-Werte. Andere Stylesheets
+   (z. B. back-link.css) greifen darauf zu, damit sie automatisch im
+   Look der Startseite bleiben, auch wenn sich deren Farben ändern. */
+:root {
+    --site-bg: #111;
+    --site-text: #ccc;
+    --site-text-strong: #fff;
+}

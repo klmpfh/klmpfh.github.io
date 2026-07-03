@@ -4,14 +4,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Szenario-Generator für Fantasy-Rollenspiele – würfelt Antagonisten, Pläne und Konsequenzen im mittelalterlichen Setting.">
     <title>Zaubern &amp; Kloppen – Szenario-Generator</title>
+    <link rel="stylesheet" href="../assets/css/reset.css">
+    <link rel="stylesheet" href="../assets/css/back-link.css">
     <style>
         * {
             font-family: 'Courier New', Courier, monospace;
         }
 
         body {
-            font-family: 'Courier New', Courier, monospace;
             background-color: #1a1510;
             color: #c0a87a;
             display: flex;
@@ -19,9 +21,7 @@
             align-items: center;
             justify-content: center;
             min-height: 100vh;
-            margin: 0;
             padding: 20px;
-            box-sizing: border-box;
         }
 
         h1 {
@@ -114,6 +114,7 @@
 </head>
 
 <body>
+    <button type="button" class="back-link" onclick="location.href='../index.html'">← Zurück</button>
     <h1>Zaubern &amp; Kloppen</h1>
     <p class="subtitle">Szenario-Generator</p>
 
@@ -123,94 +124,66 @@
         <button class="btn" onclick="roll()">&#9654; Neu würfeln</button>
     </div>
 
+    <script src="../assets/js/scenario-generator.js"></script>
     <script>
-        const threats = [
-            "Morgath, der erwachte Lichkönig",
-            "eine endlose Horde hungriger Trolle und Orks",
-            "eine verräterische Erzmagierin auf Rachefeldzug",
-            "Schalakhor, uralter Drache der Verderbnis",
-            "ein Schwarm seelenfressender Dämonen",
-            "Medushara, Anführerin der Schlangenmensch-Sekte",
-            "die Inquisition des Heiligen Sonnenordens",
-            "der ewige Dschinn Azarak der Ungebundene",
-            "Elfenassassinen aus dem verbotenen Wald",
-            "die dunkle Bruderschaft des Abyssus",
-            "Fürst Valdrak und sein untotes Heer",
-            "die unsterbliche Herrin der Leere, Nyxara"
-        ];
-
-        const wants = [
-            "auslöschen und verfluchen",
-            "rauben und entführen",
-            "sich vereinen mit / aufgehen in",
-            "unter finstere Herrschaft stellen",
-            "aus verbotener Magie erschaffen",
-            "unterwerfen und versklaven",
-            "erwecken / entfesseln",
-            "in Doppelgänger verwandeln",
-            "sabotieren / unterwandern",
-            "verbannen / für immer versiegeln",
-            "verzaubern / korrumpieren",
-            "beherrschen / geistig manipulieren"
-        ];
-
-        const targets = [
-            "die Königin der Grenzdörfer",
-            "uralte Dracheneier im Herzwald",
-            "die mächtige Festung Eisentor",
-            "einen instabilen Magiestrudel im Gebirge",
-            "eine vergessene Tempelruine im Sumpf",
-            "ein rätselhaftes arkanes Artefakt",
-            "die letzte Elbenkönigin des Silberwaldes",
-            "den Gedächtnisstein der alten Götter",
-            "die sterbende Welteneiche",
-            "die prophetische Hexe Seraphira",
-            "den Knotenpunkt aller Ley-Linien",
-            "die eingefrorene Zeit selbst"
-        ];
-
-        const consequences = [
-            "ein ganzes Königreich in Asche legen wird",
-            "den Lauf der Zeit umkehren wird",
-            "alle Stadtbewohner in Untote verwandeln wird",
-            "einen Götterkrieg entfachen wird",
-            "das Gewebe der Magie für immer zerreißen wird",
-            "auf wundersame Weise alle Wunden heilen wird",
-            "eine neue Welt aus den Trümmern erschaffen wird",
-            "alle Lebewesen in Stein verwandeln wird",
-            "eine neue dominierende Rasse beschwören wird",
-            "den Tod selbst aufheben wird",
-            "alle Erinnerungen der Sterblichen löschen wird",
-            "zwei mächtige Reiche in den Untergang reißen wird"
-        ];
-
-        function d12() {
-            return Math.floor(Math.random() * 12);
-        }
-
-        function roll() {
-            const t = d12(), w = d12(), g = d12(), k = d12();
-
-            document.getElementById('scenario').innerHTML = `
-                <span class="label">Bedrohung</span>
-                <span class="value">${threats[t]}</span>
-
-                <span class="label">will</span>
-                <span class="value">${wants[w]}</span>
-
-                <span class="label">…</span>
-                <span class="value">${targets[g]}</span>
-
-                <span class="label">was</span>
-                <span class="value">${consequences[k]}</span>
-
-                <span class="dice" style="margin-top:18px;">
-                    [W12: ${(t+1).toString().padStart(2,'0')}] [W12: ${(w+1).toString().padStart(2,'0')}] [W12: ${(g+1).toString().padStart(2,'0')}] [W12: ${(k+1).toString().padStart(2,'0')}]
-                </span>
-            `;
-        }
-
-        roll();
+        initScenarioGenerator({
+            threats: [
+                "Morgath, der erwachte Lichkönig",
+                "eine endlose Horde hungriger Trolle und Orks",
+                "eine verräterische Erzmagierin auf Rachefeldzug",
+                "Schalakhor, uralter Drache der Verderbnis",
+                "ein Schwarm seelenfressender Dämonen",
+                "Medushara, Anführerin der Schlangenmensch-Sekte",
+                "die Inquisition des Heiligen Sonnenordens",
+                "der ewige Dschinn Azarak der Ungebundene",
+                "Elfenassassinen aus dem verbotenen Wald",
+                "die dunkle Bruderschaft des Abyssus",
+                "Fürst Valdrak und sein untotes Heer",
+                "die unsterbliche Herrin der Leere, Nyxara"
+            ],
+            wants: [
+                "auslöschen und verfluchen",
+                "rauben und entführen",
+                "sich vereinen mit / aufgehen in",
+                "unter finstere Herrschaft stellen",
+                "aus verbotener Magie erschaffen",
+                "unterwerfen und versklaven",
+                "erwecken / entfesseln",
+                "in Doppelgänger verwandeln",
+                "sabotieren / unterwandern",
+                "verbannen / für immer versiegeln",
+                "verzaubern / korrumpieren",
+                "beherrschen / geistig manipulieren"
+            ],
+            targets: [
+                "die Königin der Grenzdörfer",
+                "uralte Dracheneier im Herzwald",
+                "die mächtige Festung Eisentor",
+                "einen instabilen Magiestrudel im Gebirge",
+                "eine vergessene Tempelruine im Sumpf",
+                "ein rätselhaftes arkanes Artefakt",
+                "die letzte Elbenkönigin des Silberwaldes",
+                "den Gedächtnisstein der alten Götter",
+                "die sterbende Welteneiche",
+                "die prophetische Hexe Seraphira",
+                "den Knotenpunkt aller Ley-Linien",
+                "die eingefrorene Zeit selbst"
+            ],
+            consequences: [
+                "ein ganzes Königreich in Asche legen wird",
+                "den Lauf der Zeit umkehren wird",
+                "alle Stadtbewohner in Untote verwandeln wird",
+                "einen Götterkrieg entfachen wird",
+                "das Gewebe der Magie für immer zerreißen wird",
+                "auf wundersame Weise alle Wunden heilen wird",
+                "eine neue Welt aus den Trümmern erschaffen wird",
+                "alle Lebewesen in Stein verwandeln wird",
+                "eine neue dominierende Rasse beschwören wird",
+                "den Tod selbst aufheben wird",
+                "alle Erinnerungen der Sterblichen löschen wird",
+                "zwei mächtige Reiche in den Untergang reißen wird"
+            ]
+        });
     </script>
 </body>
 

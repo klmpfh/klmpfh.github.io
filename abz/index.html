@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Erfasst und verwaltet Arbeitszeiten für den Tag, ohne Daten zu speichern.">
     <title>Arbeitszeit-Tracker</title>
+    <link rel="stylesheet" href="../assets/css/reset.css">
+    <link rel="stylesheet" href="../assets/css/back-link.css">
     <style>
         :root {
             --bg-color: #f4f6f9;
@@ -22,9 +25,6 @@
         }
 
         * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         }
 
@@ -407,6 +407,7 @@
 <body>
 
 <div class="container">
+    <button type="button" class="back-link" onclick="location.href='../index.html'">← Zurück</button>
     <header>
         <h1>Arbeitszeit-Tracker</h1>
         <div class="input-group">
