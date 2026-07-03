@@ -504,6 +504,7 @@
 
     // ── INITIALISIERUNG ───────────────────────────────────────────────────
     window.addEventListener('DOMContentLoaded', () => {
+        loadFromUrlParams();
         startTimeInput.focus();
         startTimeInput.select();
         updateTracker();
@@ -529,6 +530,66 @@
 
     function markValid(input, valid) {
         input.classList.toggle('invalid', !valid);
+    }
+
+    // ── URL-PARAMETER (Tages-/Wochenarbeitszeit & Pausen als Link merken) ───
+
+    /** Liest daily/weekly/pauses aus den GET-Parametern und befüllt die Felder */
+    function loadFromUrlParams() {
+        const params = new URLSearchParams(window.location.search);
+        const daily  = params.get('daily');
+        const weekly = params.get('weekly');
+
+        if (daily) {
+            dailyTimeInput.value = daily;
+            const min = parseDuration(daily);
+            weeklyTimeInput.value = min > 0 ? formatDuration(min * 5) : '';
+        } else if (weekly) {
+            weeklyTimeInput.value = weekly;
+            const min = parseDuration(weekly);
+            dailyTimeInput.value = min > 0 ? formatDuration(Math.round(min / 5)) : '';
+        }
+
+        const pausesParam = params.get('pauses');
+        if (pausesParam) pauses = parsePausesParam(pausesParam);
+    }
+
+    /** "HH:MM-HH:MM,HH:MM-HH:MM" → [{ startMin, durationMin }] */
+    function parsePausesParam(str) {
+        return str.split(',').map(part => {
+            const [from, to] = part.split('-');
+            if (!from || !to) return null;
+            const fromMin = parseTimeToMinutes(from);
+            let   toMin   = parseTimeToMinutes(to);
+            if (toMin <= fromMin) toMin += 1440;
+            return { startMin: fromMin, durationMin: toMin - fromMin };
+        }).filter(p => p && p.durationMin > 0);
+    }
+
+    /** Pausenliste → "HH:MM-HH:MM,HH:MM-HH:MM" */
+    function serializePausesParam() {
+        return pauses
+            .map(p => `${formatMinutesToTime(p.startMin)}-${formatMinutesToTime(p.startMin + p.durationMin)}`)
+            .join(',');
+    }
+
+    /** Baut einen Query-String, hält ":" und "," aber unkodiert (Lesbarkeit) */
+    function buildQueryString(paramsObj) {
+        return Object.entries(paramsObj)
+            .filter(([, v]) => v)
+            .map(([k, v]) => `${k}=${encodeURIComponent(v).replace(/%3A/g, ':').replace(/%2C/g, ',')}`)
+            .join('&');
+    }
+
+    /** Schreibt daily/weekly/pauses als GET-Parameter in die URL (ohne Reload/History-Eintrag) */
+    function updateUrlParams() {
+        const qs = buildQueryString({
+            daily:  dailyTimeInput.value.trim(),
+            weekly: weeklyTimeInput.value.trim(),
+            pauses: serializePausesParam()
+        });
+        const newUrl = window.location.pathname + (qs ? '?' + qs : '');
+        history.replaceState(null, '', newUrl);
     }
 
     // ── PAUSEN-STEUERUNG ──────────────────────────────────────────────────
@@ -744,6 +805,7 @@
         renderPauseList(currentMinOfDay);
         renderWarnings(netWorkMin, elapsedPauseMin);
         drawTimeline(elapsedMin, startMin, currentMinOfDay, allPauseMin, runningPauseMin, targetWorkMin);
+        updateUrlParams();
     }
 
     // ── TIMELINE ──────────────────────────────────────────────────────────
