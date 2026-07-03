@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Choose Wisely</title>
+<style>
+    :root {
+        --cork: #ab7c4f;
+        --cork-dark: #8a6039;
+        --paper: #fdf7e6;
+        --paper-yellow: #fff3b0;
+        --paper-yellow2: #ffe985;
+        --paper-red: #ffd9d0;
+        --ink: #2b2116;
+        --ink-soft: #6b5638;
+        --red: #c0392b;
+        --red-dark: #7c1f17;
+        --pin-red: #d8433a;
+        --pin-yellow: #e8c547;
+        --pin-green: #4c8c5b;
+        --shadow: rgba(30, 18, 8, 0.4);
+    }
+
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        color: var(--ink);
+        background-color: var(--cork);
+        background-image:
+            radial-gradient(circle at 12% 18%, rgba(0, 0, 0, 0.12) 0, transparent 5%),
+            radial-gradient(circle at 78% 12%, rgba(0, 0, 0, 0.1) 0, transparent 4%),
+            radial-gradient(circle at 60% 82%, rgba(0, 0, 0, 0.12) 0, transparent 5%),
+            radial-gradient(circle at 30% 68%, rgba(255, 255, 255, 0.08) 0, transparent 4%),
+            radial-gradient(circle at 90% 60%, rgba(0, 0, 0, 0.1) 0, transparent 4%),
+            radial-gradient(circle at 8% 85%, rgba(255, 255, 255, 0.06) 0, transparent 4%),
+            repeating-radial-gradient(circle at center, rgba(0, 0, 0, 0.05) 0, rgba(0, 0, 0, 0.05) 1px, transparent 1px, transparent 7px);
+        min-height: 100vh;
+        padding: 40px 16px 70px;
+        display: flex;
+        justify-content: center;
+    }
+
+    .board {
+        width: 100%;
+        max-width: 640px;
+    }
+
+    .pin {
+        position: absolute;
+        top: -13px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background:
+            radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.65), transparent 45%),
+            radial-gradient(circle at 45% 45%, var(--pin-red), var(--red-dark) 85%);
+        box-shadow: 0 3px 4px var(--shadow), inset 0 -2px 3px rgba(0, 0, 0, 0.35);
+        z-index: 3;
+    }
+
+    .pin.pin-yellow {
+        background:
+            radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.7), transparent 45%),
+            radial-gradient(circle at 45% 45%, var(--pin-yellow), #a9781e 85%);
+    }
+
+    .pin.pin-green {
+        background:
+            radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.7), transparent 45%),
+            radial-gradient(circle at 45% 45%, var(--pin-green), #245030 85%);
+    }
+
+    header {
+        position: relative;
+        text-align: center;
+        background: var(--paper);
+        border-radius: 3px;
+        padding: 22px 20px 20px;
+        margin: 22px 0 26px;
+        transform: rotate(-1.2deg);
+        box-shadow: 0 10px 22px var(--shadow);
+    }
+
+    header h1 {
+        font-size: 26px;
+        font-weight: 800;
+        letter-spacing: 0.5px;
+        color: var(--ink);
+    }
+
+    header h1 .dice {
+        display: inline-block;
+        transform: rotate(-8deg);
+    }
+
+    header p {
+        color: var(--ink-soft);
+        font-size: 13.5px;
+        margin-top: 8px;
+        line-height: 1.5;
+    }
+
+    .tabs {
+        display: flex;
+        gap: 6px;
+        padding: 0 18px;
+        position: relative;
+        z-index: 1;
+    }
+
+    .tab-btn {
+        flex: 1;
+        padding: 11px 8px 9px;
+        border: none;
+        background: #e9c98b;
+        color: var(--ink-soft);
+        font-size: 13.5px;
+        font-weight: 700;
+        cursor: pointer;
+        clip-path: polygon(8% 0, 92% 0, 100% 100%, 0 100%);
+        transform: translateY(3px);
+        transition: transform 0.15s, background 0.15s, color 0.15s;
+    }
+
+    .tab-btn.active {
+        background: var(--paper-yellow);
+        color: var(--ink);
+        transform: translateY(0);
+        box-shadow: 0 -3px 8px rgba(0, 0, 0, 0.12);
+    }
+
+    .note {
+        position: relative;
+        background: var(--paper-yellow);
+        border-radius: 2px;
+        padding: 24px 22px;
+        margin-bottom: 22px;
+        box-shadow: 0 12px 24px var(--shadow);
+        transform: rotate(0.6deg);
+    }
+
+    #view-photo .note {
+        transform: rotate(-0.5deg);
+    }
+
+    .view {
+        display: none;
+    }
+
+    .view.active {
+        display: block;
+    }
+
+    label.field-label {
+        display: block;
+        font-size: 12.5px;
+        font-weight: 700;
+        color: var(--ink-soft);
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        margin-bottom: 10px;
+    }
+
+    textarea, input[type="text"] {
+        width: 100%;
+        background: var(--paper);
+        background-image: repeating-linear-gradient(to bottom, transparent, transparent 27px, rgba(192, 57, 43, 0.15) 28px);
+        border: none;
+        border-left: 4px solid var(--red);
+        border-radius: 4px;
+        color: var(--ink);
+        font-family: inherit;
+        font-size: 15px;
+        line-height: 28px;
+        padding: 4px 14px;
+        outline: none;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
+        resize: vertical;
+    }
+
+    textarea::placeholder, input::placeholder {
+        color: #b3a688;
+    }
+
+    textarea:focus, input[type="text"]:focus {
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15), 0 0 0 3px rgba(192, 57, 43, 0.25);
+    }
+
+    .hint {
+        color: var(--ink-soft);
+        font-size: 12.5px;
+        margin-top: 10px;
+    }
+
+    .btn {
+        margin-top: 16px;
+        width: 100%;
+        padding: 13px 14px;
+        border: 3px solid var(--red-dark);
+        border-radius: 7px;
+        background: var(--red);
+        color: var(--paper);
+        font-size: 15px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        cursor: pointer;
+        transform: rotate(-0.6deg);
+        box-shadow: 3px 4px 0 var(--ink-soft);
+        transition: transform 0.08s, box-shadow 0.08s, filter 0.15s;
+    }
+
+    .btn:hover {
+        filter: brightness(1.06);
+    }
+
+    .btn:active {
+        transform: rotate(-0.6deg) translate(2px, 3px);
+        box-shadow: 1px 1px 0 var(--ink-soft);
+    }
+
+    .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .btn.secondary {
+        background: var(--paper);
+        border-color: var(--ink-soft);
+        color: var(--ink);
+    }
+
+    .results {
+        margin-top: 4px;
+    }
+
+    .chip {
+        display: inline-block;
+        background: var(--paper);
+        border: 1px dashed var(--ink-soft);
+        border-radius: 20px;
+        padding: 2px 10px;
+        margin: 3px 4px 0 0;
+        font-size: 12.5px;
+    }
+
+    .live-preview {
+        margin-top: 12px;
+        min-height: 22px;
+    }
+
+    .live-preview .chip {
+        background: var(--paper-yellow2);
+    }
+
+    .live-preview .chip-empty {
+        font-size: 12.5px;
+        color: var(--ink-soft);
+        font-style: italic;
+    }
+
+    .winner-note {
+        position: relative;
+        background: var(--paper);
+        border-radius: 3px;
+        padding: 20px 18px 18px;
+        text-align: center;
+        transform: rotate(-1.6deg);
+        box-shadow: 0 10px 20px var(--shadow);
+    }
+
+    .winner-note .winner-label {
+        font-size: 13px;
+        color: var(--ink-soft);
+        margin-bottom: 6px;
+    }
+
+    .winner-note .winner-value {
+        font-size: 26px;
+        font-weight: 800;
+        color: var(--red);
+        text-decoration: underline wavy var(--red);
+        text-decoration-thickness: 2px;
+        text-underline-offset: 5px;
+        word-break: break-word;
+    }
+
+    .note.note-warn {
+        position: relative;
+        background: var(--paper-red);
+        border: none;
+        color: var(--red-dark);
+        font-size: 14px;
+        border-radius: 3px;
+        padding: 18px 18px 16px;
+        margin: 0;
+        transform: rotate(-0.8deg);
+        box-shadow: 0 10px 20px var(--shadow);
+    }
+
+    .drop-zone {
+        border: 3px dashed var(--ink-soft);
+        border-radius: 6px;
+        padding: 30px 14px;
+        text-align: center;
+        color: var(--ink-soft);
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        background: rgba(255, 255, 255, 0.2);
+        transition: border-color 0.2s, color 0.2s, background 0.2s;
+    }
+
+    .drop-zone:hover, .drop-zone.dragover {
+        border-color: var(--red);
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.4);
+    }
+
+    .drop-zone input {
+        display: none;
+    }
+
+    .canvas-wrap {
+        margin-top: 20px;
+        text-align: center;
+    }
+
+    .polaroid {
+        display: inline-block;
+        background: #fff;
+        padding: 12px 12px 34px;
+        box-shadow: 0 10px 22px var(--shadow);
+        transform: rotate(-1.5deg);
+        max-width: 100%;
+    }
+
+    canvas {
+        display: block;
+        max-width: 100%;
+        background: #f4f0e6;
+    }
+
+    .actions-row {
+        display: flex;
+        gap: 10px;
+        margin-top: 16px;
+    }
+
+    footer {
+        text-align: center;
+        color: var(--ink);
+        opacity: 0.75;
+        font-size: 12.5px;
+        margin-top: 10px;
+        font-weight: 600;
+    }
+</style>
+</head>
+<body>
+
+<div class="board">
+    <header>
+        <span class="pin"></span>
+        <h1><span class="dice">🎲</span> Choose Wisely</h1>
+        <p>Zwei Wege, dem Zufall die Entscheidung zu überlassen: eine Option aus deiner Liste ziehen, oder einen blinden Punkt auf einem Foto markieren.</p>
+    </header>
+
+    <div class="tabs">
+        <button type="button" class="tab-btn active" data-view="choose">🎯 Losen</button>
+        <button type="button" class="tab-btn" data-view="photo">📌 Foto-Punkt</button>
+    </div>
+
+    <div class="view active" id="view-choose">
+        <div class="note">
+            <label class="field-label" for="options">Deine Optionen</label>
+            <textarea id="options" rows="4" placeholder="Pizza&#10;Pasta&#10;Sushi"></textarea>
+            <p class="hint">Eine Option pro Zeile.</p>
+            <div class="live-preview" id="livePreview"></div>
+            <button type="button" class="btn" id="chooseBtn">Jetzt entscheiden</button>
+        </div>
+
+        <div class="results" id="chooseResults"></div>
+    </div>
+
+    <div class="view" id="view-photo">
+        <div class="note">
+            <label class="field-label">Foto</label>
+            <div class="drop-zone" id="dropZone">
+                📷 Foto hierher ziehen oder klicken zum Hochladen
+                <input type="file" id="fileInput" accept="image/*">
+            </div>
+            <p class="hint">Praktisch, wenn der Zufall auf etwas im Bild zeigen soll – zum Beispiel eine Speisekarte oder einen Stadtplan.</p>
+
+            <div class="canvas-wrap" id="canvasWrap" style="display:none;">
+                <div class="polaroid">
+                    <canvas id="canvas"></canvas>
+                </div>
+                <div class="actions-row">
+                    <button type="button" class="btn" id="markBtn">Punkt markieren</button>
+                </div>
+                <div class="actions-row">
+                    <button type="button" class="btn secondary" id="downloadBtn" style="display:none;">Als Bild speichern</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>An die Pinnwand geheftet von klmpfh 📌</footer>
+</div>
+
+<script>
+    // ---------- Tabs ----------
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const views = {
+        choose: document.getElementById('view-choose'),
+        photo: document.getElementById('view-photo')
+    };
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            tabBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            Object.values(views).forEach(v => v.classList.remove('active'));
+            views[btn.dataset.view].classList.add('active');
+        });
+    });
+
+    function escapeHtml(str) {
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
+    function randBetween(min, max) {
+        return Math.floor(Math.random() * (max - min) + min);
+    }
+
+    // ---------- Losen ----------
+    const optionsEl = document.getElementById('options');
+    const chooseBtn = document.getElementById('chooseBtn');
+    const chooseResultsEl = document.getElementById('chooseResults');
+    const livePreviewEl = document.getElementById('livePreview');
+
+    function parseLines(str) {
+        return str.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    }
+
+    function choose(str) {
+        const arr = parseLines(str);
+        if (arr.length === 0) {
+            return { error: 'Trag mindestens eine Option ein – eine pro Zeile.' };
+        }
+        const pick = arr[randBetween(0, arr.length)];
+        return { arr, pick };
+    }
+
+    function renderLivePreview() {
+        const arr = parseLines(optionsEl.value);
+        if (arr.length === 0) {
+            livePreviewEl.innerHTML = '<span class="chip-empty">Noch keine Optionen eingetragen …</span>';
+            return;
+        }
+        livePreviewEl.innerHTML = arr.map(o => `<span class="chip">${escapeHtml(o)}</span>`).join('');
+    }
+
+    optionsEl.addEventListener('input', renderLivePreview);
+    renderLivePreview();
+
+    chooseBtn.addEventListener('click', () => {
+        const res = choose(optionsEl.value);
+        if (res.error) {
+            chooseResultsEl.innerHTML = `
+                <div class="note note-warn">
+                    <span class="pin pin-yellow"></span>
+                    ⚠️ ${escapeHtml(res.error)}
+                </div>`;
+            return;
+        }
+        chooseResultsEl.innerHTML = `
+            <div class="winner-note">
+                <span class="pin pin-green"></span>
+                <div class="winner-label">Der Zufall hat entschieden:</div>
+                <div class="winner-value">${escapeHtml(res.pick)}</div>
+            </div>`;
+    });
+
+    // ---------- Foto-Punkt ----------
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const canvasWrap = document.getElementById('canvasWrap');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const markBtn = document.getElementById('markBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    let originalImg = null;
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            loadFile(e.dataTransfer.files[0]);
+        }
+    });
+    fileInput.addEventListener('change', () => {
+        if (fileInput.files && fileInput.files[0]) {
+            loadFile(fileInput.files[0]);
+        }
+    });
+
+    function loadFile(file) {
+        if (!file.type.startsWith('image/')) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                originalImg = img;
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+                canvasWrap.style.display = 'block';
+                downloadBtn.style.display = 'none';
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    // Zufälliger Punkt: 3px breites rotes Fadenkreuz über die gesamte Breite/Höhe
+    markBtn.addEventListener('click', () => {
+        if (!originalImg) return;
+        ctx.drawImage(originalImg, 0, 0);
+
+        const maxx = canvas.width;
+        const maxy = canvas.height;
+        const px = 3;
+        const valx = randBetween(0, Math.max(1, maxx - px));
+        const valy = randBetween(0, Math.max(1, maxy - px));
+
+        ctx.fillStyle = '#ff0000';
+        ctx.fillRect(valx, 0, px, maxy);
+        ctx.fillRect(0, valy, maxx, px);
+
+        downloadBtn.style.display = 'block';
+    });
+
+    downloadBtn.addEventListener('click', () => {
+        const link = document.createElement('a');
+        link.download = 'choose-wisely.jpg';
+        link.href = canvas.toDataURL('image/jpeg', 0.92);
+        link.click();
+    });
+</script>
+
+</body>
+</html>

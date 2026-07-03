@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Knall-Bumm</title>
+<style>
+    :root {
+        --bg-color: #16121a;
+        --container-bg: #211c29;
+        --card-bg: #2a2334;
+        --text-color: #f0eaf7;
+        --text-muted: #a89bb8;
+        --primary: #e0529c;
+        --primary-light: rgba(224, 82, 156, 0.15);
+        --accent: #ffcf4d;
+        --success: #4de0a0;
+        --success-light: rgba(77, 224, 160, 0.12);
+        --danger: #ff6b6b;
+        --danger-light: rgba(255, 107, 107, 0.12);
+        --border-color: #3a3145;
+        --code-bg: #17131d;
+    }
+
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+        background: radial-gradient(circle at top, #241d2c 0%, var(--bg-color) 60%);
+        color: var(--text-color);
+        padding: 30px 15px 60px;
+        display: flex;
+        justify-content: center;
+        min-height: 100vh;
+    }
+
+    .container {
+        width: 100%;
+        max-width: 760px;
+    }
+
+    header {
+        text-align: center;
+        margin-bottom: 24px;
+    }
+
+    header h1 {
+        font-size: 28px;
+        font-weight: 800;
+        letter-spacing: 0.5px;
+    }
+
+    header h1 span {
+        background: linear-gradient(90deg, var(--primary), var(--accent));
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+    }
+
+    header p {
+        color: var(--text-muted);
+        font-size: 13px;
+        margin-top: 6px;
+    }
+
+    .panel {
+        background: var(--container-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 18px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    label.field-label {
+        display: block;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 8px;
+    }
+
+    .drinks {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .drink-row {
+        position: relative;
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 14px 40px 14px 14px;
+    }
+
+    .drink-fields {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr 1.4fr;
+        gap: 10px;
+    }
+
+    @media (max-width: 560px) {
+        .drink-fields {
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+
+    .field label {
+        display: block;
+        font-size: 10.5px;
+        font-weight: 700;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-bottom: 5px;
+    }
+
+    .field input {
+        width: 100%;
+        background: var(--code-bg);
+        border: 2px solid var(--border-color);
+        border-radius: 8px;
+        color: var(--text-color);
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 13.5px;
+        padding: 9px 10px;
+        outline: none;
+        transition: border-color 0.2s;
+    }
+
+    .field input::placeholder {
+        color: #5a4f68;
+    }
+
+    .field input:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px var(--primary-light);
+    }
+
+    .field input[type="number"]::-webkit-outer-spin-button,
+    .field input[type="number"]::-webkit-inner-spin-button {
+        opacity: 0.5;
+    }
+
+    .remove-btn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 24px;
+        height: 24px;
+        border: none;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--text-muted);
+        font-size: 16px;
+        line-height: 1;
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s;
+    }
+
+    .remove-btn:hover {
+        background: var(--danger-light);
+        color: var(--danger);
+    }
+
+    .add-btn {
+        margin-top: 14px;
+        width: 100%;
+        padding: 11px 14px;
+        border: 2px dashed var(--border-color);
+        border-radius: 8px;
+        background: transparent;
+        color: var(--text-muted);
+        font-size: 13.5px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: border-color 0.2s, color 0.2s;
+    }
+
+    .add-btn:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+
+    .results {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .empty-hint {
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 13.5px;
+        padding: 10px 0;
+    }
+
+    .winner-banner {
+        background: linear-gradient(90deg, var(--primary-light), var(--success-light));
+        border: 1px solid var(--accent);
+        border-radius: 10px;
+        padding: 14px 16px;
+        font-size: 14.5px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .winner-banner b {
+        color: var(--accent);
+    }
+
+    .card {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 16px 18px;
+    }
+
+    .card.error {
+        border-color: var(--danger);
+        background: var(--danger-light);
+        color: #ffdada;
+        font-size: 14px;
+    }
+
+    .card.notice {
+        border-color: var(--border-color);
+        color: var(--text-muted);
+        font-size: 14px;
+    }
+
+    .card-name {
+        font-weight: 700;
+        font-size: 15px;
+        margin-bottom: 10px;
+        color: var(--accent);
+    }
+
+    .card-section-label {
+        font-size: 10.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-muted);
+        margin: 16px 0 8px;
+    }
+
+    .card-section-label:first-of-type {
+        margin-top: 0;
+    }
+
+    .hero {
+        text-align: center;
+        background: var(--primary-light);
+        border-radius: 10px;
+        padding: 14px 12px;
+    }
+
+    .hero-value {
+        font-size: 32px;
+        font-weight: 800;
+        color: var(--primary);
+        line-height: 1.15;
+    }
+
+    .hero-value .hero-unit {
+        font-size: 16px;
+        font-weight: 700;
+        margin-left: 2px;
+    }
+
+    .hero-label {
+        margin-top: 2px;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--primary);
+        opacity: 0.85;
+    }
+
+    .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+    }
+
+    @media (max-width: 480px) {
+        .stat-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    .stat {
+        background: var(--code-bg);
+        border-radius: 8px;
+        padding: 9px 10px;
+    }
+
+    .stat-label {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        color: var(--text-muted);
+        margin-bottom: 4px;
+    }
+
+    .stat-value {
+        font-size: 14.5px;
+        font-weight: 700;
+        color: var(--text-color);
+    }
+
+    .stat-value .stat-unit {
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--text-muted);
+        margin-left: 2px;
+    }
+
+    .card.is-winner {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 1px var(--accent);
+    }
+
+    .card.is-winner .hero {
+        background: rgba(255, 207, 77, 0.15);
+    }
+
+    .card.is-winner .hero-value,
+    .card.is-winner .hero-label {
+        color: var(--accent);
+    }
+
+    footer {
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 12px;
+        margin-top: 26px;
+    }
+
+    footer a {
+        color: var(--text-muted);
+    }
+</style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1><span>🥂 Knall-Bumm</span></h1>
+        <p>Errechnet aus Menge, Alkoholgehalt und Preis den Knall-Bumm-Wert (ml Alkohol pro Euro).</p>
+    </header>
+
+    <div class="panel">
+        <label class="field-label">Getränke</label>
+        <div class="drinks" id="drinks"></div>
+        <button type="button" class="add-btn" id="addDrink">+ Getränk hinzufügen</button>
+    </div>
+
+    <div class="results" id="results"></div>
+
+    <footer>Bewusst genießen! 🎉</footer>
+</div>
+
+<script>
+    const REF_ALC = 40 * 20; // 40% * 20ml -> Referenz für 1 "Shot"
+
+    const drinksEl = document.getElementById('drinks');
+    const addDrinkBtn = document.getElementById('addDrink');
+    const resultsEl = document.getElementById('results');
+
+    function addRow() {
+        const row = document.createElement('div');
+        row.className = 'drink-row';
+        row.innerHTML = `
+            <div class="drink-fields">
+                <div class="field">
+                    <label>Menge (L/ml)</label>
+                    <input type="number" step="any" min="0" class="drink-vol" placeholder="500">
+                </div>
+                <div class="field">
+                    <label>Alkohol %</label>
+                    <input type="number" step="any" min="0" max="100" class="drink-alc" placeholder="5">
+                </div>
+                <div class="field">
+                    <label>Preis €</label>
+                    <input type="number" step="any" min="0" class="drink-eur" placeholder="1">
+                </div>
+                <div class="field field-name">
+                    <label>Name (optional)</label>
+                    <input type="text" class="drink-name" placeholder="Bier">
+                </div>
+            </div>
+            <button type="button" class="remove-btn" title="Getränk entfernen">×</button>`;
+        row.querySelector('.remove-btn').addEventListener('click', () => {
+            row.remove();
+            render();
+        });
+        drinksEl.appendChild(row);
+        return row;
+    }
+
+    addDrinkBtn.addEventListener('click', () => {
+        addRow();
+        render();
+    });
+
+    drinksEl.addEventListener('input', render);
+
+    // Startbelegung: zwei leere Getränke zum direkten Vergleich
+    addRow();
+    addRow();
+
+    function round(x) {
+        return Math.round(x * 100) / 100;
+    }
+
+    function escapeHtml(str) {
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
+    // errechnet Ergebnis-Objekt für ein Getränk (Logik 1:1 vom Telegram-Bot übernommen)
+    function calcDrink(rawVol, rawAlc, rawEur, rawName, altName) {
+        const out = { error: null, notice: null, empty: false, name: rawName || altName, result: undefined };
+
+        rawVol = rawVol.trim();
+        rawAlc = rawAlc.trim();
+        rawEur = rawEur.trim();
+
+        if (!rawVol && !rawAlc && !rawEur) {
+            out.empty = true;
+            return out;
+        }
+        if (!rawVol || !rawAlc || !rawEur) {
+            out.error = 'Bitte Menge, Alkoholgehalt und Preis angeben.';
+            return out;
+        }
+
+        const values = [rawVol, rawAlc, rawEur];
+        for (let i = 0; i < 3; i++) {
+            values[i] = values[i].replace(',', '.');
+            values[i] = parseFloat(values[i]);
+            if (typeof values[i] !== 'number' || isNaN(values[i])) {
+                out.error = `Der ${i}. Wert konnte nicht als Zahl erkannt werden!`;
+                return out;
+            }
+            if (values[i] < 0) {
+                out.error = `Der ${i}. Wert ist kleiner 0 ... das wird nichts ...`;
+                return out;
+            }
+        }
+
+        if (values[1] > 100) {
+            out.error = 'Der Alkoholgehalt übersteigt die 100%. Wie geht das???';
+            return out;
+        }
+        if (values[0] == 0) {
+            out.notice = 'Das würde ich nicht trinken ...';
+            return out;
+        }
+        if (values[1] == 0) {
+            out.notice = 'naja ... ohne ist halt ohne ...';
+            return out;
+        }
+        if (values[0] >= 10) values[0] /= 1000; // Umrechnung auf ml -> Liter
+
+        const vol = values[0];
+        const alc = values[1];
+        const eur = values[2];
+
+        const alcIn = vol * alc / 100 * 1000;
+        const shots = alcIn / REF_ALC * 100;
+
+        let shotsPerEur = round((vol * alc / 100) / eur * (1000 / REF_ALC));
+        let alcPerEur = round((vol * alc / 100) / eur * 1000);
+
+        out.result = alcPerEur;
+
+        out.alcPerEurDisplay = isFinite(alcPerEur) ? alcPerEur : 'UNENDLICH';
+        out.shotsPerEurDisplay = isFinite(shotsPerEur) ? shotsPerEur : 'UNENDLICH';
+
+        out.vol = vol;
+        out.alc = alc;
+        out.eur = eur;
+        out.alcIn = alcIn;
+        out.shotsAmount = round(vol * 1000 / 20);
+        out.shots = round(shots);
+        out.mlPerShot = round(vol / shots * 1000);
+        out.costPerLiter = round(eur / vol);
+        out.costPerMlAlc = alcIn > 0 ? round(eur / alcIn) : 'UNENDLICH';
+
+        return out;
+    }
+
+    function cardHtml(r, isWinner) {
+        if (r.error) {
+            return `<div class="card error">⚠️ ${escapeHtml(r.error)}</div>`;
+        }
+        if (r.notice) {
+            return `<div class="card notice">🥂 ${escapeHtml(r.notice)}</div>`;
+        }
+
+        const nameHtml = r.name ? `<div class="card-name">🥂 ${escapeHtml(r.name)}</div>` : '';
+
+        const stat = (label, value, unit) =>
+            `<div class="stat"><div class="stat-label">${label}</div><div class="stat-value">${value}${unit ? ` <span class="stat-unit">${unit}</span>` : ''}</div></div>`;
+
+        return `<div class="card${isWinner ? ' is-winner' : ''}">
+            ${nameHtml}
+            <div class="hero">
+                <div class="hero-value">${r.alcPerEurDisplay}<span class="hero-unit">ml</span></div>
+                <div class="hero-label">${isWinner ? '⭐️ ' : ''}Alkohol pro Euro</div>
+            </div>
+            <div class="card-section-label">Eingabe</div>
+            <div class="stat-grid">
+                ${stat('Menge', round(r.vol * 1000), 'ml')}
+                ${stat('Alkohol', r.alc, '%')}
+                ${stat('Preis', r.eur, '€')}
+            </div>
+            <div class="card-section-label">Kennzahlen</div>
+            <div class="stat-grid">
+                ${stat('Alkoholmenge', round(r.alcIn), 'ml')}
+                ${stat('Menge für Shots', r.shotsAmount, '× 20ml')}
+                ${stat('Alkohol in Shots', r.shots)}
+                ${stat('Menge pro Shot', r.mlPerShot, 'ml')}
+                ${stat('Preis pro Liter', r.costPerLiter, '€')}
+                ${stat('Preis pro ml Alk.', r.costPerMlAlc, '€')}
+            </div>
+        </div>`;
+    }
+
+    function render() {
+        const rows = Array.from(drinksEl.querySelectorAll('.drink-row'));
+
+        const data = rows.map((row, i) => calcDrink(
+            row.querySelector('.drink-vol').value,
+            row.querySelector('.drink-alc').value,
+            row.querySelector('.drink-eur').value,
+            row.querySelector('.drink-name').value.trim(),
+            'Nr ' + (i + 1)
+        )).filter(d => !d.empty);
+
+        if (data.length === 0) {
+            resultsEl.innerHTML = '<div class="empty-hint">Trag oben ein oder mehrere Getränke ein, um den Knall-Bumm-Wert zu berechnen.</div>';
+            return;
+        }
+
+        let winnerIndex = -1;
+        if (data.length > 1) {
+            let best = { result: 0 };
+            data.forEach((d, i) => {
+                if (typeof d.result === 'number' && isFinite(d.result) && d.result > best.result) {
+                    best = d;
+                    winnerIndex = i;
+                }
+            });
+            // falls alle Ergebnisse "UNENDLICH" (Preis 0), keinen speziellen Gewinner markieren
+            if (winnerIndex === -1) {
+                data.forEach((d, i) => {
+                    if (typeof d.result === 'number' && !isFinite(d.result) && winnerIndex === -1) winnerIndex = i;
+                });
+            }
+        }
+
+        let html = '';
+        if (winnerIndex !== -1) {
+            html += `<div class="winner-banner">⭐️ Gewinner: <b>${escapeHtml(data[winnerIndex].name)}</b> mit <b>${data[winnerIndex].alcPerEurDisplay} ml Alc. pro Euro</b></div>`;
+        }
+
+        html += data.map((d, i) => cardHtml(d, i === winnerIndex)).join('');
+
+        resultsEl.innerHTML = html;
+    }
+
+    render();
+</script>
+
+</body>
+</html>
