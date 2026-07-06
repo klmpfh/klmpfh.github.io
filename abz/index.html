@@ -23,11 +23,12 @@
             --highlight-bg: #f7fafc;
         }
 
-        * {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        button, input {
+            font-family: inherit;
         }
 
         body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-color);
             padding: 30px 15px;
@@ -104,13 +105,42 @@
         /* Arbeitszeit-Eingaben */
         .work-inputs {
             display: flex;
-            align-items: flex-end;
-            gap: 12px;
+            align-items: stretch;
+            gap: 18px;
             padding: 16px;
             background: var(--highlight-bg);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .input-block {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            justify-content: flex-start;
+        }
+
+        .input-block-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .work-inputs-divider {
+            width: 1px;
+            background: var(--border-color);
+            align-self: stretch;
+            margin: 2px 0;
+        }
+
+        .linked-fields {
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
             flex-wrap: wrap;
         }
 
@@ -125,8 +155,6 @@
         .work-inputs-hint {
             font-size: 12px;
             color: var(--text-muted);
-            align-self: flex-end;
-            padding-bottom: 10px;
         }
 
         /* ── Pausen-Bereich ── */
@@ -157,41 +185,39 @@
             margin-right: 4px;
         }
 
-        .btn-pause-start {
-            background-color: var(--warning);
-            color: #fff;
-            border: none;
-            padding: 7px 14px;
+        .btn-pause-start,
+        .btn-pause-stop,
+        .btn-add-pause,
+        .btn-confirm,
+        .btn-cancel {
+            border-radius: 6px;
             font-size: 13px;
             font-weight: 600;
-            border-radius: 6px;
             cursor: pointer;
-            transition: opacity 0.2s;
         }
-        .btn-pause-start:hover { opacity: 0.85; }
 
-        .btn-pause-stop {
-            background-color: var(--success);
-            color: #fff;
-            border: none;
+        .btn-pause-start,
+        .btn-pause-stop,
+        .btn-add-pause {
             padding: 7px 14px;
-            font-size: 13px;
-            font-weight: 600;
-            border-radius: 6px;
-            cursor: pointer;
+        }
+
+        .btn-pause-start,
+        .btn-pause-stop {
+            border: none;
+            color: #fff;
             transition: opacity 0.2s;
         }
+        .btn-pause-start:hover,
         .btn-pause-stop:hover { opacity: 0.85; }
+
+        .btn-pause-start { background-color: var(--warning); }
+        .btn-pause-stop  { background-color: var(--success); }
 
         .btn-add-pause {
             background-color: #fff;
             color: var(--primary);
             border: 1px solid var(--primary);
-            padding: 7px 14px;
-            font-size: 13px;
-            font-weight: 600;
-            border-radius: 6px;
-            cursor: pointer;
             transition: all 0.2s;
         }
         .btn-add-pause:hover { background-color: var(--primary); color: #fff; }
@@ -243,26 +269,22 @@
             font-weight: 500;
         }
 
+        .btn-confirm,
+        .btn-cancel {
+            padding: 6px 14px;
+        }
+
         .btn-confirm {
             background-color: var(--success);
             color: #fff;
             border: none;
-            padding: 6px 14px;
-            font-size: 13px;
-            font-weight: 600;
-            border-radius: 6px;
-            cursor: pointer;
         }
 
         .btn-cancel {
             background-color: #fff;
             color: var(--text-muted);
             border: 1px solid var(--border-color);
-            padding: 6px 14px;
-            font-size: 13px;
             font-weight: 500;
-            border-radius: 6px;
-            cursor: pointer;
         }
 
         .pause-items-list {
@@ -340,9 +362,13 @@
         /* ── Stat-Cards ── */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(5, 1fr);
             gap: 16px;
             margin-bottom: 20px;
+        }
+
+        @media (max-width: 900px) {
+            .stats-grid { grid-template-columns: repeat(3, 1fr); }
         }
 
         @media (max-width: 640px) {
@@ -351,10 +377,21 @@
 
         .stat-card {
             background: var(--highlight-bg);
-            border: 1px solid var(--border-color);
+            border: 2px solid var(--border-color);
             border-radius: 8px;
             padding: 16px;
             text-align: center;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+        }
+
+        .stat-card:hover {
+            border-color: #a0c8e8;
+        }
+
+        .stat-card.selected {
+            border-color: var(--primary);
+            background: var(--primary-light);
         }
 
         .stat-label {
@@ -412,20 +449,29 @@
 
     <!-- Arbeitszeitfelder -->
     <div class="work-inputs">
-        <div class="input-group">
-            <label for="startTime">Startzeit</label>
-            <input type="time" id="startTime">
+        <div class="input-block">
+            <div class="input-group">
+                <label for="startTime">Startzeit</label>
+                <input type="time" id="startTime">
+            </div>
         </div>
-        <div class="input-group">
-            <label for="dailyTime">Tagesarbeitszeit</label>
-            <input type="text" id="dailyTime" class="duration-input" placeholder="7:36" maxlength="6">
+
+        <div class="work-inputs-divider"></div>
+
+        <div class="input-block">
+            <div class="linked-fields">
+                <div class="input-group">
+                    <label for="dailyTime">Tagesarbeitszeit</label>
+                    <input type="text" id="dailyTime" class="duration-input" placeholder="H:MM" maxlength="6">
+                </div>
+                <div class="link-indicator" title="Die Felder sind verknüpft (Woche ÷ 5 = Tag)">⇄</div>
+                <div class="input-group">
+                    <label for="weeklyTime">Wochenarbeitszeit</label>
+                    <input type="text" id="weeklyTime" class="duration-input" placeholder="H:MM" maxlength="6">
+                </div>
+            </div>
+            <span class="work-inputs-hint">Format: Stunden:Minuten&ensp;(z.&nbsp;B. 7:36 oder 38:00)</span>
         </div>
-        <div class="link-indicator" title="Die Felder sind verknüpft (Woche ÷ 5 = Tag)">⇄</div>
-        <div class="input-group">
-            <label for="weeklyTime">Wochenarbeitszeit</label>
-            <input type="text" id="weeklyTime" class="duration-input" placeholder="38:00" maxlength="6">
-        </div>
-        <span class="work-inputs-hint">Format: Stunden:Minuten&ensp;(z.&nbsp;B. 7:36 oder 38:00)</span>
     </div>
 
     <!-- Pausen -->
@@ -462,19 +508,23 @@
 
     <!-- Ergebnisse -->
     <div class="stats-grid">
-        <div class="stat-card">
+        <div class="stat-card" id="statCardTarget" onclick="selectTitleStat('target')" title="Klicken, um diesen Wert im Seitentitel anzuzeigen">
             <div class="stat-label">Zielzeit</div>
             <div class="stat-value muted" id="statTargetTime">–</div>
         </div>
-        <div class="stat-card">
+        <div class="stat-card" id="statCardNet" onclick="selectTitleStat('net')" title="Klicken, um diesen Wert im Seitentitel anzuzeigen">
             <div class="stat-label">Netto-Arbeitszeit</div>
             <div class="stat-value" id="statNetWork">–</div>
         </div>
-        <div class="stat-card">
+        <div class="stat-card" id="statCardPause" onclick="selectTitleStat('pause')" title="Klicken, um diesen Wert im Seitentitel anzuzeigen">
+            <div class="stat-label">Pausen gesamt</div>
+            <div class="stat-value muted" id="statPauseTotal">–</div>
+        </div>
+        <div class="stat-card" id="statCardDiff" onclick="selectTitleStat('diff')" title="Klicken, um diesen Wert im Seitentitel anzuzeigen">
             <div class="stat-label">Rest / Überziehung</div>
             <div class="stat-value" id="statDiff">–</div>
         </div>
-        <div class="stat-card">
+        <div class="stat-card" id="statCardProgress" onclick="selectTitleStat('percent')" title="Klicken, um diesen Wert im Seitentitel anzuzeigen">
             <div class="stat-label">Fortschritt</div>
             <div class="stat-value" id="statProgress">–</div>
             <div class="stat-progress-bar">
@@ -492,23 +542,92 @@
     let runningPauseStart  = null;   // Date.now() wenn Pause läuft, sonst null
     let addPauseFormVisible= false;
     let editingPauseIndex  = null;   // null = neue Pause, number = Bearbeitung
+    let titleStat          = 'percent'; // welcher Stat-Wert im Seitentitel angezeigt wird
 
+    const titleStatLabels = {
+        percent: 'Fortschritt',
+        target:  'Zielzeit',
+        net:     'Netto-Arbeitszeit',
+        pause:   'Pausen gesamt',
+        diff:    'Rest / Überziehung'
+    };
     const maxTimelineDuration = 660; // 11h – visuelle X-Achsen-Länge in Minuten
 
-    // ── DOM ───────────────────────────────────────────────────────────────
+    // ── DOM (einmalig auflösen statt bei jedem Update neu zu suchen) ───────
     const startTimeInput  = document.getElementById('startTime');
     const dailyTimeInput  = document.getElementById('dailyTime');
     const weeklyTimeInput = document.getElementById('weeklyTime');
     const svg             = document.getElementById('timelineSvg');
 
+    const dom = {
+        pauseToggleBtn:         document.getElementById('pauseToggleBtn'),
+        runningPauseDisplay:    document.getElementById('runningPauseDisplay'),
+        runningPauseStartLabel: document.getElementById('runningPauseStartLabel'),
+        runningPauseDuration:   document.getElementById('runningPauseDuration'),
+        addPauseForm:           document.getElementById('addPauseForm'),
+        addPauseFormTitle:      document.getElementById('addPauseFormTitle'),
+        addPauseConfirmBtn:     document.getElementById('addPauseConfirmBtn'),
+        pauseFromInput:         document.getElementById('pauseFromInput'),
+        pauseToInput:           document.getElementById('pauseToInput'),
+        pauseList:              document.getElementById('pauseList'),
+        legalWarnings:          document.getElementById('legalWarnings'),
+        statTargetTime:         document.getElementById('statTargetTime'),
+        statNetWork:            document.getElementById('statNetWork'),
+        statPauseTotal:         document.getElementById('statPauseTotal'),
+        statDiff:               document.getElementById('statDiff'),
+        statProgress:           document.getElementById('statProgress'),
+        statProgressBar:        document.getElementById('statProgressBar'),
+    };
+
+    const titleStatCards = {
+        percent: document.getElementById('statCardProgress'),
+        target:  document.getElementById('statCardTarget'),
+        net:     document.getElementById('statCardNet'),
+        pause:   document.getElementById('statCardPause'),
+        diff:    document.getElementById('statCardDiff')
+    };
+
     // ── INITIALISIERUNG ───────────────────────────────────────────────────
     window.addEventListener('DOMContentLoaded', () => {
         loadFromUrlParams();
+        updateStatCardSelection();
         startTimeInput.focus();
         startTimeInput.select();
         updateTracker();
         setInterval(updateTracker, 10000);
     });
+
+    /** Wird beim Klick auf eine Statistik-Kachel aufgerufen und legt fest, was im Seitentitel steht */
+    function selectTitleStat(stat) {
+        titleStat = stat;
+        updateStatCardSelection();
+        updateTracker();
+    }
+
+    /** Markiert die aktuell für den Titel gewählte Kachel visuell */
+    function updateStatCardSelection() {
+        Object.entries(titleStatCards).forEach(([stat, el]) => {
+            el.classList.toggle('selected', stat === titleStat);
+        });
+    }
+
+    /** Setzt den Seitentitel gemäß der gewählten Statistik-Kachel */
+    function updateTitle(ctx) {
+        const label = titleStatLabels[titleStat];
+
+        if (titleStat === 'net')   { document.title = `${formatDuration(ctx.netWorkMin)} h – ${label}`;  return; }
+        if (titleStat === 'pause') { document.title = `${formatDuration(ctx.allPauseMin)} h – ${label}`; return; }
+
+        if (!ctx.hasTarget) { document.title = 'Arbeitszeit-Tracker'; return; }
+
+        if (titleStat === 'target') {
+            document.title = `${formatMinutesToTime(ctx.targetEndMin)} – ${label}`;
+        } else if (titleStat === 'diff') {
+            document.title = `${formatDifference(ctx.remaining)} – ${label}`;
+        } else {
+            document.title = `${ctx.progressUncapped.toFixed(1)} % – ${label}`;
+        }
+    }
 
     // Eingabe-Events
     startTimeInput.addEventListener('input', updateTracker);
@@ -551,6 +670,9 @@
 
         const pausesParam = params.get('pauses');
         if (pausesParam) pauses = parsePausesParam(pausesParam);
+
+        const titleStatParam = params.get('titleStat');
+        if (titleStatParam && titleStatCards[titleStatParam]) titleStat = titleStatParam;
     }
 
     /** "HH:MM-HH:MM,HH:MM-HH:MM" → [{ startMin, durationMin }] */
@@ -580,13 +702,18 @@
             .join('&');
     }
 
-    /** Schreibt daily/weekly/pauses als GET-Parameter in die URL (ohne Reload/History-Eintrag) */
+    /** Schreibt daily/weekly/pauses/titleStat als GET-Parameter in die URL (ohne Reload/History-Eintrag) */
+    let lastUrlQuery = null;
+
     function updateUrlParams() {
         const qs = buildQueryString({
-            daily:  dailyTimeInput.value.trim(),
-            weekly: weeklyTimeInput.value.trim(),
-            pauses: serializePausesParam()
+            daily:     dailyTimeInput.value.trim(),
+            weekly:    weeklyTimeInput.value.trim(),
+            pauses:    serializePausesParam(),
+            titleStat: titleStat !== 'percent' ? titleStat : ''
         });
+        if (qs === lastUrlQuery) return;
+        lastUrlQuery = qs;
         const newUrl = window.location.pathname + (qs ? '?' + qs : '');
         history.replaceState(null, '', newUrl);
     }
@@ -594,8 +721,8 @@
     // ── PAUSEN-STEUERUNG ──────────────────────────────────────────────────
 
     function togglePause() {
-        const btn     = document.getElementById('pauseToggleBtn');
-        const display = document.getElementById('runningPauseDisplay');
+        const btn     = dom.pauseToggleBtn;
+        const display = dom.runningPauseDisplay;
 
         if (runningPauseStart === null) {
             runningPauseStart = Date.now();
@@ -603,7 +730,7 @@
             btn.className         = 'btn-pause-stop';
             display.style.display = 'inline-flex';
             const now = new Date(runningPauseStart);
-            document.getElementById('runningPauseStartLabel').textContent =
+            dom.runningPauseStartLabel.textContent =
                 `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
         } else {
             const durationMin   = Math.round((Date.now() - runningPauseStart) / 60000);
@@ -622,17 +749,16 @@
     function toggleAddPauseForm() {
         editingPauseIndex   = null;
         addPauseFormVisible = !addPauseFormVisible;
-        const form = document.getElementById('addPauseForm');
-        form.style.display = addPauseFormVisible ? 'flex' : 'none';
+        dom.addPauseForm.style.display = addPauseFormVisible ? 'flex' : 'none';
 
         if (addPauseFormVisible) {
-            document.getElementById('addPauseFormTitle').textContent  = 'Pause eintragen:';
-            document.getElementById('addPauseConfirmBtn').textContent = 'Hinzufügen';
+            dom.addPauseFormTitle.textContent  = 'Pause eintragen:';
+            dom.addPauseConfirmBtn.textContent = 'Hinzufügen';
             const now = new Date();
-            document.getElementById('pauseFromInput').value =
+            dom.pauseFromInput.value =
                 `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-            document.getElementById('pauseToInput').value = '';
-            document.getElementById('pauseToInput').focus();
+            dom.pauseToInput.value = '';
+            dom.pauseToInput.focus();
         }
     }
 
@@ -640,17 +766,17 @@
         editingPauseIndex   = index;
         addPauseFormVisible = true;
         const p = pauses[index];
-        document.getElementById('addPauseForm').style.display          = 'flex';
-        document.getElementById('addPauseFormTitle').textContent        = 'Pause bearbeiten:';
-        document.getElementById('addPauseConfirmBtn').textContent       = 'Speichern';
-        document.getElementById('pauseFromInput').value = formatMinutesToTime(p.startMin);
-        document.getElementById('pauseToInput').value   = formatMinutesToTime(p.startMin + p.durationMin);
-        document.getElementById('pauseFromInput').focus();
+        dom.addPauseForm.style.display    = 'flex';
+        dom.addPauseFormTitle.textContent  = 'Pause bearbeiten:';
+        dom.addPauseConfirmBtn.textContent = 'Speichern';
+        dom.pauseFromInput.value = formatMinutesToTime(p.startMin);
+        dom.pauseToInput.value   = formatMinutesToTime(p.startMin + p.durationMin);
+        dom.pauseFromInput.focus();
     }
 
     function addPauseFromForm() {
-        const from = document.getElementById('pauseFromInput').value;
-        const to   = document.getElementById('pauseToInput').value;
+        const from = dom.pauseFromInput.value;
+        const to   = dom.pauseToInput.value;
         if (!from || !to) { alert('Bitte Von- und Bis-Uhrzeit eingeben.'); return; }
 
         const fromMin = parseTimeToMinutes(from);
@@ -667,7 +793,7 @@
             pauses.push({ startMin: fromMin, durationMin });
         }
         addPauseFormVisible = false;
-        document.getElementById('addPauseForm').style.display = 'none';
+        dom.addPauseForm.style.display = 'none';
         updateTracker();
     }
 
@@ -675,7 +801,7 @@
         if (editingPauseIndex === index) {
             addPauseFormVisible = false;
             editingPauseIndex   = null;
-            document.getElementById('addPauseForm').style.display = 'none';
+            dom.addPauseForm.style.display = 'none';
         }
         pauses.splice(index, 1);
         updateTracker();
@@ -683,7 +809,7 @@
 
     // ── PAUSENLISTE RENDERN ───────────────────────────────────────────────
     function renderPauseList(currentMinOfDay) {
-        const list  = document.getElementById('pauseList');
+        const list  = dom.pauseList;
         const items = [];
 
         pauses.forEach((p, i) => {
@@ -715,7 +841,7 @@
 
     // ── WARNUNGEN ─────────────────────────────────────────────────────────
     function renderWarnings(netWorkMin, elapsedPauseMin) {
-        const container = document.getElementById('legalWarnings');
+        const container = dom.legalWarnings;
         const warnings  = [];
 
         if (netWorkMin > 360 && elapsedPauseMin < 30) {
@@ -763,42 +889,48 @@
         if (runningPauseStart !== null) {
             runningPauseMin  = (Date.now() - runningPauseStart) / 60000;
             elapsedPauseMin += runningPauseMin;
-            document.getElementById('runningPauseDuration').textContent = Math.floor(runningPauseMin);
+            dom.runningPauseDuration.textContent = Math.floor(runningPauseMin);
         }
 
         const netWorkMin  = Math.max(0, elapsedMin - elapsedPauseMin);
         const allPauseMin = pauses.reduce((s, p) => s + p.durationMin, 0) + runningPauseMin;
 
         // Stat-Cards befüllen
-        document.getElementById('statNetWork').textContent = formatDuration(netWorkMin) + ' h';
-        document.getElementById('statNetWork').className   = 'stat-value';
+        dom.statNetWork.textContent = formatDuration(netWorkMin) + ' h';
+        dom.statNetWork.className   = 'stat-value';
 
-        if (targetWorkMin > 0 && startTimeInput.value) {
-            const targetEndMin = startMin + targetWorkMin + allPauseMin;
-            const remaining    = netWorkMin - targetWorkMin;
-            const progress     = Math.min(100, Math.max(0, (netWorkMin / targetWorkMin) * 100));
+        dom.statPauseTotal.textContent = formatDuration(allPauseMin) + ' h';
+        dom.statPauseTotal.className   = 'stat-value muted';
 
-            document.getElementById('statTargetTime').textContent = formatMinutesToTime(targetEndMin);
-            document.getElementById('statTargetTime').className   = 'stat-value';
+        const hasTarget = targetWorkMin > 0 && !!startTimeInput.value;
 
-            const diffEl = document.getElementById('statDiff');
-            diffEl.textContent = formatDifference(remaining);
-            diffEl.className   = 'stat-value ' + (remaining >= 0 ? 'pos' : 'neg');
+        if (hasTarget) {
+            const totalDuration    = targetWorkMin + allPauseMin;
+            const targetEndMin     = startMin + totalDuration;
+            const remaining        = netWorkMin - targetWorkMin;
+            const progressUncapped = Math.max(0, (netWorkMin / targetWorkMin) * 100);
+            const progressCapped   = Math.min(100, progressUncapped);
 
-            document.getElementById('statProgress').textContent = `${progress.toFixed(1)} %`;
-            document.getElementById('statProgress').className   = 'stat-value';
-            document.getElementById('statProgressBar').style.width = `${progress}%`;
+            dom.statTargetTime.textContent = formatMinutesToTime(targetEndMin);
+            dom.statTargetTime.className   = 'stat-value';
 
-            document.title = `${progress.toFixed(1)} % – Tagesziel`;
+            dom.statDiff.textContent = formatDifference(remaining);
+            dom.statDiff.className   = 'stat-value ' + (remaining >= 0 ? 'pos' : 'neg');
+
+            dom.statProgress.textContent = `${progressUncapped.toFixed(1)} %`;
+            dom.statProgress.className   = 'stat-value';
+            dom.statProgressBar.style.width = `${progressCapped}%`;
+
+            updateTitle({ hasTarget, netWorkMin, allPauseMin, targetEndMin, remaining, progressUncapped });
         } else {
-            document.getElementById('statTargetTime').textContent = '–';
-            document.getElementById('statTargetTime').className   = 'stat-value muted';
-            document.getElementById('statDiff').textContent       = '–';
-            document.getElementById('statDiff').className         = 'stat-value muted';
-            document.getElementById('statProgress').textContent   = '–';
-            document.getElementById('statProgress').className     = 'stat-value muted';
-            document.getElementById('statProgressBar').style.width = '0%';
-            document.title = 'Arbeitszeit-Tracker';
+            dom.statTargetTime.textContent = '–';
+            dom.statTargetTime.className   = 'stat-value muted';
+            dom.statDiff.textContent       = '–';
+            dom.statDiff.className         = 'stat-value muted';
+            dom.statProgress.textContent   = '–';
+            dom.statProgress.className     = 'stat-value muted';
+            dom.statProgressBar.style.width = '0%';
+            updateTitle({ hasTarget, netWorkMin, allPauseMin });
         }
 
         renderPauseList(currentMinOfDay);
@@ -943,6 +1075,7 @@
     function parseTimeToMinutes(timeStr) {
         if (!timeStr) return 0;
         const [h, m] = timeStr.split(':').map(Number);
+        if (Number.isNaN(h) || Number.isNaN(m)) return 0;
         return h * 60 + m;
     }
 
@@ -962,90 +1095,3 @@
 
 </body>
 </html>
-
-
-
-<!--
-
-Anforderungen:
-
-Erstelle eine einzelne, eigenständige HTML-Datei (kein Backend, keine externen Abhängigkeiten), die als interaktiver Arbeitszeit-Tracker dient.
-
-### Grundanforderungen
-- Nur eine Datei (HTML + CSS + JavaScript inline)
-- Moderne, klare Darstellung
-- Responsiv und gut lesbar
-- Aktualisierung automatisch alle ~10 Sekunden
-
----
-
-### Eingaben (Header und Arbeitszeit-Zeile)
-
-#### Startzeit
-- input[type="time"], wird beim Laden fokussiert und selektiert
-
-#### Tagesarbeitszeit ⇄ Wochenarbeitszeit
-- Zwei verknüpfte Textfelder im Format "H:MM" (z. B. "7:36" oder "38:00")
-- Wird Tagesarbeitszeit eingegeben → Wochenarbeitszeit = Tageswert × 5
-- Wird Wochenarbeitszeit eingegeben → Tagesarbeitszeit = Wochenwert ÷ 5
-- Akzeptiert auch reine Stundenzahlen (z. B. "38" → "38:00")
-- Ungültige Eingaben werden rot markiert
-
----
-
-### Pausen
-- Keine festen automatischen Pausen – nur manuelle Pausen werden getrackt
-- Drei Wege eine Pause hinzuzufügen:
-  1. „Pause starten" / „Pause beenden" – trackt eine laufende Pause live
-  2. „+ Eintragen" – Formular mit Von/Bis-Uhrzeit
-  3. Bearbeiten über ✎-Button an bestehenden Einträgen
-- Pausenliste: Von–Bis, Dauer, ✎ (Bearbeiten), × (Löschen)
-- Farben: vergangene grau, geplante blau, laufende grün mit Puls-Animation
-
-#### Auswirkung auf Berechnungen
-- Netto-Arbeitszeit = verstrichene Uhr-Zeit − vergangene Pausenminuten
-- Zielzeit = Startzeit + Tagesarbeitszeit + alle Pausenminuten (inkl. zukünftige)
-- Fortschritt und Rest basieren auf Netto-Arbeitszeit
-
----
-
-### Gesetzliche Pausenprüfung (§4 ArbZG)
-- Netto > 6h  UND Pausen bisher < 30 min → Warnung
-- Netto > 9h30 UND Pausen bisher < 45 min → Warnung
-- Netto > 10h → Warnung Höchstarbeitszeit
-- Warnungen zeigen die fehlenden Minuten an
-
----
-
-### Diagramm / Timeline
-- Grüner Balken = verstrichene Uhr-Zeit (inkl. Pausen)
-- Graue / blaue Blöcke = vergangene / geplante Pausen
-- Marker „Tagesziel" an der berechneten Zielzeit (dynamisch)
-- Marker „Jetzt" mit aktueller Uhrzeit (blau)
-- X-Achse: Stunden-Ticks 0h–11h
-
----
-
-### Ergebnisanzeige (4 Stat-Cards)
-- Zielzeit (berechnete Endzeit)
-- Netto-Arbeitszeit (H:MM h)
-- Rest / Überziehung (+H:MM oder -H:MM)
-- Fortschritt in % mit Mini-Fortschrittsbalken
-
-Alle Cards zeigen „–" wenn noch kein Tagesziel eingegeben wurde.
-
----
-
-### Seitentitel
-- Zeigt automatisch den Fortschritt: "84.7 % – Tagesziel"
-- Ohne Tagesziel-Eingabe: "Arbeitszeit-Tracker"
-
----
-
-### Technische Anforderungen
-- Reines Vanilla JavaScript, keine Libraries
-- SVG-Elemente werden komplett neu gerendert (keine DOM-Mutationen)
-- Hilfsfunktion svgEl() für SVG-Erstellung
-- Responsive (2-Spalten-Grid auf schmalen Bildschirmen)
-
--->
