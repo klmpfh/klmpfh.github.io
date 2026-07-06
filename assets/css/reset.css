@@ -10,9 +10,7 @@
 }
 
 /* Kernfarben der Startseite (index.html), als Variablen statt an
-   mehreren Stellen fest verdrahteter Hex-Werte. Andere Stylesheets
-   (z. B. back-link.css) greifen darauf zu, damit sie automatisch im
-   Look der Startseite bleiben, auch wenn sich deren Farben ändern. */
+   mehreren Stellen fest verdrahteter Hex-Werte. */
 :root {
     --site-bg: #111;
     --site-text: #ccc;

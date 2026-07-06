@@ -6,7 +6,6 @@
     <meta name="description" content="Erfasst und verwaltet Arbeitszeiten für den Tag, ohne Daten zu speichern.">
     <title>Arbeitszeit-Tracker</title>
     <link rel="stylesheet" href="../assets/css/reset.css">
-    <link rel="stylesheet" href="../assets/css/back-link.css">
     <style>
         :root {
             --bg-color: #f4f6f9;
@@ -407,17 +406,16 @@
 <body>
 
 <div class="container">
-    <button type="button" class="back-link" onclick="location.href='../index.html'">← Zurück</button>
     <header>
         <h1>Arbeitszeit-Tracker</h1>
-        <div class="input-group">
-            <label for="startTime">Startzeit</label>
-            <input type="time" id="startTime">
-        </div>
     </header>
 
     <!-- Arbeitszeitfelder -->
     <div class="work-inputs">
+        <div class="input-group">
+            <label for="startTime">Startzeit</label>
+            <input type="time" id="startTime">
+        </div>
         <div class="input-group">
             <label for="dailyTime">Tagesarbeitszeit</label>
             <input type="text" id="dailyTime" class="duration-input" placeholder="7:36" maxlength="6">

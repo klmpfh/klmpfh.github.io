@@ -8,17 +8,13 @@ Kleine Sammlung eigenständiger Web-Tools und Spielereien, statisch gehostet üb
 index.html              Startseite mit Links zu allen Projekten
 <projekt>/index.html    jede Unterseite ist ein eigenständiges Tool
 assets/css/reset.css     gemeinsamer CSS-Reset (box-sizing, margin, padding)
-assets/css/back-link.css gemeinsamer "Zurück"-Button im Look der Startseite
 assets/js/escape-html.js        gemeinsamer escapeHtml()-Helfer
 assets/js/scenario-generator.js gemeinsame Engine für die W12-Szenario-Generatoren
 ```
 
 Jede Unterseite bleibt ansonsten bewusst eigenständig (eigenes Farbschema, eigenes
 Layout, eigene Logik) – nur wirklich doppelter Code (Reset, escapeHtml, der
-Szenario-Wurf) liegt zentral in `assets/`. Der "Zurück"-Button ist bewusst auf allen
-Unterseiten identisch gehalten (abgerundete Ecken, Hintergrund/Text über die
-`--site-bg`/`--site-text`-Variablen aus `reset.css`, die auch die Startseite
-verwendet), damit sofort erkennbar ist, dass er zurück zu klmpfh führt.
+Szenario-Wurf) liegt zentral in `assets/`.
 
 Alle Links und `<link>`/`<script>`-Pfade sind relativ (kein führender `/`), damit
 die Seiten sowohl über GitHub Pages als auch direkt per Doppelklick (`file://`)
