@@ -389,6 +389,12 @@
         }
 
         .btn-copy:hover { opacity: 0.85; }
+
+        .search-summary {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 <body>
@@ -418,12 +424,8 @@
                 <input type="time" id="startTimeInput" value="09:00">
             </div>
             <div class="input-group">
-                <label for="endTimeInput">Endzeit max</label>
-                <input type="time" id="endTimeInput" value="18:00">
-            </div>
-            <div class="input-group">
-                <label for="minDurationInput">Min. Dauer</label>
-                <input type="text" id="minDurationInput" class="duration-input" value="1:00" placeholder="H:MM" maxlength="6">
+                <label for="durationInput">Dauer</label>
+                <input type="text" id="durationInput" class="duration-input" value="1:00" placeholder="H:MM" maxlength="6">
             </div>
             <div class="input-group">
                 <label for="maxWeeksInput">Zeitraum (Wochen)</label>
@@ -434,6 +436,7 @@
                 <input type="number" id="maxSuggestionsInput" min="1" max="200" value="5">
             </div>
         </div>
+        <p class="dropzone-hint">Sucht ab „Startzeit ab“ einen komplett freien Block von „Dauer“ – auch tagesübergreifend (z.&nbsp;B. 3 Tage = 72:00).</p>
 
         <div class="weekday-group">
             <label>Wochentage</label>
@@ -448,6 +451,7 @@
             </div>
         </div>
 
+        <p id="searchSummary" class="search-summary"></p>
         <button id="searchBtn" class="btn-primary">Freie Termine suchen</button>
         <div id="searchError" class="warning-banner" style="display:none"></div>
     </section>
@@ -462,6 +466,7 @@
     </section>
 
     <p class="footer-note">Hinweis: Zeitzonen in den iCal-Dateien werden vereinfacht als lokale Zeit interpretiert. Sehr komplexe Wiederholungsregeln (z.&nbsp;B. BYSETPOS) werden nicht vollständig unterstützt.</p>
+    <p class="footer-note">Version 1.4</p>
 </div>
 
 <script>
@@ -475,8 +480,7 @@
         fileInput:           document.getElementById('fileInput'),
         fileList:            document.getElementById('fileList'),
         startTimeInput:      document.getElementById('startTimeInput'),
-        endTimeInput:        document.getElementById('endTimeInput'),
-        minDurationInput:    document.getElementById('minDurationInput'),
+        durationInput:       document.getElementById('durationInput'),
         maxWeeksInput:       document.getElementById('maxWeeksInput'),
         maxSuggestionsInput: document.getElementById('maxSuggestionsInput'),
         searchBtn:           document.getElementById('searchBtn'),
@@ -485,10 +489,16 @@
         resultsSummary:      document.getElementById('resultsSummary'),
         resultsList:         document.getElementById('resultsList'),
         copyResultsBtn:      document.getElementById('copyResultsBtn'),
+        searchSummary:       document.getElementById('searchSummary'),
     };
 
     dom.searchBtn.addEventListener('click', runSearch);
     dom.copyResultsBtn.addEventListener('click', copyResultsToClipboard);
+
+    // ── LIVE-ZUSAMMENFASSUNG DER SUCHKRITERIEN ───────────────────────────
+    [dom.startTimeInput, dom.durationInput, dom.maxWeeksInput, dom.maxSuggestionsInput]
+        .forEach(el => el.addEventListener('input', updateSearchSummary));
+    document.querySelectorAll('#weekdayCheckboxes input').forEach(cb => cb.addEventListener('change', updateSearchSummary));
 
     // ── DATEI-UPLOAD ──────────────────────────────────────────────────────
     dom.fileInput.addEventListener('change', e => handleFiles(e.target.files));
@@ -867,8 +877,7 @@
         clearError();
 
         const startMin = parseTimeToMinutes(dom.startTimeInput.value);
-        const endMin = parseTimeToMinutes(dom.endTimeInput.value);
-        const minDurationMin = parseDuration(dom.minDurationInput.value);
+        const durationMin = parseDuration(dom.durationInput.value);
         const maxWeeks = clampInt(parseInt(dom.maxWeeksInput.value, 10) || 0, 1, 52);
         const maxSuggestions = clampInt(parseInt(dom.maxSuggestionsInput.value, 10) || 0, 1, 200);
         const selectedWeekdays = new Set(
@@ -876,14 +885,15 @@
         );
 
         if (calendars.length === 0) return showError('Bitte mindestens eine iCal-Datei hochladen.');
-        if (endMin <= startMin) return showError('Die Endzeit muss nach der Startzeit liegen.');
-        if (minDurationMin <= 0) return showError('Bitte eine gültige Mindestdauer angeben.');
+        if (durationMin <= 0) return showError('Bitte eine gültige Dauer angeben.');
         if (selectedWeekdays.size === 0) return showError('Bitte mindestens einen Wochentag auswählen.');
         if (calendars.some(c => c.error)) return showError('Mindestens eine Datei konnte nicht gelesen werden. Bitte fehlerhafte Datei entfernen.');
 
         const now = new Date();
         const rangeStart = now;
-        const rangeEnd = new Date(addDays(startOfDay(now), maxWeeks * 7).getTime() - 1);
+        const lastDay = addDays(startOfDay(now), maxWeeks * 7 - 1);
+        // Fensterende kann über das letzte Suchdatum hinausreichen (mehrtägige Dauer) – Puffer einrechnen
+        const rangeEnd = addMinutes(addDays(lastDay, 1), durationMin);
 
         const busyIntervals = [];
         calendars.forEach(cal => {
@@ -899,13 +909,12 @@
 
         const suggestions = [];
         let dayCursor = startOfDay(now);
-        const lastDay = addDays(startOfDay(now), maxWeeks * 7 - 1);
 
         while (dayCursor.getTime() <= lastDay.getTime() && suggestions.length < maxSuggestions) {
             if (selectedWeekdays.has(dayCursor.getDay())) {
-                let windowStart = addMinutes(dayCursor, startMin);
-                const windowEnd = addMinutes(dayCursor, endMin);
-                if (windowStart < now) windowStart = now;
+                const intendedStart = addMinutes(dayCursor, startMin);
+                const windowEnd = addMinutes(intendedStart, durationMin);
+                const windowStart = intendedStart < now ? now : intendedStart;
 
                 if (windowStart < windowEnd) {
                     const dayBusy = mergeIntervals(
@@ -917,12 +926,12 @@
                     let cursor = windowStart;
                     for (const busy of dayBusy) {
                         if (suggestions.length >= maxSuggestions) break;
-                        if (busy.start.getTime() - cursor.getTime() >= minDurationMin * 60000) {
+                        if (busy.start.getTime() - cursor.getTime() >= durationMin * 60000) {
                             suggestions.push({ start: new Date(cursor), end: new Date(busy.start) });
                         }
                         if (busy.end > cursor) cursor = busy.end;
                     }
-                    if (suggestions.length < maxSuggestions && windowEnd.getTime() - cursor.getTime() >= minDurationMin * 60000) {
+                    if (suggestions.length < maxSuggestions && windowEnd.getTime() - cursor.getTime() >= durationMin * 60000) {
                         suggestions.push({ start: new Date(cursor), end: new Date(windowEnd) });
                     }
                 }
@@ -934,8 +943,7 @@
         const meta = {
             calendarNames: calendars.map(getCalendarDisplayName),
             startTime: dom.startTimeInput.value,
-            endTime: dom.endTimeInput.value,
-            minDurationLabel: dom.minDurationInput.value.trim(),
+            durationLabel: dom.durationInput.value.trim(),
             maxWeeks,
             weekdayLabels: weekdayOrder.filter(d => selectedWeekdays.has(d)).map(d => weekdayNames[d]),
             rangeStart: now,
@@ -959,6 +967,15 @@
         return merged;
     }
 
+    /** Formatiert einen Vorschlag als Datums-/Zeit-Label; zeigt bei tagesübergreifenden Slots Start- und Enddatum. Da die Dauer fest ist, genügt die Startzeit. */
+    function formatSuggestionRange(s) {
+        const startLabel = `${formatWeekday(s.start)}, ${formatDate(s.start)}`;
+        const dateLabel = isSameDay(s.start, s.end)
+            ? startLabel
+            : `${startLabel} – ${formatWeekday(s.end)}, ${formatDate(s.end)}`;
+        return { dateLabel, timeLabel: formatTime(s.start) };
+    }
+
     function renderResults(suggestions, meta) {
         dom.resultsSection.style.display = '';
         lastResultsMarkdown = buildResultsMarkdown(suggestions, meta);
@@ -971,9 +988,10 @@
         dom.resultsSummary.textContent = `${suggestions.length} freie${suggestions.length === 1 ? 'r' : ''} Termin${suggestions.length === 1 ? '' : 'e'} gefunden.`;
         dom.resultsList.innerHTML = suggestions.map(s => {
             const durMin = Math.round((s.end.getTime() - s.start.getTime()) / 60000);
+            const { dateLabel, timeLabel } = formatSuggestionRange(s);
             return `<li class="result-item">
-                <span class="result-date">${formatWeekday(s.start)}, ${formatDate(s.start)}</span>
-                <span class="result-time">${formatTime(s.start)}–${formatTime(s.end)}</span>
+                <span class="result-date">${dateLabel}</span>
+                <span class="result-time">${timeLabel} Uhr</span>
                 <span class="result-duration">${formatDuration(durMin)} h</span>
             </li>`;
         }).join('');
@@ -986,8 +1004,8 @@
             '',
             `**Kalender:** ${meta.calendarNames.length ? meta.calendarNames.join(', ') : '–'}`,
             `**Zeitraum:** ${formatDate(meta.rangeStart)} – ${formatDate(meta.rangeEnd)} (${meta.maxWeeks} Woche${meta.maxWeeks === 1 ? '' : 'n'})`,
-            `**Uhrzeitfenster:** ${meta.startTime}–${meta.endTime} Uhr`,
-            `**Mindestdauer:** ${meta.minDurationLabel} h`,
+            `**Startzeit ab:** ${meta.startTime} Uhr`,
+            `**Dauer:** ${meta.durationLabel} h`,
             `**Wochentage:** ${meta.weekdayLabels.join(', ')}`,
             '',
         ];
@@ -996,7 +1014,8 @@
         } else {
             suggestions.forEach(s => {
                 const durMin = Math.round((s.end.getTime() - s.start.getTime()) / 60000);
-                lines.push(`- ${formatWeekday(s.start)}, ${formatDate(s.start)}: ${formatTime(s.start)}–${formatTime(s.end)} Uhr (${formatDuration(durMin)} h)`);
+                const { dateLabel, timeLabel } = formatSuggestionRange(s);
+                lines.push(`- ${dateLabel}: ${timeLabel} Uhr (${formatDuration(durMin)} h)`);
             });
         }
         return lines.join('\n');
@@ -1065,6 +1084,34 @@
         const m = totalMin % 60;
         return `${h}:${String(m).padStart(2, '0')}`;
     }
+
+    /** Minuten → "H:MM h", ab 24h zusätzlich mit Tages-Umrechnung, z.B. "72:00 h (3 Tage)" */
+    function formatDurationWithDays(totalMin) {
+        const label = `${formatDuration(totalMin)} h`;
+        if (totalMin < 24 * 60) return label;
+        const days = totalMin / (24 * 60);
+        const daysLabel = Number.isInteger(days) ? `${days} Tag${days === 1 ? '' : 'e'}` : `${days.toFixed(1)} Tage`;
+        return `${label} (${daysLabel})`;
+    }
+
+    /** Aktualisiert die Live-Zusammenfassung der Suchkriterien über dem Suchen-Knopf */
+    function updateSearchSummary() {
+        const startTime = dom.startTimeInput.value || '–';
+        const durationMin = parseDuration(dom.durationInput.value);
+        const maxWeeks = clampInt(parseInt(dom.maxWeeksInput.value, 10) || 0, 1, 52);
+        const maxSuggestions = clampInt(parseInt(dom.maxSuggestionsInput.value, 10) || 0, 1, 200);
+        const weekdayOrder = [1, 2, 3, 4, 5, 6, 0]; // Mo…So
+        const selectedWeekdays = new Set(
+            Array.from(document.querySelectorAll('#weekdayCheckboxes input:checked')).map(cb => parseInt(cb.value, 10))
+        );
+        const weekdayLabels = weekdayOrder.filter(d => selectedWeekdays.has(d)).map(d => weekdayNames[d]);
+
+        dom.searchSummary.textContent = `Sucht ab ${startTime} Uhr einen komplett freien Block von ${formatDurationWithDays(durationMin)}, `
+            + `an ${weekdayLabels.length ? weekdayLabels.join('/') : '–'}, `
+            + `über die nächsten ${maxWeeks} Woche${maxWeeks === 1 ? '' : 'n'} (max. ${maxSuggestions} Vorschläge).`;
+    }
+
+    updateSearchSummary();
 </script>
 
 </body>
