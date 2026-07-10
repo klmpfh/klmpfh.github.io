@@ -590,6 +590,10 @@
     // ── INITIALISIERUNG ───────────────────────────────────────────────────
     window.addEventListener('DOMContentLoaded', () => {
         loadFromUrlParams();
+        if (!startTimeInput.value) {
+            const now = new Date();
+            startTimeInput.value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        }
         updateStatCardSelection();
         startTimeInput.focus();
         startTimeInput.select();
@@ -655,8 +659,11 @@
     /** Liest daily/weekly/pauses aus den GET-Parametern und befüllt die Felder */
     function loadFromUrlParams() {
         const params = new URLSearchParams(window.location.search);
+        const start  = params.get('start');
         const daily  = params.get('daily');
         const weekly = params.get('weekly');
+
+        if (start) startTimeInput.value = start;
 
         if (daily) {
             dailyTimeInput.value = daily;
@@ -707,6 +714,7 @@
 
     function updateUrlParams() {
         const qs = buildQueryString({
+            start:     startTimeInput.value.trim(),
             daily:     dailyTimeInput.value.trim(),
             weekly:    weeklyTimeInput.value.trim(),
             pauses:    serializePausesParam(),
@@ -720,11 +728,29 @@
 
     // ── PAUSEN-STEUERUNG ──────────────────────────────────────────────────
 
+    /** Prüft, ob sich [fromMin, toMin) mit einer bestehenden Pause überschneidet (excludeIndex wird bei Bearbeitung ausgelassen) */
+    function findOverlappingPauseIndex(fromMin, toMin, excludeIndex) {
+        return pauses.findIndex((p, i) => {
+            if (i === excludeIndex) return false;
+            const pEnd = p.startMin + p.durationMin;
+            return fromMin < pEnd && p.startMin < toMin;
+        });
+    }
+
+    function isMinuteInsideAnyPause(min) {
+        return pauses.some(p => min >= p.startMin && min < p.startMin + p.durationMin);
+    }
+
     function togglePause() {
         const btn     = dom.pauseToggleBtn;
         const display = dom.runningPauseDisplay;
 
         if (runningPauseStart === null) {
+            const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+            if (isMinuteInsideAnyPause(nowMin)) {
+                alert('Jetzt liegt bereits eine eingetragene Pause vor. Bitte diese zuerst bearbeiten oder löschen.');
+                return;
+            }
             runningPauseStart = Date.now();
             btn.textContent       = 'Pause beenden';
             btn.className         = 'btn-pause-stop';
@@ -785,6 +811,11 @@
 
         const durationMin = toMin - fromMin;
         if (durationMin <= 0) { alert('Die Endzeit muss nach der Startzeit liegen.'); return; }
+
+        if (findOverlappingPauseIndex(fromMin, toMin, editingPauseIndex) !== -1) {
+            alert('Diese Pause überschneidet sich mit einer bereits eingetragenen Pause.');
+            return;
+        }
 
         if (editingPauseIndex !== null) {
             pauses[editingPauseIndex] = { startMin: fromMin, durationMin };
@@ -861,6 +892,59 @@
             .join('');
     }
 
+    // ── ZIELZEIT-BERECHNUNG ──────────────────────────────────────────────
+    // Pausen, die zeitlich VOR bzw. WÄHREND der errechneten Zielzeit liegen, verschieben diese nach
+    // hinten. Pausen, die erst NACH der Zielzeit beginnen, dürfen sie nicht beeinflussen.
+
+    /** Pausen (inkl. laufender Pause) als {start,end}-Intervalle für die Zielzeit-/Warnschwellen-Berechnung */
+    function buildPauseIntervals(currentMinOfDay) {
+        const intervals = pauses.map(p => ({ start: p.startMin, end: p.startMin + p.durationMin }));
+        if (runningPauseStart !== null) {
+            const runStart    = new Date(runningPauseStart);
+            const runStartMin = runStart.getHours() * 60 + runStart.getMinutes();
+            intervals.push({ start: runStartMin, end: currentMinOfDay });
+        }
+        return intervals;
+    }
+
+    /** Schneidet Intervalle auf >= startMin zu, sortiert und verschmilzt Überlappungen */
+    function mergePauseIntervals(pauseIntervals, startMin) {
+        const clipped = pauseIntervals
+            .map(iv => ({ start: Math.max(iv.start, startMin), end: iv.end }))
+            .filter(iv => iv.end > iv.start)
+            .sort((a, b) => a.start - b.start);
+
+        const merged = [];
+        clipped.forEach(iv => {
+            const last = merged[merged.length - 1];
+            if (last && iv.start <= last.end) {
+                last.end = Math.max(last.end, iv.end);
+            } else {
+                merged.push({ ...iv });
+            }
+        });
+        return merged;
+    }
+
+    /**
+     * Uhrzeit (Minuten ab Mitternacht), zu der ab startMin insgesamt netMinutesNeeded Netto-Arbeitsminuten
+     * erreicht sind. Pausen, die dabei durchlaufen werden, verlängern die Uhrzeit; Pausen, die erst nach
+     * diesem Zeitpunkt beginnen, bleiben unberücksichtigt.
+     */
+    function computeClockTimeForNetMinutes(startMin, netMinutesNeeded, pauseIntervals) {
+        const merged = mergePauseIntervals(pauseIntervals, startMin);
+        let cursor    = startMin;
+        let remaining = netMinutesNeeded;
+
+        for (const iv of merged) {
+            const availableBeforePause = iv.start - cursor;
+            if (availableBeforePause >= remaining) return cursor + remaining;
+            remaining -= availableBeforePause;
+            cursor = iv.end;
+        }
+        return cursor + remaining;
+    }
+
     // ── HAUPT-UPDATE ──────────────────────────────────────────────────────
     function updateTracker() {
         const now             = new Date();
@@ -892,8 +976,9 @@
             dom.runningPauseDuration.textContent = Math.floor(runningPauseMin);
         }
 
-        const netWorkMin  = Math.max(0, elapsedMin - elapsedPauseMin);
-        const allPauseMin = pauses.reduce((s, p) => s + p.durationMin, 0) + runningPauseMin;
+        const netWorkMin     = Math.max(0, elapsedMin - elapsedPauseMin);
+        const allPauseMin    = pauses.reduce((s, p) => s + p.durationMin, 0) + runningPauseMin;
+        const pauseIntervals = buildPauseIntervals(currentMinOfDay);
 
         // Stat-Cards befüllen
         dom.statNetWork.textContent = formatDuration(netWorkMin) + ' h';
@@ -903,13 +988,13 @@
         dom.statPauseTotal.className   = 'stat-value muted';
 
         const hasTarget = targetWorkMin > 0 && !!startTimeInput.value;
+        let targetEndMin = null;
 
         if (hasTarget) {
-            const totalDuration    = targetWorkMin + allPauseMin;
-            const targetEndMin     = startMin + totalDuration;
-            const remaining        = netWorkMin - targetWorkMin;
-            const progressUncapped = Math.max(0, (netWorkMin / targetWorkMin) * 100);
-            const progressCapped   = Math.min(100, progressUncapped);
+            targetEndMin            = computeClockTimeForNetMinutes(startMin, targetWorkMin, pauseIntervals);
+            const remaining         = netWorkMin - targetWorkMin;
+            const progressUncapped  = Math.max(0, (netWorkMin / targetWorkMin) * 100);
+            const progressCapped    = Math.min(100, progressUncapped);
 
             dom.statTargetTime.textContent = formatMinutesToTime(targetEndMin);
             dom.statTargetTime.className   = 'stat-value';
@@ -933,14 +1018,25 @@
             updateTitle({ hasTarget, netWorkMin, allPauseMin });
         }
 
+        // Warnschwellen (6h/9h30/10h) als Uhrzeit-Marker für den Zeitstrahl, mit Bezug zum "Jetzt"-Zeiger
+        const warnMarkers = [
+            { thresholdMin: 360, label: '6h',   active: netWorkMin > 360 && elapsedPauseMin < 30 },
+            { thresholdMin: 570, label: '9h30', active: netWorkMin > 570 && elapsedPauseMin < 45 },
+            { thresholdMin: 600, label: '10h',  active: netWorkMin > 600 }
+        ].map(w => ({
+            clockMin: computeClockTimeForNetMinutes(startMin, w.thresholdMin, pauseIntervals),
+            label:    w.label,
+            active:   w.active
+        }));
+
         renderPauseList(currentMinOfDay);
         renderWarnings(netWorkMin, elapsedPauseMin);
-        drawTimeline(elapsedMin, startMin, currentMinOfDay, allPauseMin, runningPauseMin, targetWorkMin);
+        drawTimeline(elapsedMin, startMin, currentMinOfDay, runningPauseMin, targetEndMin, warnMarkers);
         updateUrlParams();
     }
 
     // ── TIMELINE ──────────────────────────────────────────────────────────
-    function drawTimeline(elapsedMin, startMinOfDay, currentMinOfDay, allPauseMin, runningPauseMin, targetWorkMin) {
+    function drawTimeline(elapsedMin, startMinOfDay, currentMinOfDay, runningPauseMin, targetEndMin, warnMarkers) {
         const width        = svg.clientWidth || 940;
         const paddingLeft  = 30;
         const paddingRight = 30;
@@ -1007,12 +1103,12 @@
         }
 
         // 5. Zielmarker (nur wenn Tagesziel eingegeben)
-        if (targetWorkMin > 0 && startMinOfDay > 0) {
-            const totalDuration = targetWorkMin + allPauseMin;
-            const mX            = getX(totalDuration);
-            const labelTime     = formatMinutesToTime(startMinOfDay + totalDuration);
-            const fullText      = `Tagesziel (${labelTime})`;
-            const levelY        = barY + barHeight + 20;
+        if (targetEndMin !== null && startMinOfDay > 0) {
+            const offsetMin = targetEndMin - startMinOfDay;
+            const mX        = getX(offsetMin);
+            const labelTime = formatMinutesToTime(targetEndMin);
+            const fullText  = `Tagesziel (${labelTime})`;
+            const levelY    = barY + barHeight + 20;
 
             svg.appendChild(svgEl('line', { x1: mX, y1: barY - 2, x2: mX, y2: levelY - 8, stroke: '#e53e3e', 'stroke-width': 2, 'stroke-dasharray': '3,2' }));
             svg.appendChild(svgEl('circle', { cx: mX, cy: levelY - 9, r: 3, fill: '#e53e3e' }));
@@ -1026,7 +1122,31 @@
             svg.appendChild(lTxt);
         }
 
-        // 6. „Jetzt"-Marker
+        // 6. Warnschwellen-Marker (zeigen, wann eine Pausen-Warnung entsteht – Bezug zum „Jetzt"-Zeiger)
+        if (startMinOfDay > 0 && warnMarkers) {
+            warnMarkers.forEach(w => {
+                const offsetMin = w.clockMin - startMinOfDay;
+                if (offsetMin < 0 || offsetMin > maxTimelineDuration) return;
+                const wX    = getX(offsetMin);
+                const color = w.active ? '#dd6b20' : '#cbd5e0';
+
+                svg.appendChild(svgEl('line', {
+                    x1: wX, y1: barY - 11, x2: wX, y2: barY,
+                    stroke: color, 'stroke-width': w.active ? 2 : 1.5,
+                    'stroke-dasharray': w.active ? '0' : '2,2'
+                }));
+                svg.appendChild(svgEl('circle', { cx: wX, cy: barY - 11, r: 2.5, fill: color }));
+
+                const wTxt = svgEl('text', {
+                    x: wX, y: barY - 15, 'text-anchor': 'middle', 'font-size': '9px',
+                    'font-weight': w.active ? 700 : 500, fill: color
+                });
+                wTxt.textContent = w.label;
+                svg.appendChild(wTxt);
+            });
+        }
+
+        // 7. „Jetzt"-Marker
         if (elapsedMin >= 0 && elapsedMin <= maxTimelineDuration && startMinOfDay > 0) {
             const nowX       = getX(elapsedMin);
             const nowTimeStr = formatMinutesToTime(startMinOfDay + elapsedMin);

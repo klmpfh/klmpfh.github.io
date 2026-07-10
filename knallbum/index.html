@@ -216,128 +216,88 @@
         color: var(--accent);
     }
 
-    .card {
-        background: var(--card-bg);
+    .table-wrap {
+        overflow: hidden;
         border: 1px solid var(--border-color);
         border-radius: 10px;
-        padding: 16px 18px;
+        background: var(--container-bg);
     }
 
-    .card.error {
-        border-color: var(--danger);
-        background: var(--danger-light);
-        color: #ffdada;
-        font-size: 14px;
+    table.results-table {
+        width: 100%;
+        table-layout: fixed;
+        border-collapse: collapse;
     }
 
-    .card.notice {
-        border-color: var(--border-color);
-        color: var(--text-muted);
-        font-size: 14px;
-    }
-
-    .card-name {
-        font-weight: 700;
-        font-size: 15px;
-        margin-bottom: 10px;
-        color: var(--accent);
-    }
-
-    .card-section-label {
-        font-size: 10.5px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: var(--text-muted);
-        margin: 16px 0 8px;
-    }
-
-    .card-section-label:first-of-type {
-        margin-top: 0;
-    }
-
-    .hero {
-        text-align: center;
-        background: var(--primary-light);
-        border-radius: 10px;
-        padding: 14px 12px;
-    }
-
-    .hero-value {
-        font-size: 32px;
-        font-weight: 800;
-        color: var(--primary);
-        line-height: 1.15;
-    }
-
-    .hero-value .hero-unit {
-        font-size: 16px;
-        font-weight: 700;
-        margin-left: 2px;
-    }
-
-    .hero-label {
-        margin-top: 2px;
+    .results-table th,
+    .results-table td {
+        padding: 8px 6px;
+        text-align: left;
         font-size: 12px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: var(--primary);
-        opacity: 0.85;
+        overflow-wrap: break-word;
+        border-bottom: 1px solid var(--border-color);
     }
 
-    .stat-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
-    }
-
-    @media (max-width: 480px) {
-        .stat-grid {
-            grid-template-columns: repeat(2, 1fr);
+    @media (max-width: 560px) {
+        .results-table th,
+        .results-table td {
+            padding: 6px 4px;
+            font-size: 10.5px;
         }
     }
 
-    .stat {
-        background: var(--code-bg);
-        border-radius: 8px;
-        padding: 9px 10px;
-    }
-
-    .stat-label {
-        font-size: 10px;
+    .results-table thead th {
+        background: var(--card-bg);
+        color: var(--text-muted);
+        font-size: 10.5px;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.4px;
-        color: var(--text-muted);
-        margin-bottom: 4px;
     }
 
-    .stat-value {
-        font-size: 14.5px;
-        font-weight: 700;
-        color: var(--text-color);
+    .results-table tbody tr:last-child td {
+        border-bottom: none;
     }
 
-    .stat-value .stat-unit {
-        font-size: 11.5px;
-        font-weight: 600;
+    .results-table td .unit,
+    .results-table th .unit {
+        font-size: 11px;
         color: var(--text-muted);
         margin-left: 2px;
     }
 
-    .card.is-winner {
-        border-color: var(--accent);
-        box-shadow: 0 0 0 1px var(--accent);
-    }
-
-    .card.is-winner .hero {
-        background: rgba(255, 207, 77, 0.15);
-    }
-
-    .card.is-winner .hero-value,
-    .card.is-winner .hero-label {
+    .results-table td.name-cell {
+        font-weight: 700;
         color: var(--accent);
+    }
+
+    .results-table td.hero-cell {
+        font-weight: 800;
+        color: var(--primary);
+        font-size: 14px;
+    }
+
+    @media (max-width: 560px) {
+        .results-table td.hero-cell {
+            font-size: 12px;
+        }
+    }
+
+    .results-table tr.is-winner td {
+        background: rgba(255, 207, 77, 0.12);
+    }
+
+    .results-table tr.is-winner td.hero-cell,
+    .results-table tr.is-winner td.name-cell {
+        color: var(--accent);
+    }
+
+    .results-table td.message-cell.error {
+        color: var(--danger);
+    }
+
+    .results-table td.message-cell.notice {
+        color: var(--text-muted);
     }
 
     footer {
@@ -498,41 +458,28 @@
         return out;
     }
 
-    function cardHtml(r, isWinner) {
+    const RESULT_COLUMN_COUNT = 8;
+
+    function rowHtml(r, isWinner) {
         if (r.error) {
-            return `<div class="card error">⚠️ ${escapeHtml(r.error)}</div>`;
+            return `<tr><td class="message-cell error" colspan="${RESULT_COLUMN_COUNT}">⚠️ ${escapeHtml(r.error)}</td></tr>`;
         }
         if (r.notice) {
-            return `<div class="card notice">🥂 ${escapeHtml(r.notice)}</div>`;
+            return `<tr><td class="message-cell notice" colspan="${RESULT_COLUMN_COUNT}">🥂 ${escapeHtml(r.notice)}</td></tr>`;
         }
 
-        const nameHtml = r.name ? `<div class="card-name">🥂 ${escapeHtml(r.name)}</div>` : '';
+        const cell = (value, unit) => `<td>${value}${unit ? ` <span class="unit">${unit}</span>` : ''}</td>`;
 
-        const stat = (label, value, unit) =>
-            `<div class="stat"><div class="stat-label">${label}</div><div class="stat-value">${value}${unit ? ` <span class="stat-unit">${unit}</span>` : ''}</div></div>`;
-
-        return `<div class="card${isWinner ? ' is-winner' : ''}">
-            ${nameHtml}
-            <div class="hero">
-                <div class="hero-value">${r.alcPerEurDisplay}<span class="hero-unit">ml</span></div>
-                <div class="hero-label">${isWinner ? '⭐️ ' : ''}Alkohol pro Euro</div>
-            </div>
-            <div class="card-section-label">Eingabe</div>
-            <div class="stat-grid">
-                ${stat('Menge', round(r.vol * 1000), 'ml')}
-                ${stat('Alkohol', r.alc, '%')}
-                ${stat('Preis', r.eur, '€')}
-            </div>
-            <div class="card-section-label">Kennzahlen</div>
-            <div class="stat-grid">
-                ${stat('Alkoholmenge', round(r.alcIn), 'ml')}
-                ${stat('Menge für Shots', r.shotsAmount, '× 20ml')}
-                ${stat('Alkohol in Shots', r.shots)}
-                ${stat('Menge pro Shot', r.mlPerShot, 'ml')}
-                ${stat('Preis pro Liter', r.costPerLiter, '€')}
-                ${stat('Preis pro ml Alk.', r.costPerMlAlc, '€')}
-            </div>
-        </div>`;
+        return `<tr class="${isWinner ? 'is-winner' : ''}">
+            <td class="name-cell">${isWinner ? '⭐️ ' : ''}${escapeHtml(r.name)}</td>
+            <td class="hero-cell">${r.alcPerEurDisplay}<span class="unit">ml</span></td>
+            ${cell(round(r.alcIn), 'ml')}
+            ${cell(r.shotsAmount, '× 20ml')}
+            ${cell(r.shots)}
+            ${cell(r.mlPerShot, 'ml')}
+            ${cell(r.costPerLiter, '€')}
+            ${cell(r.costPerMlAlc, '€')}
+        </tr>`;
     }
 
     function render() {
@@ -573,7 +520,19 @@
             html += `<div class="winner-banner">⭐️ Gewinner: <b>${escapeHtml(data[winnerIndex].name)}</b> mit <b>${data[winnerIndex].alcPerEurDisplay} ml Alc. pro Euro</b></div>`;
         }
 
-        html += data.map((d, i) => cardHtml(d, i === winnerIndex)).join('');
+        html += `<div class="table-wrap"><table class="results-table">
+            <thead><tr>
+                <th>Name</th>
+                <th>Alk/€ <span class="unit">ml</span></th>
+                <th>Alkoholmenge <span class="unit">ml</span></th>
+                <th>Menge f. Shots</th>
+                <th>Alk. in Shots</th>
+                <th>Menge/Shot <span class="unit">ml</span></th>
+                <th>Preis/Liter <span class="unit">€</span></th>
+                <th>Preis/ml Alk. <span class="unit">€</span></th>
+            </tr></thead>
+            <tbody>${data.map((d, i) => rowHtml(d, i === winnerIndex)).join('')}</tbody>
+        </table></div>`;
 
         resultsEl.innerHTML = html;
     }
