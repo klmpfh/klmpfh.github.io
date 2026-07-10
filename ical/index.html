@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Findet freie Termin-Slots anhand mehrerer hochgeladener iCal-(.ics)-Dateien.">
+    <title>iCal Terminsuche</title>
+    <link rel="stylesheet" href="../assets/css/reset.css">
+    <style>
+        :root {
+            --bg-color: #f4f6f9;
+            --container-bg: #ffffff;
+            --text-color: #2d3748;
+            --text-muted: #718096;
+            --primary: #3182ce;
+            --primary-light: #ebf8ff;
+            --success: #38a169;
+            --success-light: #f0fff4;
+            --danger: #e53e3e;
+            --warning: #dd6b20;
+            --warning-light: #fffaf0;
+            --border-color: #e2e8f0;
+            --highlight-bg: #f7fafc;
+        }
+
+        button, input {
+            font-family: inherit;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            padding: 30px 15px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: var(--container-bg);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            padding: 30px;
+        }
+
+        header {
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 20px;
+            margin-bottom: 24px;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        header p {
+            margin-top: 6px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .card {
+            background: var(--highlight-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 18px 20px;
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: 14px;
+        }
+
+        /* ── Datei-Upload ── */
+        .dropzone {
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 26px 16px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 14px;
+            background: #fff;
+            transition: border-color 0.15s, background 0.15s;
+        }
+
+        .dropzone.dragover {
+            border-color: var(--primary);
+            background: var(--primary-light);
+        }
+
+        .file-label {
+            color: var(--primary);
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .dropzone-hint {
+            margin-top: 6px;
+            font-size: 12px;
+            color: #a0aec0;
+        }
+
+        .file-list {
+            list-style: none;
+            margin-top: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .file-item {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 8px 12px;
+            background: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .file-item-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .file-options {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px 18px;
+            padding-top: 8px;
+            border-top: 1px solid var(--border-color);
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .file-option-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+
+        .file-option-select {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .file-option-select select {
+            font-family: inherit;
+            font-size: 12px;
+            padding: 3px 6px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: #fff;
+            color: var(--text-color);
+        }
+
+        .file-name {
+            font-weight: 600;
+            flex: 1;
+            overflow-wrap: anywhere;
+        }
+
+        .file-meta {
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+
+        .file-item.file-error .file-meta {
+            color: var(--danger);
+        }
+
+        .file-remove {
+            background: none;
+            border: none;
+            color: #a0aec0;
+            font-size: 16px;
+            line-height: 1;
+            cursor: pointer;
+            padding: 0 4px;
+        }
+
+        .file-remove:hover { color: var(--danger); }
+
+        /* ── Formular ── */
+        .form-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px 20px;
+            margin-bottom: 18px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        input[type="time"],
+        input[type="number"],
+        .duration-input {
+            padding: 9px 12px;
+            font-size: 16px;
+            font-weight: 600;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-color);
+            background-color: #fff;
+            outline: none;
+            width: 110px;
+            transition: border-color 0.2s;
+        }
+
+        input[type="number"] { width: 90px; }
+
+        input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-light);
+        }
+
+        .weekday-group {
+            margin-bottom: 18px;
+        }
+
+        .weekday-checkboxes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .weekday-chip {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            padding: 7px 14px;
+            border: 2px solid var(--border-color);
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-muted);
+            background: #fff;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.15s;
+        }
+
+        .weekday-chip:has(input:checked) {
+            border-color: var(--primary);
+            background: var(--primary-light);
+            color: var(--primary);
+        }
+
+        .weekday-chip input {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .btn-primary {
+            padding: 12px 22px;
+            font-size: 15px;
+            font-weight: 700;
+            color: #fff;
+            background: var(--primary);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .btn-primary:hover { opacity: 0.9; }
+
+        .warning-banner {
+            background: var(--warning-light);
+            border: 1px solid #f6ad55;
+            border-left: 4px solid var(--warning);
+            border-radius: 6px;
+            padding: 9px 14px;
+            font-size: 13px;
+            color: #744210;
+            font-weight: 500;
+            margin-top: 14px;
+        }
+
+        /* ── Ergebnisse ── */
+        .results-summary {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+
+        .results-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: var(--success-light);
+            border: 1px solid #9ae6b4;
+            border-radius: 8px;
+            flex-wrap: wrap;
+        }
+
+        .result-date { font-weight: 700; }
+
+        .result-time {
+            font-family: monospace;
+            font-size: 15px;
+        }
+
+        .result-duration {
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        .footer-note {
+            font-size: 12px;
+            color: #a0aec0;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>iCal Terminsuche</h1>
+        <p>Lädt beliebig viele .ics-Kalenderdateien und findet freie Termin-Slots, an denen in keinem der Kalender ein Termin liegt.</p>
+    </header>
+
+    <section class="card">
+        <h2>1. Kalender hochladen</h2>
+        <div id="dropzone" class="dropzone">
+            <p>.ics-Dateien hierher ziehen oder <label for="fileInput" class="file-label">auswählen</label></p>
+            <p class="dropzone-hint">Mehrfachauswahl möglich · ohne Datei gilt das gesamte Zeitfenster als frei</p>
+            <input type="file" id="fileInput" accept=".ics,text/calendar" multiple hidden>
+        </div>
+        <ul id="fileList" class="file-list"></ul>
+    </section>
+
+    <section class="card">
+        <h2>2. Kriterien</h2>
+        <div class="form-grid">
+            <div class="input-group">
+                <label for="startTimeInput">Startzeit ab</label>
+                <input type="time" id="startTimeInput" value="09:00">
+            </div>
+            <div class="input-group">
+                <label for="endTimeInput">Endzeit max</label>
+                <input type="time" id="endTimeInput" value="18:00">
+            </div>
+            <div class="input-group">
+                <label for="minDurationInput">Min. Dauer</label>
+                <input type="text" id="minDurationInput" class="duration-input" value="1:00" placeholder="H:MM" maxlength="6">
+            </div>
+            <div class="input-group">
+                <label for="maxWeeksInput">Zeitraum (Wochen)</label>
+                <input type="number" id="maxWeeksInput" min="1" max="52" value="3">
+            </div>
+            <div class="input-group">
+                <label for="maxSuggestionsInput">Max. Vorschläge</label>
+                <input type="number" id="maxSuggestionsInput" min="1" max="200" value="5">
+            </div>
+        </div>
+
+        <div class="weekday-group">
+            <label>Wochentage</label>
+            <div class="weekday-checkboxes" id="weekdayCheckboxes">
+                <label class="weekday-chip"><input type="checkbox" value="1" checked>Mo</label>
+                <label class="weekday-chip"><input type="checkbox" value="2" checked>Di</label>
+                <label class="weekday-chip"><input type="checkbox" value="3" checked>Mi</label>
+                <label class="weekday-chip"><input type="checkbox" value="4" checked>Do</label>
+                <label class="weekday-chip"><input type="checkbox" value="5" checked>Fr</label>
+                <label class="weekday-chip"><input type="checkbox" value="6">Sa</label>
+                <label class="weekday-chip"><input type="checkbox" value="0">So</label>
+            </div>
+        </div>
+
+        <button id="searchBtn" class="btn-primary">Freie Termine suchen</button>
+        <div id="searchError" class="warning-banner" style="display:none"></div>
+    </section>
+
+    <section class="card" id="resultsSection" style="display:none">
+        <h2>3. Vorschläge</h2>
+        <div id="resultsSummary" class="results-summary"></div>
+        <ul id="resultsList" class="results-list"></ul>
+    </section>
+
+    <p class="footer-note">Hinweis: Zeitzonen in den iCal-Dateien werden vereinfacht als lokale Zeit interpretiert. Sehr komplexe Wiederholungsregeln (z.&nbsp;B. BYSETPOS) werden nicht vollständig unterstützt.</p>
+</div>
+
+<script>
+    // ── ZUSTAND ───────────────────────────────────────────────────────────
+    let calendars = [];       // [{ id, name, events, error }]
+    let calendarIdSeq = 0;
+
+    const dom = {
+        dropzone:            document.getElementById('dropzone'),
+        fileInput:           document.getElementById('fileInput'),
+        fileList:            document.getElementById('fileList'),
+        startTimeInput:      document.getElementById('startTimeInput'),
+        endTimeInput:        document.getElementById('endTimeInput'),
+        minDurationInput:    document.getElementById('minDurationInput'),
+        maxWeeksInput:       document.getElementById('maxWeeksInput'),
+        maxSuggestionsInput: document.getElementById('maxSuggestionsInput'),
+        searchBtn:           document.getElementById('searchBtn'),
+        searchError:         document.getElementById('searchError'),
+        resultsSection:      document.getElementById('resultsSection'),
+        resultsSummary:      document.getElementById('resultsSummary'),
+        resultsList:         document.getElementById('resultsList'),
+    };
+
+    window.addEventListener('DOMContentLoaded', runSearch);
+    dom.searchBtn.addEventListener('click', runSearch);
+
+    // ── DATEI-UPLOAD ──────────────────────────────────────────────────────
+    dom.fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+    dom.dropzone.addEventListener('dragover', e => {
+        e.preventDefault();
+        dom.dropzone.classList.add('dragover');
+    });
+    dom.dropzone.addEventListener('dragleave', () => dom.dropzone.classList.remove('dragover'));
+    dom.dropzone.addEventListener('drop', e => {
+        e.preventDefault();
+        dom.dropzone.classList.remove('dragover');
+        handleFiles(e.dataTransfer.files);
+    });
+
+    function handleFiles(fileListObj) {
+        Array.from(fileListObj).forEach(file => {
+            const cal = { id: calendarIdSeq++, name: file.name, events: [], error: null, respectAvailability: true, allDayMode: 'stored' };
+            calendars.push(cal);
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                try {
+                    cal.events = parseIcsText(reader.result);
+                } catch (err) {
+                    cal.error = err.message || 'Datei konnte nicht gelesen werden.';
+                }
+                renderFileList();
+                runSearch();
+            };
+            reader.onerror = () => {
+                cal.error = 'Datei konnte nicht gelesen werden.';
+                renderFileList();
+            };
+            reader.readAsText(file);
+        });
+        renderFileList();
+        dom.fileInput.value = '';
+    }
+
+    function removeCalendar(id) {
+        calendars = calendars.filter(c => c.id !== id);
+        renderFileList();
+        runSearch();
+    }
+
+    function updateCalendarOption(id, key, value) {
+        const cal = calendars.find(c => c.id === id);
+        if (!cal) return;
+        cal[key] = value;
+        runSearch();
+    }
+
+    function renderFileList() {
+        dom.fileList.innerHTML = calendars.map(cal => `
+            <li class="file-item ${cal.error ? 'file-error' : ''}">
+                <div class="file-item-row">
+                    <span class="file-name">${escapeHtml(cal.name)}</span>
+                    <span class="file-meta">${cal.error ? 'Fehler: ' + escapeHtml(cal.error) : cal.events.length + ' Termine'}</span>
+                    <button class="file-remove" onclick="removeCalendar(${cal.id})" title="Entfernen">×</button>
+                </div>
+                ${cal.error ? '' : `
+                <div class="file-options">
+                    <label class="file-option-checkbox">
+                        <input type="checkbox" ${cal.respectAvailability ? 'checked' : ''} onchange="updateCalendarOption(${cal.id}, 'respectAvailability', this.checked)">
+                        Verfügbarkeiten beachten
+                    </label>
+                    <label class="file-option-select">
+                        Ganztägige Termine:
+                        <select onchange="updateCalendarOption(${cal.id}, 'allDayMode', this.value)">
+                            <option value="stored" ${cal.allDayMode === 'stored' ? 'selected' : ''}>wie hinterlegt</option>
+                            <option value="free" ${cal.allDayMode === 'free' ? 'selected' : ''}>frei</option>
+                            <option value="busy" ${cal.allDayMode === 'busy' ? 'selected' : ''}>belegt</option>
+                        </select>
+                    </label>
+                </div>`}
+            </li>
+        `).join('');
+    }
+
+    function escapeHtml(str) {
+        return String(str).replace(/[&<>"']/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
+    }
+
+    // ── ICS-PARSER ────────────────────────────────────────────────────────
+    // Unterstützt DTSTART/DTEND/DURATION, RRULE (DAILY/WEEKLY/MONTHLY/YEARLY
+    // mit INTERVAL/COUNT/UNTIL/BYDAY/BYMONTHDAY), EXDATE, geänderte Einzeltermine
+    // (RECURRENCE-ID), STATUS:CANCELLED und TRANSP:TRANSPARENT.
+
+    /** Löst Zeilenumbrüche (Folding) gemäß RFC 5545 auf: Fortsetzungszeilen beginnen mit Leerzeichen/Tab */
+    function unfoldIcsLines(text) {
+        const rawLines = text.replace(/\r\n/g, '\n').split('\n');
+        const unfolded = [];
+        rawLines.forEach(line => {
+            line = line.replace(/\r$/, '');
+            if ((line.startsWith(' ') || line.startsWith('\t')) && unfolded.length > 0) {
+                unfolded[unfolded.length - 1] += line.slice(1);
+            } else {
+                unfolded.push(line);
+            }
+        });
+        return unfolded;
+    }
+
+    function parseIcsText(text) {
+        const lines = unfoldIcsLines(text);
+        const events = [];
+        let current = null;
+        let inAlarm = false;
+
+        lines.forEach(line => {
+            if (!line) return;
+            if (line === 'BEGIN:VALARM') { inAlarm = true; return; }
+            if (line === 'END:VALARM')   { inAlarm = false; return; }
+            if (line === 'BEGIN:VEVENT') {
+                current = { uid: null, start: null, end: null, allDay: false, durationMs: null, rrule: null, exdates: [], recurrenceId: null, cancelled: false, transparent: false };
+                return;
+            }
+            if (line === 'END:VEVENT') {
+                if (current && current.start) {
+                    finalizeEvent(current);
+                    events.push(current);
+                }
+                current = null;
+                return;
+            }
+            if (!current || inAlarm) return;
+
+            const colonIdx = line.indexOf(':');
+            if (colonIdx === -1) return;
+            const namePart = line.slice(0, colonIdx);
+            const value = line.slice(colonIdx + 1);
+            const [propNameRaw, ...paramParts] = namePart.split(';');
+            const propName = propNameRaw.toUpperCase();
+            const params = {};
+            paramParts.forEach(p => {
+                const eq = p.indexOf('=');
+                if (eq !== -1) params[p.slice(0, eq).toUpperCase()] = p.slice(eq + 1);
+            });
+
+            switch (propName) {
+                case 'UID':
+                    current.uid = value;
+                    break;
+                case 'DTSTART': {
+                    const parsed = parseIcsDateValue(value, params);
+                    current.start = parsed.date;
+                    current.allDay = parsed.allDay;
+                    break;
+                }
+                case 'DTEND':
+                    current.end = parseIcsDateValue(value, params).date;
+                    break;
+                case 'DURATION':
+                    current.durationMs = parseIcsDuration(value);
+                    break;
+                case 'RRULE':
+                    current.rrule = parseRRule(value);
+                    break;
+                case 'EXDATE':
+                    value.split(',').forEach(v => current.exdates.push(parseIcsDateValue(v, params).date));
+                    break;
+                case 'RECURRENCE-ID':
+                    current.recurrenceId = parseIcsDateValue(value, params).date;
+                    break;
+                case 'STATUS':
+                    if (value.toUpperCase() === 'CANCELLED') current.cancelled = true;
+                    break;
+                case 'TRANSP':
+                    if (value.toUpperCase() === 'TRANSPARENT') current.transparent = true;
+                    break;
+            }
+        });
+
+        return postProcessEvents(events);
+    }
+
+    /** Setzt DTEND, falls nur DURATION oder (bei ganztägigen Terminen) gar nichts angegeben ist */
+    function finalizeEvent(ev) {
+        if (ev.end) return;
+        if (ev.durationMs != null) ev.end = new Date(ev.start.getTime() + ev.durationMs);
+        else if (ev.allDay) ev.end = addDays(ev.start, 1);
+        else ev.end = ev.start;
+    }
+
+    /** Verknüpft geänderte Einzeltermine (RECURRENCE-ID) mit ihrer Serie, damit die Originalinstanz nicht doppelt zählt */
+    function postProcessEvents(events) {
+        const overridesByUid = {};
+        events.forEach(ev => {
+            if (ev.recurrenceId) (overridesByUid[ev.uid] = overridesByUid[ev.uid] || []).push(ev.recurrenceId);
+        });
+        events.forEach(ev => {
+            if (ev.rrule && !ev.recurrenceId) {
+                ev.excludedDates = (overridesByUid[ev.uid] || []).concat(ev.exdates);
+            }
+        });
+        return events;
+    }
+
+    /** ICS-Datumswert (DATE oder DATE-TIME, optional UTC) → { date: Date, allDay: bool } */
+    function parseIcsDateValue(value, params) {
+        value = value.trim();
+        const isDateOnly = params.VALUE === 'DATE' || /^\d{8}$/.test(value);
+        if (isDateOnly) {
+            const y = +value.slice(0, 4), mo = +value.slice(4, 6), d = +value.slice(6, 8);
+            return { date: new Date(y, mo - 1, d, 0, 0, 0), allDay: true };
+        }
+        const isUtc = value.endsWith('Z');
+        const v = isUtc ? value.slice(0, -1) : value;
+        const y = +v.slice(0, 4), mo = +v.slice(4, 6), d = +v.slice(6, 8);
+        const h = +v.slice(9, 11) || 0, mi = +v.slice(11, 13) || 0, s = +v.slice(13, 15) || 0;
+        const date = isUtc ? new Date(Date.UTC(y, mo - 1, d, h, mi, s)) : new Date(y, mo - 1, d, h, mi, s);
+        return { date, allDay: false };
+    }
+
+    /** ICS-Dauer ("PT1H30M", "P1D", "P2W" …) → Millisekunden */
+    function parseIcsDuration(value) {
+        const weekMatch = value.match(/^([+-]?)P(\d+)W$/);
+        if (weekMatch) return (weekMatch[1] === '-' ? -1 : 1) * (+weekMatch[2]) * 7 * 86400000;
+
+        const m = value.match(/^([+-]?)P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/);
+        if (!m) return 0;
+        const sign = m[1] === '-' ? -1 : 1;
+        const days = +(m[2] || 0), hours = +(m[3] || 0), mins = +(m[4] || 0), secs = +(m[5] || 0);
+        return sign * (((days * 24 + hours) * 60 + mins) * 60 + secs) * 1000;
+    }
+
+    function parseRRule(value) {
+        const rule = {};
+        value.split(';').forEach(part => {
+            const eq = part.indexOf('=');
+            if (eq !== -1) rule[part.slice(0, eq).toUpperCase()] = part.slice(eq + 1);
+        });
+        return rule;
+    }
+
+    // ── RRULE-EXPANSION ───────────────────────────────────────────────────
+    const DAY_CODE_TO_NUM = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
+    const NUM_TO_DAY_CODE = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+
+    function mondayOffset(dayNum) { return (dayNum + 6) % 7; }
+
+    function startOfWeekMonday(date) {
+        return addDays(startOfDay(date), -mondayOffset(date.getDay()));
+    }
+
+    function setTimeOfDay(dateOnly, template) {
+        return new Date(dateOnly.getFullYear(), dateOnly.getMonth(), dateOnly.getDate(), template.getHours(), template.getMinutes(), template.getSeconds());
+    }
+
+    function isSameDay(a, b) {
+        return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    }
+
+    /** Erweitert ein wiederkehrendes Ereignis auf konkrete Vorkommen, die [rangeStart, rangeEnd] überlappen */
+    function expandRRule(ev, rangeStart, rangeEnd) {
+        const dtstart = ev.start;
+        const durationMs = ev.end.getTime() - ev.start.getTime();
+        const rrule = ev.rrule;
+        const freq = (rrule.FREQ || '').toUpperCase();
+        const interval = Math.max(1, parseInt(rrule.INTERVAL, 10) || 1);
+        const count = rrule.COUNT ? parseInt(rrule.COUNT, 10) : null;
+        const until = rrule.UNTIL ? parseIcsDateValue(rrule.UNTIL, {}).date : null;
+        const excluded = ev.excludedDates || [];
+        const isExcluded = d => excluded.some(ex => isSameDay(ex, d));
+
+        const results = [];
+        let generated = 0;
+        const MAX_ITER = 5000;
+
+        /** Prüft eine generierte Instanz gegen COUNT/UNTIL/Bereich und fügt sie ggf. hinzu. Rückgabe: true=weiter, false=Serie beendet, 'stop'=Bereich überschritten */
+        function tryAdd(occStart) {
+            generated++;
+            if (count !== null && generated > count) return false;
+            if (until && occStart.getTime() > until.getTime()) return false;
+            if (occStart.getTime() > rangeEnd.getTime()) return 'stop';
+            if (!isExcluded(occStart)) {
+                const occEnd = new Date(occStart.getTime() + durationMs);
+                if (occEnd.getTime() >= rangeStart.getTime()) results.push({ start: occStart, end: occEnd });
+            }
+            return true;
+        }
+
+        let iter = 0;
+        if (freq === 'DAILY') {
+            let cursor = new Date(dtstart);
+            while (iter++ < MAX_ITER) {
+                const r = tryAdd(cursor);
+                if (r === false || r === 'stop') break;
+                cursor = addDays(cursor, interval);
+            }
+        } else if (freq === 'WEEKLY') {
+            const dayNums = (rrule.BYDAY ? rrule.BYDAY.split(',') : [NUM_TO_DAY_CODE[dtstart.getDay()]])
+                .map(code => DAY_CODE_TO_NUM[code]).sort((a, b) => a - b);
+            let weekStart = startOfWeekMonday(dtstart);
+            let stopped = false;
+            while (iter++ < MAX_ITER && !stopped) {
+                for (const dn of dayNums) {
+                    const occ = setTimeOfDay(addDays(weekStart, mondayOffset(dn)), dtstart);
+                    if (occ.getTime() < dtstart.getTime()) continue;
+                    const r = tryAdd(occ);
+                    if (r === false || r === 'stop') { stopped = true; break; }
+                }
+                weekStart = addDays(weekStart, 7 * interval);
+                if (weekStart.getTime() > rangeEnd.getTime()) stopped = true;
+            }
+        } else if (freq === 'MONTHLY') {
+            const monthDays = (rrule.BYMONTHDAY ? rrule.BYMONTHDAY.split(',').map(Number) : [dtstart.getDate()]).sort((a, b) => a - b);
+            let monthCursor = new Date(dtstart.getFullYear(), dtstart.getMonth(), 1);
+            let stopped = false;
+            while (iter++ < MAX_ITER && !stopped) {
+                for (const md of monthDays) {
+                    const occ = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), md, dtstart.getHours(), dtstart.getMinutes(), dtstart.getSeconds());
+                    if (occ.getTime() < dtstart.getTime()) continue;
+                    const r = tryAdd(occ);
+                    if (r === false || r === 'stop') { stopped = true; break; }
+                }
+                monthCursor = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + interval, 1);
+                if (monthCursor.getTime() > rangeEnd.getTime()) stopped = true;
+            }
+        } else if (freq === 'YEARLY') {
+            let year = dtstart.getFullYear();
+            while (iter++ < MAX_ITER) {
+                const occ = new Date(year, dtstart.getMonth(), dtstart.getDate(), dtstart.getHours(), dtstart.getMinutes(), dtstart.getSeconds());
+                if (occ.getTime() >= dtstart.getTime()) {
+                    const r = tryAdd(occ);
+                    if (r === false || r === 'stop') break;
+                }
+                year += interval;
+                if (new Date(year, 0, 1).getTime() > rangeEnd.getTime()) break;
+            }
+        } else {
+            // Unbekannte/nicht unterstützte Wiederholungsregel: nur die Ursprungsinstanz berücksichtigen
+            tryAdd(dtstart);
+        }
+
+        return results;
+    }
+
+    // ── FREIE-SLOT-SUCHE ──────────────────────────────────────────────────
+    /** Bestimmt anhand der Kalender-Optionen, ob ein Termin als "belegt" gilt */
+    function isEventBusy(ev, cal) {
+        if (ev.allDay) {
+            if (cal.allDayMode === 'free') return false;
+            if (cal.allDayMode === 'busy') return true;
+            // 'stored': wie unten für normale Termine behandeln
+        }
+        if (!cal.respectAvailability) return true;
+        return !ev.transparent;
+    }
+
+    function runSearch() {
+        clearError();
+
+        const startMin = parseTimeToMinutes(dom.startTimeInput.value);
+        const endMin = parseTimeToMinutes(dom.endTimeInput.value);
+        const minDurationMin = parseDuration(dom.minDurationInput.value);
+        const maxWeeks = clampInt(parseInt(dom.maxWeeksInput.value, 10) || 0, 1, 52);
+        const maxSuggestions = clampInt(parseInt(dom.maxSuggestionsInput.value, 10) || 0, 1, 200);
+        const selectedWeekdays = new Set(
+            Array.from(document.querySelectorAll('#weekdayCheckboxes input:checked')).map(cb => parseInt(cb.value, 10))
+        );
+
+        if (endMin <= startMin) return showError('Die Endzeit muss nach der Startzeit liegen.');
+        if (minDurationMin <= 0) return showError('Bitte eine gültige Mindestdauer angeben.');
+        if (selectedWeekdays.size === 0) return showError('Bitte mindestens einen Wochentag auswählen.');
+        if (calendars.some(c => c.error)) return showError('Mindestens eine Datei konnte nicht gelesen werden. Bitte fehlerhafte Datei entfernen.');
+
+        const now = new Date();
+        const rangeStart = now;
+        const rangeEnd = new Date(addDays(startOfDay(now), maxWeeks * 7).getTime() - 1);
+
+        const busyIntervals = [];
+        calendars.forEach(cal => {
+            cal.events.forEach(ev => {
+                if (ev.cancelled || !isEventBusy(ev, cal)) return;
+                if (ev.rrule) {
+                    busyIntervals.push(...expandRRule(ev, rangeStart, rangeEnd));
+                } else if (ev.end.getTime() >= rangeStart.getTime() && ev.start.getTime() <= rangeEnd.getTime()) {
+                    busyIntervals.push({ start: ev.start, end: ev.end });
+                }
+            });
+        });
+
+        const suggestions = [];
+        let dayCursor = startOfDay(now);
+        const lastDay = addDays(startOfDay(now), maxWeeks * 7 - 1);
+
+        while (dayCursor.getTime() <= lastDay.getTime() && suggestions.length < maxSuggestions) {
+            if (selectedWeekdays.has(dayCursor.getDay())) {
+                let windowStart = addMinutes(dayCursor, startMin);
+                const windowEnd = addMinutes(dayCursor, endMin);
+                if (windowStart < now) windowStart = now;
+
+                if (windowStart < windowEnd) {
+                    const dayBusy = mergeIntervals(
+                        busyIntervals
+                            .filter(b => b.end > windowStart && b.start < windowEnd)
+                            .map(b => ({ start: maxDate(b.start, windowStart), end: minDate(b.end, windowEnd) }))
+                    );
+
+                    let cursor = windowStart;
+                    for (const busy of dayBusy) {
+                        if (suggestions.length >= maxSuggestions) break;
+                        if (busy.start.getTime() - cursor.getTime() >= minDurationMin * 60000) {
+                            suggestions.push({ start: new Date(cursor), end: new Date(busy.start) });
+                        }
+                        if (busy.end > cursor) cursor = busy.end;
+                    }
+                    if (suggestions.length < maxSuggestions && windowEnd.getTime() - cursor.getTime() >= minDurationMin * 60000) {
+                        suggestions.push({ start: new Date(cursor), end: new Date(windowEnd) });
+                    }
+                }
+            }
+            dayCursor = addDays(dayCursor, 1);
+        }
+
+        renderResults(suggestions);
+    }
+
+    function mergeIntervals(intervals) {
+        const sorted = [...intervals].sort((a, b) => a.start - b.start);
+        const merged = [];
+        sorted.forEach(iv => {
+            const last = merged[merged.length - 1];
+            if (last && iv.start <= last.end) {
+                if (iv.end > last.end) last.end = iv.end;
+            } else {
+                merged.push({ start: iv.start, end: iv.end });
+            }
+        });
+        return merged;
+    }
+
+    function renderResults(suggestions) {
+        dom.resultsSection.style.display = '';
+        if (suggestions.length === 0) {
+            dom.resultsSummary.textContent = 'Keine passenden freien Termine im gewählten Zeitraum gefunden.';
+            dom.resultsList.innerHTML = '';
+            return;
+        }
+        dom.resultsSummary.textContent = `${suggestions.length} freie${suggestions.length === 1 ? 'r' : ''} Termin${suggestions.length === 1 ? '' : 'e'} gefunden.`;
+        dom.resultsList.innerHTML = suggestions.map(s => {
+            const durMin = Math.round((s.end.getTime() - s.start.getTime()) / 60000);
+            return `<li class="result-item">
+                <span class="result-date">${formatWeekday(s.start)}, ${formatDate(s.start)}</span>
+                <span class="result-time">${formatTime(s.start)}–${formatTime(s.end)}</span>
+                <span class="result-duration">${formatDuration(durMin)} h</span>
+            </li>`;
+        }).join('');
+    }
+
+    function showError(msg) {
+        dom.searchError.textContent = msg;
+        dom.searchError.style.display = 'block';
+        dom.resultsSection.style.display = 'none';
+    }
+
+    function clearError() {
+        dom.searchError.style.display = 'none';
+    }
+
+    // ── HILFSFUNKTIONEN ───────────────────────────────────────────────────
+    function clampInt(n, min, max) { return Math.min(max, Math.max(min, n)); }
+    function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+    function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+    function addMinutes(d, n) { return new Date(d.getTime() + n * 60000); }
+    function maxDate(a, b) { return a > b ? a : b; }
+    function minDate(a, b) { return a < b ? a : b; }
+
+    const weekdayNames = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+    function formatWeekday(d) { return weekdayNames[d.getDay()]; }
+    function formatDate(d) { return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`; }
+    function formatTime(d) { return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+
+    /** "HH:MM" Uhrzeit → Minuten ab Mitternacht */
+    function parseTimeToMinutes(timeStr) {
+        if (!timeStr) return 0;
+        const [h, m] = timeStr.split(':').map(Number);
+        if (Number.isNaN(h) || Number.isNaN(m)) return 0;
+        return h * 60 + m;
+    }
+
+    /** "H:MM" oder reine Zahl (Stunden) Dauer → Minuten */
+    function parseDuration(str) {
+        if (!str || !str.trim()) return 0;
+        str = str.trim().replace(',', '.');
+        if (str.includes(':')) {
+            const [h, m] = str.split(':').map(s => parseInt(s, 10) || 0);
+            return h * 60 + m;
+        }
+        const hours = parseFloat(str);
+        return isNaN(hours) ? 0 : Math.round(hours * 60);
+    }
+
+    /** Minuten → "H:MM" Dauer-String */
+    function formatDuration(totalMin) {
+        totalMin = Math.round(totalMin);
+        const h = Math.floor(totalMin / 60);
+        const m = totalMin % 60;
+        return `${h}:${String(m).padStart(2, '0')}`;
+    }
+</script>
+
+</body>
+</html>
