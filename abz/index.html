@@ -659,11 +659,8 @@
     /** Liest daily/weekly/pauses aus den GET-Parametern und befüllt die Felder */
     function loadFromUrlParams() {
         const params = new URLSearchParams(window.location.search);
-        const start  = params.get('start');
         const daily  = params.get('daily');
         const weekly = params.get('weekly');
-
-        if (start) startTimeInput.value = start;
 
         if (daily) {
             dailyTimeInput.value = daily;
@@ -714,7 +711,6 @@
 
     function updateUrlParams() {
         const qs = buildQueryString({
-            start:     startTimeInput.value.trim(),
             daily:     dailyTimeInput.value.trim(),
             weekly:    weeklyTimeInput.value.trim(),
             pauses:    serializePausesParam(),
