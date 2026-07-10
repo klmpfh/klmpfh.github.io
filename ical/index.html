@@ -64,6 +64,11 @@
             color: var(--text-muted);
         }
 
+        .privacy-note {
+            font-weight: 600;
+            color: var(--success) !important;
+        }
+
         .card {
             background: var(--highlight-bg);
             border: 1px solid var(--border-color);
@@ -350,6 +355,40 @@
             color: #a0aec0;
             margin-top: 4px;
         }
+
+        .file-subname {
+            font-weight: 400;
+            color: var(--text-muted);
+            font-size: 12px;
+            margin-left: 4px;
+        }
+
+        .results-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .results-header h2 {
+            margin-bottom: 0;
+        }
+
+        .btn-copy {
+            padding: 7px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--primary);
+            background: var(--primary-light);
+            border: 1px solid var(--primary);
+            border-radius: 6px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: opacity 0.2s;
+        }
+
+        .btn-copy:hover { opacity: 0.85; }
     </style>
 </head>
 <body>
@@ -358,13 +397,14 @@
     <header>
         <h1>iCal Terminsuche</h1>
         <p>Lädt beliebig viele .ics-Kalenderdateien und findet freie Termin-Slots, an denen in keinem der Kalender ein Termin liegt.</p>
+        <p class="privacy-note">Läuft vollständig lokal im Browser. Es werden keine Daten hochgeladen, übertragen oder online gespeichert.</p>
     </header>
 
     <section class="card">
         <h2>1. Kalender hochladen</h2>
         <div id="dropzone" class="dropzone">
             <p>.ics-Dateien hierher ziehen oder <label for="fileInput" class="file-label">auswählen</label></p>
-            <p class="dropzone-hint">Mehrfachauswahl möglich · ohne Datei gilt das gesamte Zeitfenster als frei</p>
+            <p class="dropzone-hint">Mehrfachauswahl möglich · ohne Datei keine Ergebnisse</p>
             <input type="file" id="fileInput" accept=".ics,text/calendar" multiple hidden>
         </div>
         <ul id="fileList" class="file-list"></ul>
@@ -413,7 +453,10 @@
     </section>
 
     <section class="card" id="resultsSection" style="display:none">
-        <h2>3. Vorschläge</h2>
+        <div class="results-header">
+            <h2>3. Vorschläge</h2>
+            <button id="copyResultsBtn" class="btn-copy" type="button">In Zwischenablage kopieren</button>
+        </div>
         <div id="resultsSummary" class="results-summary"></div>
         <ul id="resultsList" class="results-list"></ul>
     </section>
@@ -423,8 +466,9 @@
 
 <script>
     // ── ZUSTAND ───────────────────────────────────────────────────────────
-    let calendars = [];       // [{ id, name, events, error }]
+    let calendars = [];       // [{ id, name, calendarName, events, error }]
     let calendarIdSeq = 0;
+    let lastResultsMarkdown = ''; // zuletzt erzeugter Markdown-Text für den Kopieren-Button
 
     const dom = {
         dropzone:            document.getElementById('dropzone'),
@@ -440,10 +484,11 @@
         resultsSection:      document.getElementById('resultsSection'),
         resultsSummary:      document.getElementById('resultsSummary'),
         resultsList:         document.getElementById('resultsList'),
+        copyResultsBtn:      document.getElementById('copyResultsBtn'),
     };
 
-    window.addEventListener('DOMContentLoaded', runSearch);
     dom.searchBtn.addEventListener('click', runSearch);
+    dom.copyResultsBtn.addEventListener('click', copyResultsToClipboard);
 
     // ── DATEI-UPLOAD ──────────────────────────────────────────────────────
     dom.fileInput.addEventListener('change', e => handleFiles(e.target.files));
@@ -461,18 +506,19 @@
 
     function handleFiles(fileListObj) {
         Array.from(fileListObj).forEach(file => {
-            const cal = { id: calendarIdSeq++, name: file.name, events: [], error: null, respectAvailability: true, allDayMode: 'stored' };
+            const cal = { id: calendarIdSeq++, name: file.name, calendarName: null, events: [], error: null, respectAvailability: true, allDayMode: 'stored' };
             calendars.push(cal);
 
             const reader = new FileReader();
             reader.onload = () => {
                 try {
-                    cal.events = parseIcsText(reader.result);
+                    const parsed = parseIcsText(reader.result);
+                    cal.events = parsed.events;
+                    cal.calendarName = parsed.calendarName;
                 } catch (err) {
                     cal.error = err.message || 'Datei konnte nicht gelesen werden.';
                 }
                 renderFileList();
-                runSearch();
             };
             reader.onerror = () => {
                 cal.error = 'Datei konnte nicht gelesen werden.';
@@ -487,21 +533,28 @@
     function removeCalendar(id) {
         calendars = calendars.filter(c => c.id !== id);
         renderFileList();
-        runSearch();
     }
 
     function updateCalendarOption(id, key, value) {
         const cal = calendars.find(c => c.id === id);
         if (!cal) return;
         cal[key] = value;
-        runSearch();
+    }
+
+    /** Anzeigename: im Kalender hinterlegter Name (X-WR-CALNAME/NAME), sonst Dateiname */
+    function getCalendarDisplayName(cal) {
+        return cal.calendarName || cal.name;
     }
 
     function renderFileList() {
-        dom.fileList.innerHTML = calendars.map(cal => `
+        dom.fileList.innerHTML = calendars.map(cal => {
+            const displayName = getCalendarDisplayName(cal);
+            const subname = !cal.error && cal.calendarName && cal.calendarName !== cal.name
+                ? ` <span class="file-subname">(${escapeHtml(cal.name)})</span>` : '';
+            return `
             <li class="file-item ${cal.error ? 'file-error' : ''}">
                 <div class="file-item-row">
-                    <span class="file-name">${escapeHtml(cal.name)}</span>
+                    <span class="file-name">${escapeHtml(displayName)}${subname}</span>
                     <span class="file-meta">${cal.error ? 'Fehler: ' + escapeHtml(cal.error) : cal.events.length + ' Termine'}</span>
                     <button class="file-remove" onclick="removeCalendar(${cal.id})" title="Entfernen">×</button>
                 </div>
@@ -521,7 +574,8 @@
                     </label>
                 </div>`}
             </li>
-        `).join('');
+        `;
+        }).join('');
     }
 
     function escapeHtml(str) {
@@ -553,6 +607,7 @@
         const events = [];
         let current = null;
         let inAlarm = false;
+        let calendarName = null;
 
         lines.forEach(line => {
             if (!line) return;
@@ -570,7 +625,20 @@
                 current = null;
                 return;
             }
-            if (!current || inAlarm) return;
+            if (!current) {
+                // Kalendername (VCALENDAR-Ebene): X-WR-CALNAME (de-facto-Standard) oder NAME (RFC 7986)
+                if (calendarName === null) {
+                    const nameColonIdx = line.indexOf(':');
+                    if (nameColonIdx !== -1) {
+                        const nameProp = line.slice(0, nameColonIdx).split(';')[0].toUpperCase();
+                        if (nameProp === 'X-WR-CALNAME' || nameProp === 'NAME') {
+                            calendarName = line.slice(nameColonIdx + 1).trim();
+                        }
+                    }
+                }
+                return;
+            }
+            if (inAlarm) return;
 
             const colonIdx = line.indexOf(':');
             if (colonIdx === -1) return;
@@ -618,7 +686,7 @@
             }
         });
 
-        return postProcessEvents(events);
+        return { events: postProcessEvents(events), calendarName };
     }
 
     /** Setzt DTEND, falls nur DURATION oder (bei ganztägigen Terminen) gar nichts angegeben ist */
@@ -807,6 +875,7 @@
             Array.from(document.querySelectorAll('#weekdayCheckboxes input:checked')).map(cb => parseInt(cb.value, 10))
         );
 
+        if (calendars.length === 0) return showError('Bitte mindestens eine iCal-Datei hochladen.');
         if (endMin <= startMin) return showError('Die Endzeit muss nach der Startzeit liegen.');
         if (minDurationMin <= 0) return showError('Bitte eine gültige Mindestdauer angeben.');
         if (selectedWeekdays.size === 0) return showError('Bitte mindestens einen Wochentag auswählen.');
@@ -861,7 +930,19 @@
             dayCursor = addDays(dayCursor, 1);
         }
 
-        renderResults(suggestions);
+        const weekdayOrder = [1, 2, 3, 4, 5, 6, 0]; // Mo…So
+        const meta = {
+            calendarNames: calendars.map(getCalendarDisplayName),
+            startTime: dom.startTimeInput.value,
+            endTime: dom.endTimeInput.value,
+            minDurationLabel: dom.minDurationInput.value.trim(),
+            maxWeeks,
+            weekdayLabels: weekdayOrder.filter(d => selectedWeekdays.has(d)).map(d => weekdayNames[d]),
+            rangeStart: now,
+            rangeEnd: lastDay,
+        };
+
+        renderResults(suggestions, meta);
     }
 
     function mergeIntervals(intervals) {
@@ -878,8 +959,10 @@
         return merged;
     }
 
-    function renderResults(suggestions) {
+    function renderResults(suggestions, meta) {
         dom.resultsSection.style.display = '';
+        lastResultsMarkdown = buildResultsMarkdown(suggestions, meta);
+
         if (suggestions.length === 0) {
             dom.resultsSummary.textContent = 'Keine passenden freien Termine im gewählten Zeitraum gefunden.';
             dom.resultsList.innerHTML = '';
@@ -896,10 +979,46 @@
         }).join('');
     }
 
+    /** Baut den kopierbaren Markdown-Text: Suchparameter, berücksichtigte Kalender, Ergebnistabelle */
+    function buildResultsMarkdown(suggestions, meta) {
+        const lines = [
+            '## Freie Termine',
+            '',
+            `**Kalender:** ${meta.calendarNames.length ? meta.calendarNames.join(', ') : '–'}`,
+            `**Zeitraum:** ${formatDate(meta.rangeStart)} – ${formatDate(meta.rangeEnd)} (${meta.maxWeeks} Woche${meta.maxWeeks === 1 ? '' : 'n'})`,
+            `**Uhrzeitfenster:** ${meta.startTime}–${meta.endTime} Uhr`,
+            `**Mindestdauer:** ${meta.minDurationLabel} h`,
+            `**Wochentage:** ${meta.weekdayLabels.join(', ')}`,
+            '',
+        ];
+        if (suggestions.length === 0) {
+            lines.push('_Keine passenden freien Termine gefunden._');
+        } else {
+            suggestions.forEach(s => {
+                const durMin = Math.round((s.end.getTime() - s.start.getTime()) / 60000);
+                lines.push(`- ${formatWeekday(s.start)}, ${formatDate(s.start)}: ${formatTime(s.start)}–${formatTime(s.end)} Uhr (${formatDuration(durMin)} h)`);
+            });
+        }
+        return lines.join('\n');
+    }
+
+    function copyResultsToClipboard() {
+        if (!lastResultsMarkdown) return;
+        navigator.clipboard.writeText(lastResultsMarkdown).then(() => {
+            const original = 'In Zwischenablage kopieren';
+            dom.copyResultsBtn.textContent = 'Kopiert ✓';
+            setTimeout(() => { dom.copyResultsBtn.textContent = original; }, 1500);
+        }).catch(() => {
+            dom.copyResultsBtn.textContent = 'Kopieren fehlgeschlagen';
+            setTimeout(() => { dom.copyResultsBtn.textContent = 'In Zwischenablage kopieren'; }, 1500);
+        });
+    }
+
     function showError(msg) {
         dom.searchError.textContent = msg;
         dom.searchError.style.display = 'block';
         dom.resultsSection.style.display = 'none';
+        lastResultsMarkdown = '';
     }
 
     function clearError() {
