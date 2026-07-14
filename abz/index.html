@@ -533,7 +533,7 @@
         </div>
     </div>
 
-    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden.</div>
+    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden. Letzte Aktualisierung: <span id="lastUpdate">–</span> · v<span id="versionNumber">6.4</span></div>
 </div>
 
 <script>
@@ -577,6 +577,7 @@
         statDiff:               document.getElementById('statDiff'),
         statProgress:           document.getElementById('statProgress'),
         statProgressBar:        document.getElementById('statProgressBar'),
+        lastUpdate:             document.getElementById('lastUpdate'),
     };
 
     const titleStatCards = {
@@ -870,7 +871,7 @@
     }
 
     // ── PAUSENLISTE RENDERN ───────────────────────────────────────────────
-    function renderPauseList(currentMinOfDay, pausesList) {
+    function renderPauseList(currentMinOfDay, pausesList, runningPauseMin) {
         const list  = dom.pauseList;
         const items = [];
 
@@ -896,8 +897,7 @@
         });
 
         if (runningPauseStart !== null) {
-            const runningMin = Math.floor((Date.now() - runningPauseStart) / 60000);
-            items.push(`<span class="pause-item pause-running"><span class="running-dot"></span> Läuft (${runningMin} min)</span>`);
+            items.push(`<span class="pause-item pause-running"><span class="running-dot"></span> Läuft (${runningPauseMin} min)</span>`);
         }
 
         list.innerHTML = items.length > 0
@@ -1009,9 +1009,14 @@
 
         let runningPauseMin = 0;
         if (runningPauseStart !== null) {
-            runningPauseMin  = (Date.now() - runningPauseStart) / 60000;
-            elapsedPauseMin += runningPauseMin;
-            dom.runningPauseDuration.textContent = Math.floor(runningPauseMin);
+            // Auf Basis von currentMinOfDay (volle Minuten) statt Date.now()-Differenz berechnen,
+            // damit runningPauseMin exakt im selben Minutentakt wächst wie elapsedMin. Sonst driftet
+            // netWorkMin während der laufenden Pause innerhalb jeder Minute kurz nach unten/oben.
+            const runStart    = new Date(runningPauseStart);
+            const runStartMin = runStart.getHours() * 60 + runStart.getMinutes();
+            runningPauseMin   = Math.max(0, currentMinOfDay - runStartMin);
+            elapsedPauseMin  += runningPauseMin;
+            dom.runningPauseDuration.textContent = runningPauseMin;
         }
 
         const netWorkMin     = Math.max(0, elapsedMin - elapsedPauseMin);
@@ -1067,10 +1072,13 @@
             active:   w.active
         }));
 
-        renderPauseList(currentMinOfDay, effectivePauses);
+        renderPauseList(currentMinOfDay, effectivePauses, runningPauseMin);
         renderWarnings(netWorkMin, elapsedPauseMin);
         drawTimeline(elapsedMin, startMin, currentMinOfDay, runningPauseMin, targetEndMin, warnMarkers, effectivePauses);
         updateUrlParams();
+
+        dom.lastUpdate.textContent =
+            `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
     }
 
     // ── TIMELINE ──────────────────────────────────────────────────────────
