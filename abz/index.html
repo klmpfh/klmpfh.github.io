@@ -636,6 +636,9 @@
     // Eingabe-Events
     startTimeInput.addEventListener('input', updateTracker);
 
+    dom.pauseFromInput.addEventListener('input', updateTracker);
+    dom.pauseToInput.addEventListener('input', updateTracker);
+
     dailyTimeInput.addEventListener('input', () => {
         const min = parseDuration(dailyTimeInput.value);
         weeklyTimeInput.value = min > 0 ? formatDuration(min * 5) : '';
@@ -782,6 +785,7 @@
             dom.pauseToInput.value = '';
             dom.pauseToInput.focus();
         }
+        updateTracker();
     }
 
     function editPause(index) {
@@ -794,6 +798,37 @@
         dom.pauseFromInput.value = formatMinutesToTime(p.startMin);
         dom.pauseToInput.value   = formatMinutesToTime(p.startMin + p.durationMin);
         dom.pauseFromInput.focus();
+        updateTracker();
+    }
+
+    /** Liest die aktuell im Formular stehende (noch nicht gespeicherte) Pause, sofern gültig */
+    function getDraftPause() {
+        if (!addPauseFormVisible) return null;
+        const from = dom.pauseFromInput.value;
+        const to   = dom.pauseToInput.value;
+        if (!from || !to) return null;
+
+        const fromMin = parseTimeToMinutes(from);
+        let   toMin   = parseTimeToMinutes(to);
+        if (toMin <= fromMin) toMin += 1440;
+
+        const durationMin = toMin - fromMin;
+        if (durationMin <= 0) return null;
+        return { startMin: fromMin, durationMin };
+    }
+
+    /**
+     * Pausenliste inkl. der gerade im Formular eingegebenen Pause, damit Werte und Grafiken schon
+     * während der Eingabe/Bearbeitung live aktualisiert werden, bevor bestätigt wird.
+     */
+    function getEffectivePauses() {
+        const draft = getDraftPause();
+        if (!draft) return pauses;
+
+        if (editingPauseIndex !== null) {
+            return pauses.map((p, i) => i === editingPauseIndex ? { ...draft, isDraft: true } : p);
+        }
+        return [...pauses, { ...draft, isDraft: true }];
     }
 
     function addPauseFromForm() {
@@ -835,23 +870,27 @@
     }
 
     // ── PAUSENLISTE RENDERN ───────────────────────────────────────────────
-    function renderPauseList(currentMinOfDay) {
+    function renderPauseList(currentMinOfDay, pausesList) {
         const list  = dom.pauseList;
         const items = [];
 
-        pauses.forEach((p, i) => {
+        pausesList.forEach((p, i) => {
             const endMin   = p.startMin + p.durationMin;
             const startStr = formatMinutesToTime(p.startMin);
             const endStr   = formatMinutesToTime(endMin);
             const isFuture = p.startMin > currentMinOfDay;
-            const cls      = isFuture ? 'pause-future' : 'pause-done';
-            const tag      = isFuture ? ' <em>(geplant)</em>' : '';
+            const cls      = p.isDraft ? 'pause-future' : (isFuture ? 'pause-future' : 'pause-done');
+            const tag      = p.isDraft ? ' <em>(Entwurf)</em>' : (isFuture ? ' <em>(geplant)</em>' : '');
+
+            const actions = p.isDraft
+                ? ''
+                : ` <button class="pause-edit-btn" onclick="editPause(${i})" title="Bearbeiten">✎</button>`
+                + ` <button class="pause-delete-btn" onclick="deletePause(${i})" title="Entfernen">×</button>`;
 
             items.push(
                 `<span class="pause-item ${cls}">`
                 + `${startStr}–${endStr} · ${p.durationMin} min${tag}`
-                + ` <button class="pause-edit-btn" onclick="editPause(${i})" title="Bearbeiten">✎</button>`
-                + ` <button class="pause-delete-btn" onclick="deletePause(${i})" title="Entfernen">×</button>`
+                + actions
                 + `</span>`
             );
         });
@@ -893,8 +932,8 @@
     // hinten. Pausen, die erst NACH der Zielzeit beginnen, dürfen sie nicht beeinflussen.
 
     /** Pausen (inkl. laufender Pause) als {start,end}-Intervalle für die Zielzeit-/Warnschwellen-Berechnung */
-    function buildPauseIntervals(currentMinOfDay) {
-        const intervals = pauses.map(p => ({ start: p.startMin, end: p.startMin + p.durationMin }));
+    function buildPauseIntervals(currentMinOfDay, pausesList) {
+        const intervals = pausesList.map(p => ({ start: p.startMin, end: p.startMin + p.durationMin }));
         if (runningPauseStart !== null) {
             const runStart    = new Date(runningPauseStart);
             const runStartMin = runStart.getHours() * 60 + runStart.getMinutes();
@@ -949,6 +988,9 @@
         const startMin      = parseTimeToMinutes(startTimeInput.value);
         const targetWorkMin = parseDuration(dailyTimeInput.value); // Netto-Ziel
 
+        // Pausenliste inkl. eines gerade im Formular eingegebenen Entwurfs (Live-Vorschau)
+        const effectivePauses = getEffectivePauses();
+
         // Vergangene Zeit seit Arbeitsbeginn (Uhr-Minuten)
         let elapsedMin = currentMinOfDay - startMin;
         if (elapsedMin < -120) elapsedMin += 1440;
@@ -956,7 +998,7 @@
 
         // Vergangene Pausenminuten
         let elapsedPauseMin = 0;
-        pauses.forEach(p => {
+        effectivePauses.forEach(p => {
             const pEnd = p.startMin + p.durationMin;
             if (currentMinOfDay >= pEnd) {
                 elapsedPauseMin += p.durationMin;
@@ -973,8 +1015,8 @@
         }
 
         const netWorkMin     = Math.max(0, elapsedMin - elapsedPauseMin);
-        const allPauseMin    = pauses.reduce((s, p) => s + p.durationMin, 0) + runningPauseMin;
-        const pauseIntervals = buildPauseIntervals(currentMinOfDay);
+        const allPauseMin    = effectivePauses.reduce((s, p) => s + p.durationMin, 0) + runningPauseMin;
+        const pauseIntervals = buildPauseIntervals(currentMinOfDay, effectivePauses);
 
         // Stat-Cards befüllen
         dom.statNetWork.textContent = formatDuration(netWorkMin) + ' h';
@@ -1025,14 +1067,14 @@
             active:   w.active
         }));
 
-        renderPauseList(currentMinOfDay);
+        renderPauseList(currentMinOfDay, effectivePauses);
         renderWarnings(netWorkMin, elapsedPauseMin);
-        drawTimeline(elapsedMin, startMin, currentMinOfDay, runningPauseMin, targetEndMin, warnMarkers);
+        drawTimeline(elapsedMin, startMin, currentMinOfDay, runningPauseMin, targetEndMin, warnMarkers, effectivePauses);
         updateUrlParams();
     }
 
     // ── TIMELINE ──────────────────────────────────────────────────────────
-    function drawTimeline(elapsedMin, startMinOfDay, currentMinOfDay, runningPauseMin, targetEndMin, warnMarkers) {
+    function drawTimeline(elapsedMin, startMinOfDay, currentMinOfDay, runningPauseMin, targetEndMin, warnMarkers, pausesList) {
         const width        = svg.clientWidth || 940;
         const paddingLeft  = 30;
         const paddingRight = 30;
@@ -1061,7 +1103,7 @@
         }
 
         // 3. Pausenblöcke
-        pauses.forEach(p => {
+        pausesList.forEach(p => {
             const offsetMin = p.startMin - startMinOfDay;
             if (offsetMin > maxTimelineDuration || offsetMin + p.durationMin < 0) return;
             const pX1      = getX(Math.max(0, offsetMin));
@@ -1070,7 +1112,7 @@
             svg.appendChild(svgEl('rect', {
                 x: pX1, y: barY,
                 width: Math.max(0, pX2 - pX1), height: barHeight,
-                fill: isFuture ? 'rgba(49,130,206,0.22)' : 'rgba(113,128,150,0.5)'
+                fill: p.isDraft ? 'rgba(221,107,32,0.35)' : (isFuture ? 'rgba(49,130,206,0.22)' : 'rgba(113,128,150,0.5)')
             }));
         });
 
