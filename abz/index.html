@@ -533,7 +533,7 @@
         </div>
     </div>
 
-    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden. Letzte Aktualisierung: <span id="lastUpdate">–</span> · v<span id="versionNumber">6.4</span></div>
+    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden. Letzte Aktualisierung: <span id="lastUpdate">–</span> · v<span id="versionNumber">6.5</span></div>
 </div>
 
 <script>
@@ -1061,16 +1061,19 @@
             updateTitle({ hasTarget, netWorkMin, allPauseMin });
         }
 
-        // Warnschwellen (6h/9h30/10h) als Uhrzeit-Marker für den Zeitstrahl, mit Bezug zum "Jetzt"-Zeiger
+        // Warnschwellen (6h/9h30/10h) als Uhrzeit-Marker für den Zeitstrahl, mit Bezug zum "Jetzt"-Zeiger.
+        // Pflichtpausen-Schwellen (6h/9h30) werden ausgeblendet, sobald bis zu diesem Zeitpunkt bereits
+        // genug Pause genommen wurde/geplant ist – die Regel würde zu diesem Zeitpunkt dann nicht mehr greifen.
         const warnMarkers = [
-            { thresholdMin: 360, label: '6h',   active: netWorkMin > 360 && elapsedPauseMin < 30 },
-            { thresholdMin: 570, label: '9h30', active: netWorkMin > 570 && elapsedPauseMin < 45 },
-            { thresholdMin: 600, label: '10h',  active: netWorkMin > 600 }
-        ].map(w => ({
-            clockMin: computeClockTimeForNetMinutes(startMin, w.thresholdMin, pauseIntervals),
-            label:    w.label,
-            active:   w.active
-        }));
+            { thresholdMin: 360, label: '6h',   requiredPauseMin: 30,   active: netWorkMin > 360 && elapsedPauseMin < 30 },
+            { thresholdMin: 570, label: '9h30', requiredPauseMin: 45,   active: netWorkMin > 570 && elapsedPauseMin < 45 },
+            { thresholdMin: 600, label: '10h',  requiredPauseMin: null, active: netWorkMin > 600 }
+        ].map(w => {
+            const clockMin              = computeClockTimeForNetMinutes(startMin, w.thresholdMin, pauseIntervals);
+            const pauseElapsedAtMarker  = clockMin - startMin - w.thresholdMin;
+            const alreadySatisfied      = w.requiredPauseMin !== null && pauseElapsedAtMarker >= w.requiredPauseMin;
+            return { clockMin, label: w.label, active: w.active, visible: !alreadySatisfied };
+        }).filter(w => w.visible);
 
         renderPauseList(currentMinOfDay, effectivePauses, runningPauseMin);
         renderWarnings(netWorkMin, elapsedPauseMin);
@@ -1177,14 +1180,14 @@
                 const color = w.active ? '#dd6b20' : '#cbd5e0';
 
                 svg.appendChild(svgEl('line', {
-                    x1: wX, y1: barY - 11, x2: wX, y2: barY,
+                    x1: wX, y1: barY - 18, x2: wX, y2: barY,
                     stroke: color, 'stroke-width': w.active ? 2 : 1.5,
                     'stroke-dasharray': w.active ? '0' : '2,2'
                 }));
-                svg.appendChild(svgEl('circle', { cx: wX, cy: barY - 11, r: 2.5, fill: color }));
+                svg.appendChild(svgEl('circle', { cx: wX, cy: barY - 18, r: 2.5, fill: color }));
 
                 const wTxt = svgEl('text', {
-                    x: wX, y: barY - 15, 'text-anchor': 'middle', 'font-size': '9px',
+                    x: wX, y: barY - 22, 'text-anchor': 'middle', 'font-size': '9px',
                     'font-weight': w.active ? 700 : 500, fill: color
                 });
                 wTxt.textContent = w.label;
