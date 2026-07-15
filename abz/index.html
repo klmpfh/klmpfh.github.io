@@ -533,7 +533,7 @@
         </div>
     </div>
 
-    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden. Letzte Aktualisierung: <span id="lastUpdate">–</span> · v<span id="versionNumber">6.6</span></div>
+    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden. Letzte Aktualisierung: <span id="lastUpdate">–</span> · v<span id="versionNumber">6.7</span></div>
 </div>
 
 <script>
@@ -914,9 +914,9 @@
             const missing = Math.ceil(30 - elapsedPauseMin);
             warnings.push(`&#9888; Bei über 6h Arbeitszeit sind mindestens 30 min Pause vorgeschrieben. Es fehlen noch <strong>${missing} min</strong>.`);
         }
-        if (netWorkMin > 570 && elapsedPauseMin < 45) {
+        if (netWorkMin > 540 && elapsedPauseMin < 45) {
             const missing = Math.ceil(45 - elapsedPauseMin);
-            warnings.push(`&#9888; Bei über 9h30 Arbeitszeit sind mindestens 45 min Pause vorgeschrieben. Es fehlen noch <strong>${missing} min</strong>.`);
+            warnings.push(`&#9888; Bei über 9h Arbeitszeit sind mindestens 45 min Pause vorgeschrieben. Es fehlen noch <strong>${missing} min</strong>.`);
         }
         if (netWorkMin > 600) {
             warnings.push(`&#9888; Die gesetzliche Höchstarbeitszeit von 10h pro Tag ist überschritten.`);
@@ -1061,13 +1061,13 @@
             updateTitle({ hasTarget, netWorkMin, allPauseMin });
         }
 
-        // Warnschwellen (6h/9h30/10h) als Uhrzeit-Marker für den Zeitstrahl, mit Bezug zum "Jetzt"-Zeiger.
-        // Pflichtpausen-Schwellen (6h/9h30) werden ausgeblendet, sobald bis zu diesem Zeitpunkt bereits
+        // Warnschwellen (6h/9h/10h) als Uhrzeit-Marker für den Zeitstrahl, mit Bezug zum "Jetzt"-Zeiger.
+        // Pflichtpausen-Schwellen (6h/9h) werden ausgeblendet, sobald bis zu diesem Zeitpunkt bereits
         // genug Pause genommen wurde/geplant ist – die Regel würde zu diesem Zeitpunkt dann nicht mehr greifen.
         const warnMarkers = [
-            { thresholdMin: 360, label: '6h',   requiredPauseMin: 30,   active: netWorkMin > 360 && elapsedPauseMin < 30 },
-            { thresholdMin: 570, label: '9h30', requiredPauseMin: 45,   active: netWorkMin > 570 && elapsedPauseMin < 45 },
-            { thresholdMin: 600, label: '10h',  requiredPauseMin: null, active: netWorkMin > 600 }
+            { thresholdMin: 360, label: '6h', requiredPauseMin: 30,   active: netWorkMin > 360 && elapsedPauseMin < 30 },
+            { thresholdMin: 540, label: '9h', requiredPauseMin: 45,   active: netWorkMin > 540 && elapsedPauseMin < 45 },
+            { thresholdMin: 600, label: '10h', requiredPauseMin: null, active: netWorkMin > 600 }
         ].map(w => {
             const clockMin              = computeClockTimeForNetMinutes(startMin, w.thresholdMin, pauseIntervals);
             const pauseElapsedAtMarker  = clockMin - startMin - w.thresholdMin;
