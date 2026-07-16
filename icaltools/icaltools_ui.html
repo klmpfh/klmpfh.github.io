@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <title>iCal Tools – Google Kalender</title>
+</head>
+<body>
+
+<h1>iCal Tools – Google Kalender</h1>
+<p>Wählt einen oder mehrere eigene Google-Kalender aus, entfernt oder ersetzt persönliche Daten und gibt die Termine im gewünschten Zeitraum als .ics-Datei oder CSV-Text aus.</p>
+<p>Das Skript läuft mit den Rechten der ausführenden Person und liest nur deren eigene Google-Kalender. Es werden keine Daten an Dritte übertragen.</p>
+
+<h2>1. Kalender auswählen</h2>
+<div id="calendarList">
+  <p>Kalender werden geladen …</p>
+</div>
+
+<h2>2. Persönliche Daten</h2>
+<p>Standardmäßig maximal privat: jedes Feld wird durch einen Platzhalter ersetzt. Original behalten ist pro Feld einzeln zubuchbar.</p>
+<table>
+  <thead>
+    <tr>
+      <th>Feld</th>
+      <th>Original</th>
+      <th>Entfernen</th>
+      <th>Platzhalter</th>
+      <th>Platzhalter-Text</th>
+    </tr>
+  </thead>
+  <tbody id="fieldsTableBody"></tbody>
+</table>
+<p>
+  <label>
+    <input type="checkbox" id="uidRegenerate" checked>
+    Zufällige ID statt Original-Ereignis-ID verwenden (Kalender-UID)
+  </label>
+</p>
+
+<h2>3. Zeitraum der Ausgabe</h2>
+<table>
+  <tr>
+    <td><label for="vonInput">Von</label></td>
+    <td><input type="date" id="vonInput"></td>
+  </tr>
+  <tr>
+    <td><label for="bisInput">Bis</label></td>
+    <td><input type="date" id="bisInput"></td>
+  </tr>
+</table>
+
+<p><button id="processBtn" type="button">Termine verarbeiten</button></p>
+<p id="processError"></p>
+
+<h2>4. Ergebnis</h2>
+<div id="resultsSection">
+  <p id="resultsSummary"></p>
+  <p>
+    <button id="downloadIcsBtn" type="button">Als .ics herunterladen</button>
+    <button id="copyCsvBtn" type="button">CSV kopieren</button>
+  </p>
+  <p>
+    <textarea id="csvPreview" readonly rows="16" cols="100"></textarea>
+  </p>
+</div>
+
+<hr>
+<p><small>Hinweis: Kategorien/Tags, Link/URL und Erinnerungen (Alarme) werden von der Basis-Kalender-API nicht als übertragbare Felder bereitgestellt und daher immer weggelassen. Zeitzonen werden in der Zeitzone des Skript-Projekts interpretiert.</small></p>
+
+<script>
+  var FIELD_DEFS = [
+    { key: 'summary',     label: 'Titel',            defaultPlaceholder: 'Termin' },
+    { key: 'description', label: 'Beschreibung',     defaultPlaceholder: 'Details ausgeblendet' },
+    { key: 'location',    label: 'Ort',              defaultPlaceholder: 'Ort ausgeblendet' },
+    { key: 'organizer',   label: 'Organisator:in',   defaultPlaceholder: 'Organisator:in ausgeblendet' },
+    { key: 'attendees',   label: 'Teilnehmer:innen', defaultPlaceholder: 'Teilnehmer:innen ausgeblendet' },
+  ];
+
+  var lastIcsText = '';
+  var lastCsvText = '';
+  var lastFromStr = '';
+  var lastToStr = '';
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+    });
+  }
+
+  function renderFieldsTable() {
+    var tbody = document.getElementById('fieldsTableBody');
+    tbody.innerHTML = FIELD_DEFS.map(function (f) {
+      return '<tr>' +
+        '<td>' + escapeHtml(f.label) + '</td>' +
+        '<td><input type="radio" name="mode-' + f.key + '" value="keep"></td>' +
+        '<td><input type="radio" name="mode-' + f.key + '" value="remove" checked></td>' +
+        '<td><input type="radio" name="mode-' + f.key + '" value="placeholder"></td>' +
+        '<td><input type="text" id="placeholder-' + f.key + '" value="' + escapeHtml(f.defaultPlaceholder) + '"></td>' +
+        '</tr>';
+    }).join('');
+  }
+  renderFieldsTable();
+
+  function readFieldSettings() {
+    var settings = {};
+    FIELD_DEFS.forEach(function (f) {
+      var checked = document.querySelector('input[name="mode-' + f.key + '"]:checked');
+      settings[f.key] = {
+        mode: checked ? checked.value : 'keep',
+        placeholder: document.getElementById('placeholder-' + f.key).value.trim(),
+      };
+    });
+    return settings;
+  }
+
+  (function initDateDefaults() {
+    var today = new Date();
+    var in90 = new Date(today);
+    in90.setDate(in90.getDate() + 90);
+    document.getElementById('vonInput').value = toDateInputValue(today);
+    document.getElementById('bisInput').value = toDateInputValue(in90);
+  })();
+
+  function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+  function toDateInputValue(d) {
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  function renderCalendarList(calendars) {
+    var container = document.getElementById('calendarList');
+    if (!calendars.length) {
+      container.innerHTML = '<p>Keine Kalender gefunden.</p>';
+      return;
+    }
+    container.innerHTML = calendars.map(function (cal) {
+      return '<p><label>' +
+        '<input type="checkbox" class="calendarCheckbox" value="' + escapeHtml(cal.id) + '">' +
+        ' ' + escapeHtml(cal.name) +
+        '</label></p>';
+    }).join('');
+  }
+
+  google.script.run.withSuccessHandler(renderCalendarList).withFailureHandler(function (err) {
+    document.getElementById('calendarList').innerHTML = '<p>Fehler beim Laden der Kalender: ' + escapeHtml(err.message) + '</p>';
+  }).listCalendars();
+
+  document.getElementById('processBtn').addEventListener('click', function () {
+    clearError();
+    var checkboxes = document.querySelectorAll('.calendarCheckbox:checked');
+    var calendarIds = Array.prototype.map.call(checkboxes, function (cb) { return cb.value; });
+    if (!calendarIds.length) return showError('Bitte mindestens einen Kalender auswählen.');
+
+    var fromStr = document.getElementById('vonInput').value;
+    var toStr = document.getElementById('bisInput').value;
+    if (!fromStr || !toStr) return showError('Bitte Start- und Enddatum des Zeitraums angeben.');
+    if (fromStr > toStr) return showError('Das Startdatum muss vor dem Enddatum liegen (oder mit ihm übereinstimmen).');
+
+    var input = {
+      calendarIds: calendarIds,
+      fields: readFieldSettings(),
+      uidRegenerate: document.getElementById('uidRegenerate').checked,
+      fromStr: fromStr,
+      toStr: toStr,
+    };
+
+    var btn = document.getElementById('processBtn');
+    btn.disabled = true;
+    btn.textContent = 'Verarbeite …';
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        btn.disabled = false;
+        btn.textContent = 'Termine verarbeiten';
+        lastIcsText = result.ics;
+        lastCsvText = result.csv;
+        lastFromStr = fromStr;
+        lastToStr = toStr;
+        renderResults(result, fromStr, toStr);
+      })
+      .withFailureHandler(function (err) {
+        btn.disabled = false;
+        btn.textContent = 'Termine verarbeiten';
+        showError(err.message);
+      })
+      .processCalendars(input);
+  });
+
+  function renderResults(result, fromStr, toStr) {
+    document.getElementById('resultsSummary').textContent = result.count
+      ? result.count + ' Termin(e) im Zeitraum ' + fromStr + ' bis ' + toStr + '.'
+      : 'Keine Termine im Zeitraum ' + fromStr + ' bis ' + toStr + ' gefunden.';
+    document.getElementById('csvPreview').value = result.csv;
+  }
+
+  document.getElementById('downloadIcsBtn').addEventListener('click', function () {
+    if (!lastIcsText) return;
+    var blob = new Blob([lastIcsText], { type: 'text/calendar;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'termine_' + lastFromStr + '_bis_' + lastToStr + '.ics';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  document.getElementById('copyCsvBtn').addEventListener('click', function () {
+    if (!lastCsvText) return;
+    var btn = document.getElementById('copyCsvBtn');
+    var original = btn.textContent;
+    navigator.clipboard.writeText(lastCsvText).then(function () {
+      btn.textContent = 'Kopiert';
+      setTimeout(function () { btn.textContent = original; }, 1500);
+    }).catch(function () {
+      var preview = document.getElementById('csvPreview');
+      preview.select();
+      document.execCommand('copy');
+      btn.textContent = 'Kopiert';
+      setTimeout(function () { btn.textContent = original; }, 1500);
+    });
+  });
+
+  function showError(msg) {
+    document.getElementById('processError').textContent = msg;
+  }
+  function clearError() {
+    document.getElementById('processError').textContent = '';
+  }
+</script>
+
+</body>
+</html>

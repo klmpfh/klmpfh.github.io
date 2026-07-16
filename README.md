@@ -26,6 +26,9 @@ im Browser funktionieren.
 - `/abz/` – Arbeitszeit-Tracker, erfasst Arbeitszeiten für den Tag ohne Speicherung.
 - `/choose/` – Choose Wisely: lost eine Option aus einer Liste oder markiert einen
   zufälligen Punkt auf einem Foto.
+- `/ical/` – iCal Terminsuche, findet freie Termin-Slots anhand mehrerer iCal-Dateien.
+- `/icaltools/` – entfernt/anonymisiert persönliche Daten aus iCal-Dateien und
+  exportiert sie im gewünschten Zeitraum als .ics oder als maschinenlesbares CSV.
 - `/knallbum/` – Berechnet aus Preisen an der Bar die beste Option (ml Alkohol/€).
 - `/laserfeelings/` – Szenario-Generator für Laser & Feelings.
 - `/zauberkloppen/` – Szenario-Generator für Fantasy-Rollenspiele.

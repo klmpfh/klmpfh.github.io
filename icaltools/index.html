@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Lädt eine oder mehrere iCal-(.ics)-Dateien, entfernt oder ersetzt persönliche Daten und gibt die Termine im gewünschten Zeitraum als .ics-Datei oder CSV-Text aus.">
+    <title>iCal Tools</title>
+    <link rel="stylesheet" href="../assets/css/reset.css">
+    <style>
+        :root {
+            --bg-color: #f4f6f9;
+            --container-bg: #ffffff;
+            --text-color: #2d3748;
+            --text-muted: #718096;
+            --primary: #3182ce;
+            --primary-light: #ebf8ff;
+            --success: #38a169;
+            --success-light: #f0fff4;
+            --danger: #e53e3e;
+            --warning: #dd6b20;
+            --warning-light: #fffaf0;
+            --border-color: #e2e8f0;
+            --highlight-bg: #f7fafc;
+        }
+
+        button, input, textarea {
+            font-family: inherit;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            padding: 30px 15px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: var(--container-bg);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            padding: 30px;
+        }
+
+        header {
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 20px;
+            margin-bottom: 24px;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        header p {
+            margin-top: 6px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .privacy-note {
+            font-weight: 600;
+            color: var(--success) !important;
+        }
+
+        .tool-hint {
+            margin-top: 10px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .tool-hint a {
+            color: var(--primary);
+            font-weight: 600;
+            text-decoration: underline;
+        }
+
+        .card {
+            background: var(--highlight-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 18px 20px;
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: 14px;
+        }
+
+        /* ── Datei-Upload ── */
+        .dropzone {
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 26px 16px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 14px;
+            background: #fff;
+            transition: border-color 0.15s, background 0.15s;
+        }
+
+        .dropzone.dragover {
+            border-color: var(--primary);
+            background: var(--primary-light);
+        }
+
+        .file-label {
+            color: var(--primary);
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .dropzone-hint {
+            margin-top: 6px;
+            font-size: 12px;
+            color: #a0aec0;
+        }
+
+        .file-list {
+            list-style: none;
+            margin-top: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .file-item {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 8px 12px;
+            background: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .file-item-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .file-name {
+            font-weight: 600;
+            flex: 1;
+            overflow-wrap: anywhere;
+        }
+
+        .file-subname {
+            font-weight: 400;
+            color: var(--text-muted);
+            font-size: 12px;
+            margin-left: 4px;
+        }
+
+        .file-meta {
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+
+        .file-item.file-error .file-meta {
+            color: var(--danger);
+        }
+
+        .file-remove {
+            background: none;
+            border: none;
+            color: #a0aec0;
+            font-size: 16px;
+            line-height: 1;
+            cursor: pointer;
+            padding: 0 4px;
+        }
+
+        .file-remove:hover { color: var(--danger); }
+
+        /* ── Felder / Anonymisierung ── */
+        .field-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px 16px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .field-row:last-child { border-bottom: none; }
+
+        .field-name {
+            flex: 0 0 170px;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-color);
+        }
+
+        .field-help {
+            margin-top: 2px;
+            font-size: 11px;
+            font-weight: 400;
+            color: var(--text-muted);
+        }
+
+        .mode-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .mode-chip {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            padding: 6px 12px;
+            border: 2px solid var(--border-color);
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            background: #fff;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.15s;
+        }
+
+        .mode-chip:has(input:checked) {
+            border-color: var(--primary);
+            background: var(--primary-light);
+            color: var(--primary);
+        }
+
+        .mode-chip input {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .placeholder-input {
+            padding: 7px 10px;
+            font-size: 13px;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            width: 220px;
+            flex: 1 1 200px;
+            color: var(--text-color);
+            background-color: #fff;
+        }
+
+        .placeholder-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-light);
+        }
+
+        /* ── Zeitraum ── */
+        .form-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px 20px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        input[type="date"] {
+            padding: 9px 12px;
+            font-size: 15px;
+            font-weight: 600;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-color);
+            background-color: #fff;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-light);
+        }
+
+        .btn-primary {
+            padding: 12px 22px;
+            font-size: 15px;
+            font-weight: 700;
+            color: #fff;
+            background: var(--primary);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .btn-primary:hover { opacity: 0.9; }
+
+        #processBtn { margin-bottom: 20px; }
+
+        .warning-banner {
+            background: var(--warning-light);
+            border: 1px solid #f6ad55;
+            border-left: 4px solid var(--warning);
+            border-radius: 6px;
+            padding: 9px 14px;
+            font-size: 13px;
+            color: #744210;
+            font-weight: 500;
+            margin-bottom: 20px;
+        }
+
+        /* ── Ergebnis ── */
+        .results-summary {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 14px;
+        }
+
+        .btn-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .btn-copy {
+            padding: 12px 18px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--primary);
+            background: var(--primary-light);
+            border: 1px solid var(--primary);
+            border-radius: 8px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: opacity 0.2s;
+        }
+
+        .btn-copy:hover { opacity: 0.85; }
+
+        .csv-preview {
+            width: 100%;
+            min-height: 200px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12.5px;
+            line-height: 1.5;
+            padding: 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: #fff;
+            color: var(--text-color);
+            resize: vertical;
+            white-space: pre;
+        }
+
+        .footer-note {
+            font-size: 12px;
+            color: #a0aec0;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>iCal Tools</h1>
+        <p>Lädt eine oder mehrere .ics-Kalenderdateien, entfernt oder ersetzt persönliche Daten und gibt die Termine im gewünschten Zeitraum neu aus. Alle geladenen Dateien werden gemeinsam mit denselben Einstellungen verarbeitet.</p>
+        <p class="privacy-note">Läuft vollständig lokal im Browser. Es werden keine Daten hochgeladen, übertragen oder online gespeichert.</p>
+        <p class="tool-hint">Nutzt du Google Kalender? Dann geht das auch direkt, ohne Datei-Export: <a href="https://script.google.com/macros/s/AKfycbxq5X5tdBZOGBZ7oxJ4_ZjLzxw3mDMCVRl4EvEkNL9kAakuIo5RM4nE1G_ju9KmPLyO/exec" target="_blank" rel="noopener">Google-Kalender-Variante öffnen</a></p>
+    </header>
+
+    <section class="card">
+        <h2>1. Kalender hochladen</h2>
+        <div id="dropzone" class="dropzone">
+            <p>.ics-Dateien hierher ziehen oder <label for="fileInput" class="file-label">auswählen</label></p>
+            <p class="dropzone-hint">Mehrfachauswahl möglich · alle Dateien werden zu einem Ergebnis zusammengeführt</p>
+            <input type="file" id="fileInput" accept=".ics,text/calendar" multiple hidden>
+        </div>
+        <ul id="fileList" class="file-list"></ul>
+    </section>
+
+    <section class="card">
+        <h2>2. Persönliche Daten</h2>
+        <p class="dropzone-hint" style="margin-bottom:10px">Standardmäßig maximal privat: jedes Feld wird durch einen Platzhalter ersetzt. Original behalten ist pro Feld einzeln zubuchbar (Opt-in). Die Einstellung gilt für alle geladenen Kalender gleichzeitig.</p>
+        <div id="fieldsContainer"></div>
+        <div class="field-row">
+            <div class="field-name">Kalender-ID (UID)<div class="field-help">Manche Programme kodieren hier die Absender-Adresse</div></div>
+            <label class="mode-chip"><input type="checkbox" id="uidRegenerate" checked>Zufällige ID statt Original verwenden</label>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2>3. Zeitraum der Ausgabe</h2>
+        <div class="form-grid">
+            <div class="input-group">
+                <label for="vonInput">Von</label>
+                <input type="date" id="vonInput">
+            </div>
+            <div class="input-group">
+                <label for="bisInput">Bis</label>
+                <input type="date" id="bisInput">
+            </div>
+        </div>
+        <p class="dropzone-hint">Wiederkehrende Termine (RRULE) werden innerhalb dieses Zeitraums zu einzelnen Terminen aufgelöst.</p>
+    </section>
+
+    <button id="processBtn" class="btn-primary">Termine verarbeiten</button>
+    <div id="processError" class="warning-banner" style="display:none"></div>
+
+    <section class="card" id="resultsSection" style="display:none">
+        <h2>4. Ergebnis</h2>
+        <div id="resultsSummary" class="results-summary"></div>
+        <div class="btn-row">
+            <button id="downloadIcsBtn" class="btn-primary" type="button">Als .ics herunterladen</button>
+            <button id="copyCsvBtn" class="btn-copy" type="button">CSV kopieren</button>
+        </div>
+        <textarea id="csvPreview" class="csv-preview" readonly rows="14"></textarea>
+    </section>
+
+    <p class="footer-note">Hinweis: Zeitzonen in den iCal-Dateien werden vereinfacht als lokale Zeit interpretiert. Erinnerungen (Alarme) sowie alle oben nicht aufgeführten Zusatzfelder werden beim Export grundsätzlich entfernt.</p>
+    <p class="footer-note">Version 1.0</p>
+</div>
+
+<script>
+    // ── FELD-DEFINITIONEN ─────────────────────────────────────────────────
+    const FIELD_DEFS = [
+        { key: 'summary',     label: 'Titel',              help: 'z. B. „Zahnarzt“, „Meeting mit Team X“',        defaultPlaceholder: 'Termin' },
+        { key: 'description', label: 'Beschreibung',       help: 'Notizen, Agenda, Freitext',                     defaultPlaceholder: 'Details ausgeblendet' },
+        { key: 'location',    label: 'Ort',                 help: 'Adresse, Raum, Videokonferenz-Link',            defaultPlaceholder: 'Ort ausgeblendet' },
+        { key: 'organizer',   label: 'Organisator:in',      help: 'Name/E-Mail der einladenden Person',            defaultPlaceholder: 'Organisator:in ausgeblendet' },
+        { key: 'attendees',   label: 'Teilnehmer:innen',    help: 'Namen/E-Mails der Eingeladenen',                defaultPlaceholder: 'Teilnehmer:innen ausgeblendet' },
+        { key: 'categories',  label: 'Kategorien',          help: 'Farbliche Einordnung/Tags',                     defaultPlaceholder: 'Kategorie ausgeblendet' },
+        { key: 'url',         label: 'Link/URL',            help: 'z. B. Videokonferenz- oder Buchungslink',       defaultPlaceholder: 'Link ausgeblendet' },
+    ];
+
+    // ── ZUSTAND ───────────────────────────────────────────────────────────
+    let calendars = [];      // [{ id, name, calendarName, events, error }]
+    let calendarIdSeq = 0;
+    let lastCsvText = '';
+    let lastIcsText = '';
+    let lastFromStr = '';
+    let lastToStr = '';
+
+    const dom = {
+        dropzone:        document.getElementById('dropzone'),
+        fileInput:       document.getElementById('fileInput'),
+        fileList:        document.getElementById('fileList'),
+        fieldsContainer: document.getElementById('fieldsContainer'),
+        uidRegenerate:   document.getElementById('uidRegenerate'),
+        vonInput:        document.getElementById('vonInput'),
+        bisInput:        document.getElementById('bisInput'),
+        processBtn:      document.getElementById('processBtn'),
+        processError:    document.getElementById('processError'),
+        resultsSection:  document.getElementById('resultsSection'),
+        resultsSummary:  document.getElementById('resultsSummary'),
+        downloadIcsBtn:  document.getElementById('downloadIcsBtn'),
+        copyCsvBtn:      document.getElementById('copyCsvBtn'),
+        csvPreview:      document.getElementById('csvPreview'),
+    };
+
+    // ── FELDER-UI ─────────────────────────────────────────────────────────
+    function renderFieldsContainer() {
+        dom.fieldsContainer.innerHTML = FIELD_DEFS.map(f => `
+            <div class="field-row" data-field="${f.key}">
+                <div class="field-name">${escapeHtml(f.label)}<div class="field-help">${escapeHtml(f.help)}</div></div>
+                <div class="mode-group">
+                    <label class="mode-chip"><input type="radio" name="mode-${f.key}" value="keep">Original</label>
+                    <label class="mode-chip"><input type="radio" name="mode-${f.key}" value="remove" checked>Entfernen</label>
+                    <label class="mode-chip"><input type="radio" name="mode-${f.key}" value="placeholder">Platzhalter</label>
+                </div>
+                <input type="text" class="placeholder-input" id="placeholder-${f.key}" value="${escapeHtml(f.defaultPlaceholder)}" style="display:none">
+            </div>
+        `).join('');
+    }
+    renderFieldsContainer();
+
+    dom.fieldsContainer.addEventListener('change', e => {
+        if (!e.target.matches('input[type="radio"]')) return;
+        const field = e.target.closest('.field-row').dataset.field;
+        document.getElementById(`placeholder-${field}`).style.display = e.target.value === 'placeholder' ? 'inline-block' : 'none';
+    });
+
+    function readFieldSettings() {
+        const settings = {};
+        FIELD_DEFS.forEach(f => {
+            const checked = document.querySelector(`input[name="mode-${f.key}"]:checked`);
+            settings[f.key] = {
+                mode: checked ? checked.value : 'keep',
+                placeholder: document.getElementById(`placeholder-${f.key}`).value.trim(),
+            };
+        });
+        settings.uidRegenerate = dom.uidRegenerate.checked;
+        return settings;
+    }
+
+    // ── ZEITRAUM: STANDARDWERTE ───────────────────────────────────────────
+    (function initDateDefaults() {
+        const today = startOfDay(new Date());
+        dom.vonInput.value = toDateInputValue(today);
+        dom.bisInput.value = toDateInputValue(addDays(today, 90));
+    })();
+
+    // ── DATEI-UPLOAD ──────────────────────────────────────────────────────
+    dom.fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+    dom.dropzone.addEventListener('dragover', e => {
+        e.preventDefault();
+        dom.dropzone.classList.add('dragover');
+    });
+    dom.dropzone.addEventListener('dragleave', () => dom.dropzone.classList.remove('dragover'));
+    dom.dropzone.addEventListener('drop', e => {
+        e.preventDefault();
+        dom.dropzone.classList.remove('dragover');
+        handleFiles(e.dataTransfer.files);
+    });
+
+    function handleFiles(fileListObj) {
+        Array.from(fileListObj).forEach(file => {
+            const cal = { id: calendarIdSeq++, name: file.name, calendarName: null, events: [], error: null };
+            calendars.push(cal);
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                try {
+                    const parsed = parseIcsText(reader.result);
+                    cal.events = parsed.events;
+                    cal.calendarName = parsed.calendarName;
+                } catch (err) {
+                    cal.error = err.message || 'Datei konnte nicht gelesen werden.';
+                }
+                renderFileList();
+            };
+            reader.onerror = () => {
+                cal.error = 'Datei konnte nicht gelesen werden.';
+                renderFileList();
+            };
+            reader.readAsText(file);
+        });
+        renderFileList();
+        dom.fileInput.value = '';
+    }
+
+    function removeCalendar(id) {
+        calendars = calendars.filter(c => c.id !== id);
+        renderFileList();
+    }
+
+    /** Anzeigename: im Kalender hinterlegter Name (X-WR-CALNAME/NAME), sonst Dateiname */
+    function getCalendarDisplayName(cal) {
+        return cal.calendarName || cal.name;
+    }
+
+    function renderFileList() {
+        dom.fileList.innerHTML = calendars.map(cal => {
+            const displayName = getCalendarDisplayName(cal);
+            const subname = !cal.error && cal.calendarName && cal.calendarName !== cal.name
+                ? ` <span class="file-subname">(${escapeHtml(cal.name)})</span>` : '';
+            return `
+            <li class="file-item ${cal.error ? 'file-error' : ''}">
+                <div class="file-item-row">
+                    <span class="file-name">${escapeHtml(displayName)}${subname}</span>
+                    <span class="file-meta">${cal.error ? 'Fehler: ' + escapeHtml(cal.error) : cal.events.length + ' Termine'}</span>
+                    <button class="file-remove" onclick="removeCalendar(${cal.id})" title="Entfernen">×</button>
+                </div>
+            </li>`;
+        }).join('');
+    }
+
+    function escapeHtml(str) {
+        return String(str).replace(/[&<>"']/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
+    }
+
+    // ── ICS-PARSER ────────────────────────────────────────────────────────
+    // Unterstützt DTSTART/DTEND/DURATION, RRULE (DAILY/WEEKLY/MONTHLY/YEARLY
+    // mit INTERVAL/COUNT/UNTIL/BYDAY/BYMONTHDAY), EXDATE, geänderte Einzeltermine
+    // (RECURRENCE-ID), STATUS:CANCELLED sowie die personenbezogenen Felder
+    // SUMMARY/DESCRIPTION/LOCATION/ORGANIZER/ATTENDEE/CATEGORIES/URL.
+
+    /** Löst Zeilenumbrüche (Folding) gemäß RFC 5545 auf: Fortsetzungszeilen beginnen mit Leerzeichen/Tab */
+    function unfoldIcsLines(text) {
+        const rawLines = text.replace(/\r\n/g, '\n').split('\n');
+        const unfolded = [];
+        rawLines.forEach(line => {
+            line = line.replace(/\r$/, '');
+            if ((line.startsWith(' ') || line.startsWith('\t')) && unfolded.length > 0) {
+                unfolded[unfolded.length - 1] += line.slice(1);
+            } else {
+                unfolded.push(line);
+            }
+        });
+        return unfolded;
+    }
+
+    function parseIcsText(text) {
+        const lines = unfoldIcsLines(text);
+        const events = [];
+        let current = null;
+        let inAlarm = false;
+        let calendarName = null;
+
+        lines.forEach(line => {
+            if (!line) return;
+            if (line === 'BEGIN:VALARM') { inAlarm = true; return; }
+            if (line === 'END:VALARM')   { inAlarm = false; return; }
+            if (line === 'BEGIN:VEVENT') {
+                current = {
+                    uid: null, start: null, end: null, allDay: false, durationMs: null,
+                    rrule: null, exdates: [], recurrenceId: null, cancelled: false,
+                    summary: null, description: null, location: null,
+                    organizer: null, attendees: [], categories: [], url: null,
+                };
+                return;
+            }
+            if (line === 'END:VEVENT') {
+                if (current && current.start) {
+                    finalizeEvent(current);
+                    events.push(current);
+                }
+                current = null;
+                return;
+            }
+            if (!current) {
+                // Kalendername (VCALENDAR-Ebene): X-WR-CALNAME (de-facto-Standard) oder NAME (RFC 7986)
+                if (calendarName === null) {
+                    const nameColonIdx = line.indexOf(':');
+                    if (nameColonIdx !== -1) {
+                        const nameProp = line.slice(0, nameColonIdx).split(';')[0].toUpperCase();
+                        if (nameProp === 'X-WR-CALNAME' || nameProp === 'NAME') {
+                            calendarName = line.slice(nameColonIdx + 1).trim();
+                        }
+                    }
+                }
+                return;
+            }
+            if (inAlarm) return;
+
+            const colonIdx = line.indexOf(':');
+            if (colonIdx === -1) return;
+            const namePart = line.slice(0, colonIdx);
+            const value = line.slice(colonIdx + 1);
+            const [propNameRaw, ...paramParts] = namePart.split(';');
+            const propName = propNameRaw.toUpperCase();
+            const params = {};
+            paramParts.forEach(p => {
+                const eq = p.indexOf('=');
+                if (eq !== -1) params[p.slice(0, eq).toUpperCase()] = p.slice(eq + 1);
+            });
+
+            switch (propName) {
+                case 'UID':
+                    current.uid = value;
+                    break;
+                case 'DTSTART': {
+                    const parsed = parseIcsDateValue(value, params);
+                    current.start = parsed.date;
+                    current.allDay = parsed.allDay;
+                    break;
+                }
+                case 'DTEND':
+                    current.end = parseIcsDateValue(value, params).date;
+                    break;
+                case 'DURATION':
+                    current.durationMs = parseIcsDuration(value);
+                    break;
+                case 'RRULE':
+                    current.rrule = parseRRule(value);
+                    break;
+                case 'EXDATE':
+                    value.split(',').forEach(v => current.exdates.push(parseIcsDateValue(v, params).date));
+                    break;
+                case 'RECURRENCE-ID':
+                    current.recurrenceId = parseIcsDateValue(value, params).date;
+                    break;
+                case 'STATUS':
+                    if (value.toUpperCase() === 'CANCELLED') current.cancelled = true;
+                    break;
+                case 'SUMMARY':
+                    current.summary = unescapeIcsText(value);
+                    break;
+                case 'DESCRIPTION':
+                    current.description = unescapeIcsText(value);
+                    break;
+                case 'LOCATION':
+                    current.location = unescapeIcsText(value);
+                    break;
+                case 'ORGANIZER':
+                    current.organizer = parseCalAddress(value, params);
+                    break;
+                case 'ATTENDEE':
+                    current.attendees.push(parseCalAddress(value, params));
+                    break;
+                case 'CATEGORIES':
+                    value.split(',').forEach(c => {
+                        const t = unescapeIcsText(c).trim();
+                        if (t) current.categories.push(t);
+                    });
+                    break;
+                case 'URL':
+                    current.url = value.trim();
+                    break;
+            }
+        });
+
+        return { events: postProcessEvents(events), calendarName };
+    }
+
+    /** Setzt DTEND, falls nur DURATION oder (bei ganztägigen Terminen) gar nichts angegeben ist */
+    function finalizeEvent(ev) {
+        if (ev.end) return;
+        if (ev.durationMs != null) ev.end = new Date(ev.start.getTime() + ev.durationMs);
+        else if (ev.allDay) ev.end = addDays(ev.start, 1);
+        else ev.end = ev.start;
+    }
+
+    /** Verknüpft geänderte Einzeltermine (RECURRENCE-ID) mit ihrer Serie, damit die Originalinstanz nicht doppelt zählt */
+    function postProcessEvents(events) {
+        const overridesByUid = {};
+        events.forEach(ev => {
+            if (ev.recurrenceId) (overridesByUid[ev.uid] = overridesByUid[ev.uid] || []).push(ev.recurrenceId);
+        });
+        events.forEach(ev => {
+            if (ev.rrule && !ev.recurrenceId) {
+                ev.excludedDates = (overridesByUid[ev.uid] || []).concat(ev.exdates);
+            }
+        });
+        return events;
+    }
+
+    /** ICS-Datumswert (DATE oder DATE-TIME, optional UTC) → { date: Date, allDay: bool } */
+    function parseIcsDateValue(value, params) {
+        value = value.trim();
+        const isDateOnly = params.VALUE === 'DATE' || /^\d{8}$/.test(value);
+        if (isDateOnly) {
+            const y = +value.slice(0, 4), mo = +value.slice(4, 6), d = +value.slice(6, 8);
+            return { date: new Date(y, mo - 1, d, 0, 0, 0), allDay: true };
+        }
+        const isUtc = value.endsWith('Z');
+        const v = isUtc ? value.slice(0, -1) : value;
+        const y = +v.slice(0, 4), mo = +v.slice(4, 6), d = +v.slice(6, 8);
+        const h = +v.slice(9, 11) || 0, mi = +v.slice(11, 13) || 0, s = +v.slice(13, 15) || 0;
+        const date = isUtc ? new Date(Date.UTC(y, mo - 1, d, h, mi, s)) : new Date(y, mo - 1, d, h, mi, s);
+        return { date, allDay: false };
+    }
+
+    /** ICS-Dauer ("PT1H30M", "P1D", "P2W" …) → Millisekunden */
+    function parseIcsDuration(value) {
+        const weekMatch = value.match(/^([+-]?)P(\d+)W$/);
+        if (weekMatch) return (weekMatch[1] === '-' ? -1 : 1) * (+weekMatch[2]) * 7 * 86400000;
+
+        const m = value.match(/^([+-]?)P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/);
+        if (!m) return 0;
+        const sign = m[1] === '-' ? -1 : 1;
+        const days = +(m[2] || 0), hours = +(m[3] || 0), mins = +(m[4] || 0), secs = +(m[5] || 0);
+        return sign * (((days * 24 + hours) * 60 + mins) * 60 + secs) * 1000;
+    }
+
+    function parseRRule(value) {
+        const rule = {};
+        value.split(';').forEach(part => {
+            const eq = part.indexOf('=');
+            if (eq !== -1) rule[part.slice(0, eq).toUpperCase()] = part.slice(eq + 1);
+        });
+        return rule;
+    }
+
+    /** Entfernt umschließende Anführungszeichen eines Parameterwerts (z. B. CN="Doe, Jane") */
+    function stripQuotes(s) {
+        s = s || '';
+        return (s.startsWith('"') && s.endsWith('"')) ? s.slice(1, -1) : s;
+    }
+
+    /** ORGANIZER/ATTENDEE-Wert → { cn, email }; nutzt CN-Parameter, sonst die (mailto-)Adresse als Name */
+    function parseCalAddress(value, params) {
+        let v = (value || '').trim();
+        if (/^mailto:/i.test(v)) v = v.slice(7);
+        const cn = stripQuotes(params.CN || '');
+        return { cn: cn || v || 'Unbekannt', email: v };
+    }
+
+    /** Löst RFC-5545-Text-Escapes auf (\n, \, , \; , \\) */
+    function unescapeIcsText(v) {
+        return v.replace(/\\(.)/g, (m, ch) => {
+            if (ch === 'n' || ch === 'N') return '\n';
+            return ch;
+        });
+    }
+
+    /** Escaped Text für die Ausgabe in einer ICS-Property (Gegenstück zu unescapeIcsText) */
+    function escapeIcsText(v) {
+        return String(v).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+    }
+
+    // ── RRULE-EXPANSION ───────────────────────────────────────────────────
+    const DAY_CODE_TO_NUM = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
+    const NUM_TO_DAY_CODE = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+
+    function mondayOffset(dayNum) { return (dayNum + 6) % 7; }
+
+    function startOfWeekMonday(date) {
+        return addDays(startOfDay(date), -mondayOffset(date.getDay()));
+    }
+
+    function setTimeOfDay(dateOnly, template) {
+        return new Date(dateOnly.getFullYear(), dateOnly.getMonth(), dateOnly.getDate(), template.getHours(), template.getMinutes(), template.getSeconds());
+    }
+
+    function isSameDay(a, b) {
+        return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    }
+
+    /** Erweitert ein wiederkehrendes Ereignis auf konkrete Vorkommen, die [rangeStart, rangeEnd] überlappen */
+    function expandRRule(ev, rangeStart, rangeEnd) {
+        const dtstart = ev.start;
+        const durationMs = ev.end.getTime() - ev.start.getTime();
+        const rrule = ev.rrule;
+        const freq = (rrule.FREQ || '').toUpperCase();
+        const interval = Math.max(1, parseInt(rrule.INTERVAL, 10) || 1);
+        const count = rrule.COUNT ? parseInt(rrule.COUNT, 10) : null;
+        const until = rrule.UNTIL ? parseIcsDateValue(rrule.UNTIL, {}).date : null;
+        const excluded = ev.excludedDates || [];
+        const isExcluded = d => excluded.some(ex => isSameDay(ex, d));
+
+        const results = [];
+        let generated = 0;
+        const MAX_ITER = 5000;
+
+        /** Prüft eine generierte Instanz gegen COUNT/UNTIL/Bereich und fügt sie ggf. hinzu. Rückgabe: true=weiter, false=Serie beendet, 'stop'=Bereich überschritten */
+        function tryAdd(occStart) {
+            generated++;
+            if (count !== null && generated > count) return false;
+            if (until && occStart.getTime() > until.getTime()) return false;
+            if (occStart.getTime() > rangeEnd.getTime()) return 'stop';
+            if (!isExcluded(occStart)) {
+                const occEnd = new Date(occStart.getTime() + durationMs);
+                if (occEnd.getTime() >= rangeStart.getTime()) results.push({ start: occStart, end: occEnd });
+            }
+            return true;
+        }
+
+        let iter = 0;
+        if (freq === 'DAILY') {
+            let cursor = new Date(dtstart);
+            while (iter++ < MAX_ITER) {
+                const r = tryAdd(cursor);
+                if (r === false || r === 'stop') break;
+                cursor = addDays(cursor, interval);
+            }
+        } else if (freq === 'WEEKLY') {
+            const dayNums = (rrule.BYDAY ? rrule.BYDAY.split(',') : [NUM_TO_DAY_CODE[dtstart.getDay()]])
+                .map(code => DAY_CODE_TO_NUM[code]).sort((a, b) => a - b);
+            let weekStart = startOfWeekMonday(dtstart);
+            let stopped = false;
+            while (iter++ < MAX_ITER && !stopped) {
+                for (const dn of dayNums) {
+                    const occ = setTimeOfDay(addDays(weekStart, mondayOffset(dn)), dtstart);
+                    if (occ.getTime() < dtstart.getTime()) continue;
+                    const r = tryAdd(occ);
+                    if (r === false || r === 'stop') { stopped = true; break; }
+                }
+                weekStart = addDays(weekStart, 7 * interval);
+                if (weekStart.getTime() > rangeEnd.getTime()) stopped = true;
+            }
+        } else if (freq === 'MONTHLY') {
+            const monthDays = (rrule.BYMONTHDAY ? rrule.BYMONTHDAY.split(',').map(Number) : [dtstart.getDate()]).sort((a, b) => a - b);
+            let monthCursor = new Date(dtstart.getFullYear(), dtstart.getMonth(), 1);
+            let stopped = false;
+            while (iter++ < MAX_ITER && !stopped) {
+                for (const md of monthDays) {
+                    const occ = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), md, dtstart.getHours(), dtstart.getMinutes(), dtstart.getSeconds());
+                    if (occ.getTime() < dtstart.getTime()) continue;
+                    const r = tryAdd(occ);
+                    if (r === false || r === 'stop') { stopped = true; break; }
+                }
+                monthCursor = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + interval, 1);
+                if (monthCursor.getTime() > rangeEnd.getTime()) stopped = true;
+            }
+        } else if (freq === 'YEARLY') {
+            let year = dtstart.getFullYear();
+            while (iter++ < MAX_ITER) {
+                const occ = new Date(year, dtstart.getMonth(), dtstart.getDate(), dtstart.getHours(), dtstart.getMinutes(), dtstart.getSeconds());
+                if (occ.getTime() >= dtstart.getTime()) {
+                    const r = tryAdd(occ);
+                    if (r === false || r === 'stop') break;
+                }
+                year += interval;
+                if (new Date(year, 0, 1).getTime() > rangeEnd.getTime()) break;
+            }
+        } else {
+            // Unbekannte/nicht unterstützte Wiederholungsregel: nur die Ursprungsinstanz berücksichtigen
+            tryAdd(dtstart);
+        }
+
+        return results;
+    }
+
+    // ── ANONYMISIERUNG ────────────────────────────────────────────────────
+    function applyTextMode(value, fieldSetting) {
+        if (!value) return null;
+        if (fieldSetting.mode === 'remove') return null;
+        if (fieldSetting.mode === 'placeholder') return fieldSetting.placeholder || null;
+        return value;
+    }
+
+    function applyOrganizerMode(organizer, fieldSetting) {
+        if (!organizer) return null;
+        if (fieldSetting.mode === 'remove') return null;
+        if (fieldSetting.mode === 'placeholder') return { cn: fieldSetting.placeholder || 'Organisator:in', email: 'anonym@example.invalid' };
+        return organizer;
+    }
+
+    function applyListMode(list, fieldSetting, makePlaceholderItem) {
+        if (!list || !list.length) return [];
+        if (fieldSetting.mode === 'remove') return [];
+        if (fieldSetting.mode === 'placeholder') return [makePlaceholderItem(fieldSetting.placeholder || 'ausgeblendet')];
+        return list;
+    }
+
+    function generateUuid() {
+        if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
+    /** Baut aus einer Rohinstanz (Original-Event + konkreter Vorkommens-Zeit) das anonymisierte Ausgabe-Event */
+    function buildOutputEvent(ev, occ, instanceIndex, hasMultipleInstances, settings) {
+        const uid = settings.uidRegenerate
+            ? generateUuid()
+            : (hasMultipleInstances ? `${ev.uid}-${instanceIndex}` : ev.uid);
+        return {
+            uid,
+            start: occ.start,
+            end: occ.end,
+            allDay: ev.allDay,
+            summary: applyTextMode(ev.summary, settings.summary),
+            description: applyTextMode(ev.description, settings.description),
+            location: applyTextMode(ev.location, settings.location),
+            organizer: applyOrganizerMode(ev.organizer, settings.organizer),
+            attendees: applyListMode(ev.attendees, settings.attendees, text => ({ cn: text, email: 'anonym@example.invalid' })),
+            categories: applyListMode(ev.categories, settings.categories, text => text),
+            url: applyTextMode(ev.url, settings.url),
+        };
+    }
+
+    /** Sammelt alle Termine aller geladenen Kalender im Zeitraum [fromStr, toStr] ("YYYY-MM-DD"), löst RRULEs auf und anonymisiert die Felder */
+    function collectOutputEvents(fromStr, toStr) {
+        const rangeStart = startOfDay(parseDateInput(fromStr));
+        const rangeEnd = new Date(addDays(startOfDay(parseDateInput(toStr)), 1).getTime() - 1); // Ende des "Bis"-Tages, 23:59:59.999
+        const settings = readFieldSettings();
+        const output = [];
+
+        calendars.forEach(cal => {
+            cal.events.forEach(ev => {
+                if (ev.cancelled) return;
+                let occurrences = [];
+                if (ev.rrule) {
+                    occurrences = expandRRule(ev, rangeStart, rangeEnd);
+                } else if (ev.end.getTime() > rangeStart.getTime() && ev.start.getTime() <= rangeEnd.getTime()) {
+                    occurrences = [{ start: ev.start, end: ev.end }];
+                }
+                occurrences.forEach((occ, idx) => {
+                    output.push(buildOutputEvent(ev, occ, idx, occurrences.length > 1, settings));
+                });
+            });
+        });
+
+        output.sort((a, b) => a.start.getTime() - b.start.getTime());
+        return output;
+    }
+
+    // ── ICS-AUSGABE ───────────────────────────────────────────────────────
+    function pad2(n) { return String(n).padStart(2, '0'); }
+
+    function buildIcsDateTimeLocal(d) {
+        return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}T${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}`;
+    }
+    function buildIcsDateOnly(d) {
+        return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`;
+    }
+    function buildIcsDateTimeUtc(d) {
+        return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}T${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}${pad2(d.getUTCSeconds())}Z`;
+    }
+
+    /** Faltet eine ICS-Zeile gemäß RFC 5545 auf max. 75 Zeichen pro Zeile (Fortsetzung mit CRLF + Leerzeichen) */
+    function foldLine(line) {
+        const max = 75;
+        if (line.length <= max) return line;
+        let out = line.slice(0, max);
+        let rest = line.slice(max);
+        while (rest.length > 0) {
+            out += '\r\n ' + rest.slice(0, max - 1);
+            rest = rest.slice(max - 1);
+        }
+        return out;
+    }
+
+    function buildIcs(events) {
+        const nowStamp = buildIcsDateTimeUtc(new Date());
+        const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//klmpfh.github.io//icaltools//DE', 'CALSCALE:GREGORIAN'];
+        events.forEach(ev => {
+            lines.push('BEGIN:VEVENT');
+            lines.push(foldLine('UID:' + ev.uid));
+            lines.push('DTSTAMP:' + nowStamp);
+            if (ev.allDay) {
+                lines.push('DTSTART;VALUE=DATE:' + buildIcsDateOnly(ev.start));
+                lines.push('DTEND;VALUE=DATE:' + buildIcsDateOnly(ev.end));
+            } else {
+                lines.push('DTSTART:' + buildIcsDateTimeLocal(ev.start));
+                lines.push('DTEND:' + buildIcsDateTimeLocal(ev.end));
+            }
+            if (ev.summary) lines.push(foldLine('SUMMARY:' + escapeIcsText(ev.summary)));
+            if (ev.description) lines.push(foldLine('DESCRIPTION:' + escapeIcsText(ev.description)));
+            if (ev.location) lines.push(foldLine('LOCATION:' + escapeIcsText(ev.location)));
+            if (ev.organizer) lines.push(foldLine(`ORGANIZER;CN="${ev.organizer.cn.replace(/"/g, '')}":mailto:${ev.organizer.email || 'anonym@example.invalid'}`));
+            ev.attendees.forEach(a => lines.push(foldLine(`ATTENDEE;CN="${a.cn.replace(/"/g, '')}":mailto:${a.email || 'anonym@example.invalid'}`)));
+            if (ev.categories.length) lines.push(foldLine('CATEGORIES:' + ev.categories.map(escapeIcsText).join(',')));
+            if (ev.url) lines.push(foldLine('URL:' + escapeIcsText(ev.url)));
+            lines.push('END:VEVENT');
+        });
+        lines.push('END:VCALENDAR');
+        return lines.join('\r\n') + '\r\n';
+    }
+
+    // ── CSV-AUSGABE ───────────────────────────────────────────────────────
+    // Maschinenlesbares Text-Format zur Weiterverarbeitung durch andere Tools
+    // (kein Markdown, keine für Menschen optimierte Darstellung): eine Zeile
+    // pro Termin, feste Spalten, RFC-4180-Quoting.
+    const CSV_COLUMNS = ['start', 'end', 'all_day', 'summary', 'location', 'description', 'organizer', 'attendees', 'categories', 'url'];
+
+    /** Lokale Zeit ohne Zeitzonen-Suffix im Format "YYYY-MM-DDTHH:MM:SS" (konsistent mit der restlichen "floating local time"-Vereinfachung) */
+    function isoLocal(d) {
+        return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+    }
+
+    function formatCalAddress(a) {
+        return a.email ? `${a.cn} <${a.email}>` : a.cn;
+    }
+
+    /** Escaped ein CSV-Feld gemäß RFC 4180 (quotet bei Komma/Anführungszeichen/Zeilenumbruch) */
+    function csvEscape(value) {
+        const v = value == null ? '' : String(value);
+        return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+    }
+
+    /** Baut pro Termin ein Objekt mit allen möglichen Spalten (leere Werte als '') */
+    function buildCsvRowObject(ev) {
+        return {
+            start: isoLocal(ev.start),
+            end: isoLocal(ev.end),
+            all_day: ev.allDay ? 'true' : 'false',
+            summary: ev.summary || '',
+            location: ev.location || '',
+            description: ev.description || '',
+            organizer: ev.organizer ? formatCalAddress(ev.organizer) : '',
+            attendees: ev.attendees.map(formatCalAddress).join('; '),
+            categories: ev.categories.join('; '),
+            url: ev.url || '',
+        };
+    }
+
+    /** Spalten, die in keiner Zeile einen Wert haben (z. B. weil das Feld komplett entfernt wurde), fallen ganz weg */
+    function buildCsv(events) {
+        if (!events.length) return CSV_COLUMNS.join(',');
+        const rowObjects = events.map(buildCsvRowObject);
+        const usedColumns = CSV_COLUMNS.filter(col => rowObjects.some(row => row[col] !== ''));
+        const rows = [usedColumns, ...rowObjects.map(row => usedColumns.map(col => row[col]))];
+        return rows.map(row => row.map(csvEscape).join(',')).join('\r\n');
+    }
+
+    // ── VERARBEITEN-BUTTON ────────────────────────────────────────────────
+    dom.processBtn.addEventListener('click', () => {
+        clearError();
+
+        if (calendars.length === 0) return showError('Bitte mindestens eine .ics-Datei hochladen.');
+        if (calendars.some(c => c.error)) return showError('Mindestens eine Datei konnte nicht gelesen werden. Bitte fehlerhafte Datei entfernen.');
+
+        const fromStr = dom.vonInput.value;
+        const toStr = dom.bisInput.value;
+        if (!fromStr || !toStr) return showError('Bitte Start- und Enddatum des Zeitraums angeben.');
+        if (fromStr > toStr) return showError('Das Startdatum muss vor dem Enddatum liegen (oder mit ihm übereinstimmen).');
+
+        const events = collectOutputEvents(fromStr, toStr);
+        lastFromStr = fromStr;
+        lastToStr = toStr;
+        lastIcsText = buildIcs(events);
+        lastCsvText = buildCsv(events);
+        renderResults(events, fromStr, toStr);
+    });
+
+    function renderResults(events, fromStr, toStr) {
+        dom.resultsSection.style.display = '';
+        const rangeLabel = `${formatDate(parseDateInput(fromStr))} – ${formatDate(parseDateInput(toStr))}`;
+        dom.resultsSummary.textContent = events.length
+            ? `${events.length} Termin${events.length === 1 ? '' : 'e'} im Zeitraum ${rangeLabel} aus ${calendars.length} Datei${calendars.length === 1 ? '' : 'en'}.`
+            : `Keine Termine im Zeitraum ${rangeLabel} gefunden.`;
+        dom.csvPreview.value = lastCsvText;
+    }
+
+    dom.downloadIcsBtn.addEventListener('click', () => {
+        if (!lastIcsText) return;
+        const blob = new Blob([lastIcsText], { type: 'text/calendar;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `termine_${lastFromStr}_bis_${lastToStr}.ics`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    });
+
+    dom.copyCsvBtn.addEventListener('click', () => {
+        if (!lastCsvText) return;
+        navigator.clipboard.writeText(lastCsvText).then(() => {
+            const original = 'CSV kopieren';
+            dom.copyCsvBtn.textContent = 'Kopiert ✓';
+            setTimeout(() => { dom.copyCsvBtn.textContent = original; }, 1500);
+        }).catch(() => {
+            dom.copyCsvBtn.textContent = 'Kopieren fehlgeschlagen';
+            setTimeout(() => { dom.copyCsvBtn.textContent = 'CSV kopieren'; }, 1500);
+        });
+    });
+
+    function showError(msg) {
+        dom.processError.textContent = msg;
+        dom.processError.style.display = 'block';
+        dom.resultsSection.style.display = 'none';
+    }
+
+    function clearError() {
+        dom.processError.style.display = 'none';
+    }
+
+    // ── HILFSFUNKTIONEN ───────────────────────────────────────────────────
+    function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+    function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+
+    /** "YYYY-MM-DD" (Wert eines <input type=date>) → lokales Date um Mitternacht */
+    function parseDateInput(str) {
+        const [y, m, d] = str.split('-').map(Number);
+        return new Date(y, m - 1, d);
+    }
+
+    /** Date → "YYYY-MM-DD" für <input type=date> */
+    function toDateInputValue(d) {
+        return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    }
+
+    function formatDate(d) { return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`; }
+</script>
+
+</body>
+</html>
