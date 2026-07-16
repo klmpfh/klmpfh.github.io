@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Lädt eine oder mehrere iCal-(.ics)-Dateien, entfernt oder ersetzt persönliche Daten und gibt die Termine im gewünschten Zeitraum als .ics-Datei oder CSV-Text aus.">
+    <meta name="description" content="Lädt eine oder mehrere iCal-(.ics)-Dateien, entfernt alle persönlichen Daten und gibt nur Datum und Uhrzeit der Termine im gewünschten Zeitraum als .ics-Datei oder CSV-Text aus.">
     <title>iCal Tools</title>
     <link rel="stylesheet" href="../assets/css/reset.css">
     <style>
@@ -213,12 +213,6 @@
             color: var(--text-muted);
         }
 
-        .mode-group {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-        }
-
         .mode-chip {
             position: relative;
             display: inline-flex;
@@ -246,23 +240,6 @@
             opacity: 0;
             width: 0;
             height: 0;
-        }
-
-        .placeholder-input {
-            padding: 7px 10px;
-            font-size: 13px;
-            border: 2px solid var(--border-color);
-            border-radius: 8px;
-            width: 220px;
-            flex: 1 1 200px;
-            color: var(--text-color);
-            background-color: #fff;
-        }
-
-        .placeholder-input:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px var(--primary-light);
         }
 
         /* ── Zeitraum ── */
@@ -386,7 +363,8 @@
 <div class="container">
     <header>
         <h1>iCal Tools</h1>
-        <p>Lädt eine oder mehrere .ics-Kalenderdateien, entfernt oder ersetzt persönliche Daten und gibt die Termine im gewünschten Zeitraum neu aus. Alle geladenen Dateien werden gemeinsam mit denselben Einstellungen verarbeitet.</p>
+        <p>Lädt eine oder mehrere .ics-Kalenderdateien und gibt die Termine im gewünschten Zeitraum neu aus. Alle geladenen Dateien werden gemeinsam verarbeitet.</p>
+        <p class="privacy-note">Alle privaten Informationen außer Start- und Endzeit werden aus allen Terminen entfernt (Titel, Beschreibung, Ort, Organisator:in, Teilnehmer:innen, Kategorien, Link/URL).</p>
         <p class="privacy-note">Läuft vollständig lokal im Browser. Es werden keine Daten hochgeladen, übertragen oder online gespeichert.</p>
         <p class="tool-hint">Nutzt du Google Kalender? Dann geht das auch direkt, ohne Datei-Export: <a href="https://script.google.com/macros/s/AKfycbxq5X5tdBZOGBZ7oxJ4_ZjLzxw3mDMCVRl4EvEkNL9kAakuIo5RM4nE1G_ju9KmPLyO/exec" target="_blank" rel="noopener">Google-Kalender-Variante öffnen</a></p>
     </header>
@@ -403,12 +381,7 @@
 
     <section class="card">
         <h2>2. Persönliche Daten</h2>
-        <p class="dropzone-hint" style="margin-bottom:10px">Standardmäßig maximal privat: jedes Feld wird durch einen Platzhalter ersetzt. Original behalten ist pro Feld einzeln zubuchbar (Opt-in). Die Einstellung gilt für alle geladenen Kalender gleichzeitig.</p>
-        <div id="fieldsContainer"></div>
-        <div class="field-row">
-            <div class="field-name">Kalender-ID (UID)<div class="field-help">Manche Programme kodieren hier die Absender-Adresse</div></div>
-            <label class="mode-chip"><input type="checkbox" id="uidRegenerate" checked>Zufällige ID statt Original verwenden</label>
-        </div>
+        <p class="dropzone-hint">Titel, Beschreibung, Ort, Organisator:in, Teilnehmer:innen, Kategorien und Link/URL werden beim Export immer entfernt, die Kalender-ID (UID) wird immer durch eine zufällige ID ersetzt – übrig bleiben ausschließlich Start- und Endzeit jedes Termins.</p>
     </section>
 
     <section class="card">
@@ -439,22 +412,11 @@
         <textarea id="csvPreview" class="csv-preview" readonly rows="14"></textarea>
     </section>
 
-    <p class="footer-note">Hinweis: Zeitzonen in den iCal-Dateien werden vereinfacht als lokale Zeit interpretiert. Erinnerungen (Alarme) sowie alle oben nicht aufgeführten Zusatzfelder werden beim Export grundsätzlich entfernt.</p>
+    <p class="footer-note">Hinweis: Zeitzonen in den iCal-Dateien werden vereinfacht als lokale Zeit interpretiert. Erinnerungen (Alarme) werden beim Export grundsätzlich entfernt.</p>
     <p class="footer-note">Version 1.0</p>
 </div>
 
 <script>
-    // ── FELD-DEFINITIONEN ─────────────────────────────────────────────────
-    const FIELD_DEFS = [
-        { key: 'summary',     label: 'Titel',              help: 'z. B. „Zahnarzt“, „Meeting mit Team X“',        defaultPlaceholder: 'Termin' },
-        { key: 'description', label: 'Beschreibung',       help: 'Notizen, Agenda, Freitext',                     defaultPlaceholder: 'Details ausgeblendet' },
-        { key: 'location',    label: 'Ort',                 help: 'Adresse, Raum, Videokonferenz-Link',            defaultPlaceholder: 'Ort ausgeblendet' },
-        { key: 'organizer',   label: 'Organisator:in',      help: 'Name/E-Mail der einladenden Person',            defaultPlaceholder: 'Organisator:in ausgeblendet' },
-        { key: 'attendees',   label: 'Teilnehmer:innen',    help: 'Namen/E-Mails der Eingeladenen',                defaultPlaceholder: 'Teilnehmer:innen ausgeblendet' },
-        { key: 'categories',  label: 'Kategorien',          help: 'Farbliche Einordnung/Tags',                     defaultPlaceholder: 'Kategorie ausgeblendet' },
-        { key: 'url',         label: 'Link/URL',            help: 'z. B. Videokonferenz- oder Buchungslink',       defaultPlaceholder: 'Link ausgeblendet' },
-    ];
-
     // ── ZUSTAND ───────────────────────────────────────────────────────────
     let calendars = [];      // [{ id, name, calendarName, events, error }]
     let calendarIdSeq = 0;
@@ -467,8 +429,6 @@
         dropzone:        document.getElementById('dropzone'),
         fileInput:       document.getElementById('fileInput'),
         fileList:        document.getElementById('fileList'),
-        fieldsContainer: document.getElementById('fieldsContainer'),
-        uidRegenerate:   document.getElementById('uidRegenerate'),
         vonInput:        document.getElementById('vonInput'),
         bisInput:        document.getElementById('bisInput'),
         processBtn:      document.getElementById('processBtn'),
@@ -479,41 +439,6 @@
         copyCsvBtn:      document.getElementById('copyCsvBtn'),
         csvPreview:      document.getElementById('csvPreview'),
     };
-
-    // ── FELDER-UI ─────────────────────────────────────────────────────────
-    function renderFieldsContainer() {
-        dom.fieldsContainer.innerHTML = FIELD_DEFS.map(f => `
-            <div class="field-row" data-field="${f.key}">
-                <div class="field-name">${escapeHtml(f.label)}<div class="field-help">${escapeHtml(f.help)}</div></div>
-                <div class="mode-group">
-                    <label class="mode-chip"><input type="radio" name="mode-${f.key}" value="keep">Original</label>
-                    <label class="mode-chip"><input type="radio" name="mode-${f.key}" value="remove" checked>Entfernen</label>
-                    <label class="mode-chip"><input type="radio" name="mode-${f.key}" value="placeholder">Platzhalter</label>
-                </div>
-                <input type="text" class="placeholder-input" id="placeholder-${f.key}" value="${escapeHtml(f.defaultPlaceholder)}" style="display:none">
-            </div>
-        `).join('');
-    }
-    renderFieldsContainer();
-
-    dom.fieldsContainer.addEventListener('change', e => {
-        if (!e.target.matches('input[type="radio"]')) return;
-        const field = e.target.closest('.field-row').dataset.field;
-        document.getElementById(`placeholder-${field}`).style.display = e.target.value === 'placeholder' ? 'inline-block' : 'none';
-    });
-
-    function readFieldSettings() {
-        const settings = {};
-        FIELD_DEFS.forEach(f => {
-            const checked = document.querySelector(`input[name="mode-${f.key}"]:checked`);
-            settings[f.key] = {
-                mode: checked ? checked.value : 'keep',
-                placeholder: document.getElementById(`placeholder-${f.key}`).value.trim(),
-            };
-        });
-        settings.uidRegenerate = dom.uidRegenerate.checked;
-        return settings;
-    }
 
     // ── ZEITRAUM: STANDARDWERTE ───────────────────────────────────────────
     (function initDateDefaults() {
@@ -595,8 +520,9 @@
     // ── ICS-PARSER ────────────────────────────────────────────────────────
     // Unterstützt DTSTART/DTEND/DURATION, RRULE (DAILY/WEEKLY/MONTHLY/YEARLY
     // mit INTERVAL/COUNT/UNTIL/BYDAY/BYMONTHDAY), EXDATE, geänderte Einzeltermine
-    // (RECURRENCE-ID), STATUS:CANCELLED sowie die personenbezogenen Felder
-    // SUMMARY/DESCRIPTION/LOCATION/ORGANIZER/ATTENDEE/CATEGORIES/URL.
+    // (RECURRENCE-ID) und STATUS:CANCELLED. Personenbezogene Felder (SUMMARY,
+    // DESCRIPTION, LOCATION, ORGANIZER, ATTENDEE, CATEGORIES, URL) werden
+    // bewusst nicht ausgelesen, da sie ohnehin nie in die Ausgabe übernommen werden.
 
     /** Löst Zeilenumbrüche (Folding) gemäß RFC 5545 auf: Fortsetzungszeilen beginnen mit Leerzeichen/Tab */
     function unfoldIcsLines(text) {
@@ -628,8 +554,6 @@
                 current = {
                     uid: null, start: null, end: null, allDay: false, durationMs: null,
                     rrule: null, exdates: [], recurrenceId: null, cancelled: false,
-                    summary: null, description: null, location: null,
-                    organizer: null, attendees: [], categories: [], url: null,
                 };
                 return;
             }
@@ -696,30 +620,6 @@
                 case 'STATUS':
                     if (value.toUpperCase() === 'CANCELLED') current.cancelled = true;
                     break;
-                case 'SUMMARY':
-                    current.summary = unescapeIcsText(value);
-                    break;
-                case 'DESCRIPTION':
-                    current.description = unescapeIcsText(value);
-                    break;
-                case 'LOCATION':
-                    current.location = unescapeIcsText(value);
-                    break;
-                case 'ORGANIZER':
-                    current.organizer = parseCalAddress(value, params);
-                    break;
-                case 'ATTENDEE':
-                    current.attendees.push(parseCalAddress(value, params));
-                    break;
-                case 'CATEGORIES':
-                    value.split(',').forEach(c => {
-                        const t = unescapeIcsText(c).trim();
-                        if (t) current.categories.push(t);
-                    });
-                    break;
-                case 'URL':
-                    current.url = value.trim();
-                    break;
             }
         });
 
@@ -783,33 +683,6 @@
             if (eq !== -1) rule[part.slice(0, eq).toUpperCase()] = part.slice(eq + 1);
         });
         return rule;
-    }
-
-    /** Entfernt umschließende Anführungszeichen eines Parameterwerts (z. B. CN="Doe, Jane") */
-    function stripQuotes(s) {
-        s = s || '';
-        return (s.startsWith('"') && s.endsWith('"')) ? s.slice(1, -1) : s;
-    }
-
-    /** ORGANIZER/ATTENDEE-Wert → { cn, email }; nutzt CN-Parameter, sonst die (mailto-)Adresse als Name */
-    function parseCalAddress(value, params) {
-        let v = (value || '').trim();
-        if (/^mailto:/i.test(v)) v = v.slice(7);
-        const cn = stripQuotes(params.CN || '');
-        return { cn: cn || v || 'Unbekannt', email: v };
-    }
-
-    /** Löst RFC-5545-Text-Escapes auf (\n, \, , \; , \\) */
-    function unescapeIcsText(v) {
-        return v.replace(/\\(.)/g, (m, ch) => {
-            if (ch === 'n' || ch === 'N') return '\n';
-            return ch;
-        });
-    }
-
-    /** Escaped Text für die Ausgabe in einer ICS-Property (Gegenstück zu unescapeIcsText) */
-    function escapeIcsText(v) {
-        return String(v).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
     }
 
     // ── RRULE-EXPANSION ───────────────────────────────────────────────────
@@ -916,27 +789,6 @@
     }
 
     // ── ANONYMISIERUNG ────────────────────────────────────────────────────
-    function applyTextMode(value, fieldSetting) {
-        if (!value) return null;
-        if (fieldSetting.mode === 'remove') return null;
-        if (fieldSetting.mode === 'placeholder') return fieldSetting.placeholder || null;
-        return value;
-    }
-
-    function applyOrganizerMode(organizer, fieldSetting) {
-        if (!organizer) return null;
-        if (fieldSetting.mode === 'remove') return null;
-        if (fieldSetting.mode === 'placeholder') return { cn: fieldSetting.placeholder || 'Organisator:in', email: 'anonym@example.invalid' };
-        return organizer;
-    }
-
-    function applyListMode(list, fieldSetting, makePlaceholderItem) {
-        if (!list || !list.length) return [];
-        if (fieldSetting.mode === 'remove') return [];
-        if (fieldSetting.mode === 'placeholder') return [makePlaceholderItem(fieldSetting.placeholder || 'ausgeblendet')];
-        return list;
-    }
-
     function generateUuid() {
         if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
         return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -946,31 +798,15 @@
         });
     }
 
-    /** Baut aus einer Rohinstanz (Original-Event + konkreter Vorkommens-Zeit) das anonymisierte Ausgabe-Event */
-    function buildOutputEvent(ev, occ, instanceIndex, hasMultipleInstances, settings) {
-        const uid = settings.uidRegenerate
-            ? generateUuid()
-            : (hasMultipleInstances ? `${ev.uid}-${instanceIndex}` : ev.uid);
-        return {
-            uid,
-            start: occ.start,
-            end: occ.end,
-            allDay: ev.allDay,
-            summary: applyTextMode(ev.summary, settings.summary),
-            description: applyTextMode(ev.description, settings.description),
-            location: applyTextMode(ev.location, settings.location),
-            organizer: applyOrganizerMode(ev.organizer, settings.organizer),
-            attendees: applyListMode(ev.attendees, settings.attendees, text => ({ cn: text, email: 'anonym@example.invalid' })),
-            categories: applyListMode(ev.categories, settings.categories, text => text),
-            url: applyTextMode(ev.url, settings.url),
-        };
+    /** Baut aus einer konkreten Vorkommens-Zeit das Ausgabe-Event: nur UID/Start/Ende/Ganztägig. Die UID wird immer neu zufällig vergeben. */
+    function buildOutputEvent(occ, allDay) {
+        return { uid: generateUuid(), start: occ.start, end: occ.end, allDay };
     }
 
-    /** Sammelt alle Termine aller geladenen Kalender im Zeitraum [fromStr, toStr] ("YYYY-MM-DD"), löst RRULEs auf und anonymisiert die Felder */
+    /** Sammelt alle Termine aller geladenen Kalender im Zeitraum [fromStr, toStr] ("YYYY-MM-DD") und löst RRULEs auf */
     function collectOutputEvents(fromStr, toStr) {
         const rangeStart = startOfDay(parseDateInput(fromStr));
         const rangeEnd = new Date(addDays(startOfDay(parseDateInput(toStr)), 1).getTime() - 1); // Ende des "Bis"-Tages, 23:59:59.999
-        const settings = readFieldSettings();
         const output = [];
 
         calendars.forEach(cal => {
@@ -982,8 +818,8 @@
                 } else if (ev.end.getTime() > rangeStart.getTime() && ev.start.getTime() <= rangeEnd.getTime()) {
                     occurrences = [{ start: ev.start, end: ev.end }];
                 }
-                occurrences.forEach((occ, idx) => {
-                    output.push(buildOutputEvent(ev, occ, idx, occurrences.length > 1, settings));
+                occurrences.forEach(occ => {
+                    output.push(buildOutputEvent(occ, ev.allDay));
                 });
             });
         });
@@ -1032,13 +868,6 @@
                 lines.push('DTSTART:' + buildIcsDateTimeLocal(ev.start));
                 lines.push('DTEND:' + buildIcsDateTimeLocal(ev.end));
             }
-            if (ev.summary) lines.push(foldLine('SUMMARY:' + escapeIcsText(ev.summary)));
-            if (ev.description) lines.push(foldLine('DESCRIPTION:' + escapeIcsText(ev.description)));
-            if (ev.location) lines.push(foldLine('LOCATION:' + escapeIcsText(ev.location)));
-            if (ev.organizer) lines.push(foldLine(`ORGANIZER;CN="${ev.organizer.cn.replace(/"/g, '')}":mailto:${ev.organizer.email || 'anonym@example.invalid'}`));
-            ev.attendees.forEach(a => lines.push(foldLine(`ATTENDEE;CN="${a.cn.replace(/"/g, '')}":mailto:${a.email || 'anonym@example.invalid'}`)));
-            if (ev.categories.length) lines.push(foldLine('CATEGORIES:' + ev.categories.map(escapeIcsText).join(',')));
-            if (ev.url) lines.push(foldLine('URL:' + escapeIcsText(ev.url)));
             lines.push('END:VEVENT');
         });
         lines.push('END:VCALENDAR');
@@ -1049,15 +878,11 @@
     // Maschinenlesbares Text-Format zur Weiterverarbeitung durch andere Tools
     // (kein Markdown, keine für Menschen optimierte Darstellung): eine Zeile
     // pro Termin, feste Spalten, RFC-4180-Quoting.
-    const CSV_COLUMNS = ['start', 'end', 'all_day', 'summary', 'location', 'description', 'organizer', 'attendees', 'categories', 'url'];
+    const CSV_COLUMNS = ['start', 'end', 'all_day'];
 
     /** Lokale Zeit ohne Zeitzonen-Suffix im Format "YYYY-MM-DDTHH:MM:SS" (konsistent mit der restlichen "floating local time"-Vereinfachung) */
     function isoLocal(d) {
         return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
-    }
-
-    function formatCalAddress(a) {
-        return a.email ? `${a.cn} <${a.email}>` : a.cn;
     }
 
     /** Escaped ein CSV-Feld gemäß RFC 4180 (quotet bei Komma/Anführungszeichen/Zeilenumbruch) */
@@ -1066,29 +891,22 @@
         return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
     }
 
-    /** Baut pro Termin ein Objekt mit allen möglichen Spalten (leere Werte als '') */
     function buildCsvRowObject(ev) {
         return {
             start: isoLocal(ev.start),
             end: isoLocal(ev.end),
             all_day: ev.allDay ? 'true' : 'false',
-            summary: ev.summary || '',
-            location: ev.location || '',
-            description: ev.description || '',
-            organizer: ev.organizer ? formatCalAddress(ev.organizer) : '',
-            attendees: ev.attendees.map(formatCalAddress).join('; '),
-            categories: ev.categories.join('; '),
-            url: ev.url || '',
         };
     }
 
-    /** Spalten, die in keiner Zeile einen Wert haben (z. B. weil das Feld komplett entfernt wurde), fallen ganz weg */
     function buildCsv(events) {
-        if (!events.length) return CSV_COLUMNS.join(',');
-        const rowObjects = events.map(buildCsvRowObject);
-        const usedColumns = CSV_COLUMNS.filter(col => rowObjects.some(row => row[col] !== ''));
-        const rows = [usedColumns, ...rowObjects.map(row => usedColumns.map(col => row[col]))];
-        return rows.map(row => row.map(csvEscape).join(',')).join('\r\n');
+        const header = CSV_COLUMNS.join(',');
+        if (!events.length) return header;
+        const rows = events.map(ev => {
+            const row = buildCsvRowObject(ev);
+            return CSV_COLUMNS.map(col => csvEscape(row[col])).join(',');
+        });
+        return [header, ...rows].join('\r\n');
     }
 
     // ── VERARBEITEN-BUTTON ────────────────────────────────────────────────

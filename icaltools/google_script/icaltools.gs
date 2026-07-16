@@ -1,10 +1,11 @@
 /**
  * iCal Tools – Google-Kalender-Variante.
- * Liest die Google-Kalender der ausführenden Person, anonymisiert wählbare
- * Felder und liefert die Termine im gewählten Zeitraum als .ics- oder CSV-Text.
- * Wiederkehrende Termine werden von der Calendar-API bereits als einzelne
- * Vorkommen im angefragten Zeitraum zurückgegeben, eine eigene RRULE-Auflösung
- * ist daher (anders als in der Browser-Variante) nicht nötig.
+ * Liest die Google-Kalender der ausführenden Person und liefert die Termine
+ * im gewählten Zeitraum als .ics- oder CSV-Text – ausschließlich Start- und
+ * Endzeit, alle sonstigen Felder (Titel, Ort, Teilnehmer:innen usw.) werden
+ * nie ausgelesen. Wiederkehrende Termine werden von der Calendar-API bereits
+ * als einzelne Vorkommen im angefragten Zeitraum zurückgegeben, eine eigene
+ * RRULE-Auflösung ist daher (anders als in der Browser-Variante) nicht nötig.
  */
 
 function doGet() {
@@ -37,7 +38,7 @@ function processCalendars(input) {
     var cal = CalendarApp.getCalendarById(calId);
     if (!cal) return;
     cal.getEvents(rangeStart, rangeEndExclusive).forEach(function (ev) {
-      events.push(buildOutputEvent(ev, input));
+      events.push(buildOutputEvent(ev));
     });
   });
 
@@ -50,60 +51,20 @@ function processCalendars(input) {
   };
 }
 
-// ── ANONYMISIERUNG ──────────────────────────────────────────────────────
+// ── AUSGABE-EVENT ─────────────────────────────────────────────────────────
 
-function buildOutputEvent(ev, input) {
-  var fields = input.fields || {};
+/** Nur UID/Start/Ende/Ganztägig – alle sonstigen Felder werden nie übernommen. Die UID wird immer neu zufällig vergeben. */
+function buildOutputEvent(ev) {
   var allDay = ev.isAllDayEvent();
   var start = allDay ? ev.getAllDayStartDate() : ev.getStartTime();
   var end = allDay ? ev.getAllDayEndDate() : ev.getEndTime();
 
-  var creators = ev.getCreators();
-  var organizer = creators.length ? { cn: creators[0], email: creators[0] } : null;
-
-  var attendees = ev.getGuestList().map(function (g) {
-    return { cn: g.getName() || g.getEmail(), email: g.getEmail() };
-  });
-
   return {
-    uid: input.uidRegenerate ? Utilities.getUuid() : ev.getId(),
+    uid: Utilities.getUuid(),
     start: start,
     end: end,
     allDay: allDay,
-    summary: applyTextMode(ev.getTitle(), fields.summary),
-    description: applyTextMode(ev.getDescription(), fields.description),
-    location: applyTextMode(ev.getLocation(), fields.location),
-    organizer: applyOrganizerMode(organizer, fields.organizer),
-    attendees: applyListMode(attendees, fields.attendees, function (text) {
-      return { cn: text, email: 'anonym@example.invalid' };
-    }),
   };
-}
-
-function applyTextMode(value, fieldSetting) {
-  fieldSetting = fieldSetting || {};
-  if (!value) return null;
-  if (fieldSetting.mode === 'remove') return null;
-  if (fieldSetting.mode === 'placeholder') return fieldSetting.placeholder || null;
-  return value;
-}
-
-function applyOrganizerMode(organizer, fieldSetting) {
-  fieldSetting = fieldSetting || {};
-  if (!organizer) return null;
-  if (fieldSetting.mode === 'remove') return null;
-  if (fieldSetting.mode === 'placeholder') {
-    return { cn: fieldSetting.placeholder || 'Organisator:in', email: 'anonym@example.invalid' };
-  }
-  return organizer;
-}
-
-function applyListMode(list, fieldSetting, makePlaceholderItem) {
-  fieldSetting = fieldSetting || {};
-  if (!list.length) return [];
-  if (fieldSetting.mode === 'remove') return [];
-  if (fieldSetting.mode === 'placeholder') return [makePlaceholderItem(fieldSetting.placeholder || 'ausgeblendet')];
-  return list;
 }
 
 // ── ICS-AUSGABE ──────────────────────────────────────────────────────────
@@ -120,10 +81,6 @@ function buildIcsDateOnly(d) {
 function buildIcsDateTimeUtc(d) {
   return d.getUTCFullYear() + pad2(d.getUTCMonth() + 1) + pad2(d.getUTCDate()) + 'T' +
     pad2(d.getUTCHours()) + pad2(d.getUTCMinutes()) + pad2(d.getUTCSeconds()) + 'Z';
-}
-
-function escapeIcsText(v) {
-  return String(v).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
 }
 
 /** Faltet eine ICS-Zeile gemäß RFC 5545 auf max. 75 Zeichen pro Zeile */
@@ -153,15 +110,6 @@ function buildIcs(events) {
       lines.push('DTSTART:' + buildIcsDateTimeLocal(ev.start));
       lines.push('DTEND:' + buildIcsDateTimeLocal(ev.end));
     }
-    if (ev.summary) lines.push(foldLine('SUMMARY:' + escapeIcsText(ev.summary)));
-    if (ev.description) lines.push(foldLine('DESCRIPTION:' + escapeIcsText(ev.description)));
-    if (ev.location) lines.push(foldLine('LOCATION:' + escapeIcsText(ev.location)));
-    if (ev.organizer) {
-      lines.push(foldLine('ORGANIZER;CN="' + ev.organizer.cn.replace(/"/g, '') + '":mailto:' + (ev.organizer.email || 'anonym@example.invalid')));
-    }
-    ev.attendees.forEach(function (a) {
-      lines.push(foldLine('ATTENDEE;CN="' + a.cn.replace(/"/g, '') + '":mailto:' + (a.email || 'anonym@example.invalid')));
-    });
     lines.push('END:VEVENT');
   });
   lines.push('END:VCALENDAR');
@@ -170,15 +118,11 @@ function buildIcs(events) {
 
 // ── CSV-AUSGABE ──────────────────────────────────────────────────────────
 
-var CSV_COLUMNS = ['start', 'end', 'all_day', 'summary', 'location', 'description', 'organizer', 'attendees'];
+var CSV_COLUMNS = ['start', 'end', 'all_day'];
 
 function isoLocal(d) {
   return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + 'T' +
     pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
-}
-
-function formatCalAddress(a) {
-  return a.email ? a.cn + ' <' + a.email + '>' : a.cn;
 }
 
 function csvEscape(value) {
@@ -191,25 +135,17 @@ function buildCsvRowObject(ev) {
     start: isoLocal(ev.start),
     end: isoLocal(ev.end),
     all_day: ev.allDay ? 'true' : 'false',
-    summary: ev.summary || '',
-    location: ev.location || '',
-    description: ev.description || '',
-    organizer: ev.organizer ? formatCalAddress(ev.organizer) : '',
-    attendees: ev.attendees.map(formatCalAddress).join('; '),
   };
 }
 
-/** Spalten, die in keiner Zeile einen Wert haben, fallen ganz weg */
 function buildCsv(events) {
-  if (!events.length) return CSV_COLUMNS.join(',');
-  var rowObjects = events.map(buildCsvRowObject);
-  var usedColumns = CSV_COLUMNS.filter(function (col) {
-    return rowObjects.some(function (row) { return row[col] !== ''; });
+  var header = CSV_COLUMNS.join(',');
+  if (!events.length) return header;
+  var rows = events.map(function (ev) {
+    var row = buildCsvRowObject(ev);
+    return CSV_COLUMNS.map(function (col) { return csvEscape(row[col]); }).join(',');
   });
-  var rows = [usedColumns].concat(rowObjects.map(function (row) {
-    return usedColumns.map(function (col) { return row[col]; });
-  }));
-  return rows.map(function (row) { return row.map(csvEscape).join(','); }).join('\r\n');
+  return [header].concat(rows).join('\r\n');
 }
 
 // ── DATUM-HILFSFUNKTIONEN ─────────────────────────────────────────────────

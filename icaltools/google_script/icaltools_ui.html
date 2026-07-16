@@ -8,36 +8,17 @@
 <body>
 
 <h1>iCal Tools – Google Kalender</h1>
-<p>Wählt einen oder mehrere eigene Google-Kalender aus, entfernt oder ersetzt persönliche Daten und gibt die Termine im gewünschten Zeitraum als .ics-Datei oder CSV-Text aus.</p>
+<p>Wählt einen oder mehrere eigene Google-Kalender aus und gibt die Termine im gewünschten Zeitraum als .ics-Datei oder CSV-Text aus.</p>
+<p>Alle privaten Informationen außer Start- und Endzeit werden aus allen Terminen entfernt (Titel, Beschreibung, Ort, Organisator:in, Teilnehmer:innen, Kategorien, Link/URL). Die Kalender-ID (UID) wird immer durch eine zufällige ID ersetzt.</p>
 <p>Das Skript läuft mit den Rechten der ausführenden Person und liest nur deren eigene Google-Kalender. Es werden keine Daten an Dritte übertragen.</p>
 
 <h2>1. Kalender auswählen</h2>
+<p>Standardmäßig ist kein Kalender ausgewählt.</p>
 <div id="calendarList">
   <p>Kalender werden geladen …</p>
 </div>
 
-<h2>2. Persönliche Daten</h2>
-<p>Standardmäßig maximal privat: jedes Feld wird durch einen Platzhalter ersetzt. Original behalten ist pro Feld einzeln zubuchbar.</p>
-<table>
-  <thead>
-    <tr>
-      <th>Feld</th>
-      <th>Original</th>
-      <th>Entfernen</th>
-      <th>Platzhalter</th>
-      <th>Platzhalter-Text</th>
-    </tr>
-  </thead>
-  <tbody id="fieldsTableBody"></tbody>
-</table>
-<p>
-  <label>
-    <input type="checkbox" id="uidRegenerate" checked>
-    Zufällige ID statt Original-Ereignis-ID verwenden (Kalender-UID)
-  </label>
-</p>
-
-<h2>3. Zeitraum der Ausgabe</h2>
+<h2>2. Zeitraum der Ausgabe</h2>
 <table>
   <tr>
     <td><label for="vonInput">Von</label></td>
@@ -52,7 +33,7 @@
 <p><button id="processBtn" type="button">Termine verarbeiten</button></p>
 <p id="processError"></p>
 
-<h2>4. Ergebnis</h2>
+<h2>3. Ergebnis</h2>
 <div id="resultsSection">
   <p id="resultsSummary"></p>
   <p>
@@ -65,17 +46,9 @@
 </div>
 
 <hr>
-<p><small>Hinweis: Kategorien/Tags, Link/URL und Erinnerungen (Alarme) werden von der Basis-Kalender-API nicht als übertragbare Felder bereitgestellt und daher immer weggelassen. Zeitzonen werden in der Zeitzone des Skript-Projekts interpretiert.</small></p>
+<p><small>Hinweis: Titel, Beschreibung, Ort, Organisator:in, Teilnehmer:innen, Kategorien/Tags, Link/URL und Erinnerungen (Alarme) werden nie ausgelesen und daher immer weggelassen – übrig bleiben ausschließlich Start- und Endzeit. Zeitzonen werden in der Zeitzone des Skript-Projekts interpretiert.</small></p>
 
 <script>
-  var FIELD_DEFS = [
-    { key: 'summary',     label: 'Titel',            defaultPlaceholder: 'Termin' },
-    { key: 'description', label: 'Beschreibung',     defaultPlaceholder: 'Details ausgeblendet' },
-    { key: 'location',    label: 'Ort',              defaultPlaceholder: 'Ort ausgeblendet' },
-    { key: 'organizer',   label: 'Organisator:in',   defaultPlaceholder: 'Organisator:in ausgeblendet' },
-    { key: 'attendees',   label: 'Teilnehmer:innen', defaultPlaceholder: 'Teilnehmer:innen ausgeblendet' },
-  ];
-
   var lastIcsText = '';
   var lastCsvText = '';
   var lastFromStr = '';
@@ -85,32 +58,6 @@
     return String(str).replace(/[&<>"']/g, function (ch) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
     });
-  }
-
-  function renderFieldsTable() {
-    var tbody = document.getElementById('fieldsTableBody');
-    tbody.innerHTML = FIELD_DEFS.map(function (f) {
-      return '<tr>' +
-        '<td>' + escapeHtml(f.label) + '</td>' +
-        '<td><input type="radio" name="mode-' + f.key + '" value="keep"></td>' +
-        '<td><input type="radio" name="mode-' + f.key + '" value="remove" checked></td>' +
-        '<td><input type="radio" name="mode-' + f.key + '" value="placeholder"></td>' +
-        '<td><input type="text" id="placeholder-' + f.key + '" value="' + escapeHtml(f.defaultPlaceholder) + '"></td>' +
-        '</tr>';
-    }).join('');
-  }
-  renderFieldsTable();
-
-  function readFieldSettings() {
-    var settings = {};
-    FIELD_DEFS.forEach(function (f) {
-      var checked = document.querySelector('input[name="mode-' + f.key + '"]:checked');
-      settings[f.key] = {
-        mode: checked ? checked.value : 'keep',
-        placeholder: document.getElementById('placeholder-' + f.key).value.trim(),
-      };
-    });
-    return settings;
   }
 
   (function initDateDefaults() {
@@ -157,8 +104,6 @@
 
     var input = {
       calendarIds: calendarIds,
-      fields: readFieldSettings(),
-      uidRegenerate: document.getElementById('uidRegenerate').checked,
       fromStr: fromStr,
       toStr: toStr,
     };
