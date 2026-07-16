@@ -225,6 +225,7 @@
         }
 
         input[type="time"],
+        input[type="date"],
         input[type="number"],
         .duration-input {
             padding: 9px 12px;
@@ -240,6 +241,7 @@
         }
 
         input[type="number"] { width: 90px; }
+        input[type="date"] { width: 150px; }
 
         input:focus {
             border-color: var(--primary);
@@ -483,15 +485,15 @@
                 <input type="text" id="durationInput" class="duration-input" value="1:00" placeholder="H:MM" maxlength="6">
             </div>
             <div class="input-group">
-                <label for="maxWeeksInput">Zeitraum (Wochen)</label>
-                <input type="number" id="maxWeeksInput" min="1" max="52" value="3">
+                <label for="startDateInput">Startdatum</label>
+                <input type="date" id="startDateInput">
             </div>
             <div class="input-group">
                 <label for="maxSuggestionsInput">Max. Vorschläge</label>
                 <input type="number" id="maxSuggestionsInput" min="1" max="200" value="5">
             </div>
         </div>
-        <p class="dropzone-hint">Sucht ab „Startzeit ab“ einen komplett freien Block von „Dauer“ – auch tagesübergreifend (z.&nbsp;B. 3 Tage = 72:00).</p>
+        <p class="dropzone-hint">Sucht ab „Startdatum“/„Startzeit ab“ einen komplett freien Block von „Dauer“ – auch tagesübergreifend (z.&nbsp;B. 3 Tage = 72:00).</p>
 
         <div class="weekday-group">
             <label>Wochentage</label>
@@ -521,7 +523,7 @@
     </section>
 
     <p class="footer-note">Hinweis: Zeitzonen in den iCal-Dateien werden vereinfacht als lokale Zeit interpretiert. Sehr komplexe Wiederholungsregeln (z.&nbsp;B. BYSETPOS) werden nicht vollständig unterstützt.</p>
-    <p class="footer-note">Version 1.4</p>
+    <p class="footer-note">Version 1.5</p>
 </div>
 
 <script>
@@ -529,6 +531,7 @@
     let calendars = [];       // [{ id, name, calendarName, events, error }]
     let calendarIdSeq = 0;
     let lastResultsMarkdown = ''; // zuletzt erzeugter Markdown-Text für den Kopieren-Button
+    const MAX_SEARCH_DAYS = 365; // Sicherheitsnetz für die offene Suche (kein Wochen-Limit mehr)
 
     const dom = {
         dropzone:            document.getElementById('dropzone'),
@@ -536,7 +539,7 @@
         fileList:            document.getElementById('fileList'),
         startTimeInput:      document.getElementById('startTimeInput'),
         durationInput:       document.getElementById('durationInput'),
-        maxWeeksInput:       document.getElementById('maxWeeksInput'),
+        startDateInput:      document.getElementById('startDateInput'),
         maxSuggestionsInput: document.getElementById('maxSuggestionsInput'),
         searchBtn:           document.getElementById('searchBtn'),
         searchError:         document.getElementById('searchError'),
@@ -554,7 +557,7 @@
     dom.copyResultsBtn.addEventListener('click', copyResultsToClipboard);
 
     // ── LIVE-ZUSAMMENFASSUNG DER SUCHKRITERIEN ───────────────────────────
-    [dom.startTimeInput, dom.durationInput, dom.maxWeeksInput, dom.maxSuggestionsInput]
+    [dom.startTimeInput, dom.durationInput, dom.startDateInput, dom.maxSuggestionsInput]
         .forEach(el => el.addEventListener('input', updateSearchSummary));
     document.querySelectorAll('#weekdayCheckboxes input').forEach(cb => cb.addEventListener('change', updateSearchSummary));
 
@@ -1032,7 +1035,6 @@
 
         const startMin = parseTimeToMinutes(dom.startTimeInput.value);
         const durationMin = parseDuration(dom.durationInput.value);
-        const maxWeeks = clampInt(parseInt(dom.maxWeeksInput.value, 10) || 0, 1, 52);
         const maxSuggestions = clampInt(parseInt(dom.maxSuggestionsInput.value, 10) || 0, 1, 200);
         const selectedWeekdays = new Set(
             Array.from(document.querySelectorAll('#weekdayCheckboxes input:checked')).map(cb => parseInt(cb.value, 10))
@@ -1045,7 +1047,12 @@
 
         const now = new Date();
         const rangeStart = now;
-        const lastDay = addDays(startOfDay(now), maxWeeks * 7 - 1);
+        const chosenStartDate = parseDateInputValue(dom.startDateInput.value);
+        const searchStartDay = chosenStartDate && chosenStartDate.getTime() > startOfDay(now).getTime()
+            ? chosenStartDate : startOfDay(now);
+        // Kein Wochen-Limit mehr: sucht offen ab dem Startdatum, bis genug Vorschläge gefunden sind.
+        // MAX_SEARCH_DAYS ist nur ein technisches Sicherheitsnetz gegen Endlos-Suche bei voll belegten Kalendern.
+        const lastDay = addDays(searchStartDay, MAX_SEARCH_DAYS - 1);
         // Fensterende kann über das letzte Suchdatum hinausreichen (mehrtägige Dauer) – Puffer einrechnen
         const rangeEnd = addMinutes(addDays(lastDay, 1), durationMin);
 
@@ -1062,7 +1069,7 @@
         });
 
         const suggestions = [];
-        let dayCursor = startOfDay(now);
+        let dayCursor = searchStartDay;
 
         while (dayCursor.getTime() <= lastDay.getTime() && suggestions.length < maxSuggestions) {
             if (selectedWeekdays.has(dayCursor.getDay())) {
@@ -1098,10 +1105,8 @@
             calendarNames: calendars.map(getCalendarDisplayName),
             startTime: dom.startTimeInput.value,
             durationLabel: dom.durationInput.value.trim(),
-            maxWeeks,
             weekdayLabels: weekdayOrder.filter(d => selectedWeekdays.has(d)).map(d => weekdayNames[d]),
-            rangeStart: now,
-            rangeEnd: lastDay,
+            searchStartDate: searchStartDay,
         };
 
         renderResults(suggestions, meta);
@@ -1157,7 +1162,7 @@
             '## Freie Termine',
             '',
             `**Kalender:** ${meta.calendarNames.length ? meta.calendarNames.join(', ') : '–'}`,
-            `**Zeitraum:** ${formatDate(meta.rangeStart)} – ${formatDate(meta.rangeEnd)} (${meta.maxWeeks} Woche${meta.maxWeeks === 1 ? '' : 'n'})`,
+            `**Startdatum:** ${formatDate(meta.searchStartDate)}`,
             `**Startzeit ab:** ${meta.startTime} Uhr`,
             `**Dauer:** ${meta.durationLabel} h`,
             `**Wochentage:** ${meta.weekdayLabels.join(', ')}`,
@@ -1211,6 +1216,16 @@
     function formatDate(d) { return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`; }
     function formatTime(d) { return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
 
+    /** Date → "YYYY-MM-DD" für <input type="date"> */
+    function toDateInputValue(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+
+    /** "YYYY-MM-DD" aus <input type="date"> → lokales Date (Tagesbeginn), oder null wenn leer/ungültig */
+    function parseDateInputValue(str) {
+        const m = (str || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!m) return null;
+        return new Date(+m[1], +m[2] - 1, +m[3]);
+    }
+
     /** "HH:MM" Uhrzeit → Minuten ab Mitternacht */
     function parseTimeToMinutes(timeStr) {
         if (!timeStr) return 0;
@@ -1252,19 +1267,22 @@
     function updateSearchSummary() {
         const startTime = dom.startTimeInput.value || '–';
         const durationMin = parseDuration(dom.durationInput.value);
-        const maxWeeks = clampInt(parseInt(dom.maxWeeksInput.value, 10) || 0, 1, 52);
         const maxSuggestions = clampInt(parseInt(dom.maxSuggestionsInput.value, 10) || 0, 1, 200);
         const weekdayOrder = [1, 2, 3, 4, 5, 6, 0]; // Mo…So
         const selectedWeekdays = new Set(
             Array.from(document.querySelectorAll('#weekdayCheckboxes input:checked')).map(cb => parseInt(cb.value, 10))
         );
         const weekdayLabels = weekdayOrder.filter(d => selectedWeekdays.has(d)).map(d => weekdayNames[d]);
+        const chosenStartDate = parseDateInputValue(dom.startDateInput.value);
+        const startDateLabel = chosenStartDate ? formatDate(chosenStartDate) : formatDate(startOfDay(new Date()));
 
-        dom.searchSummary.textContent = `Sucht ab ${startTime} Uhr einen komplett freien Block von ${formatDurationWithDays(durationMin)}, `
-            + `an ${weekdayLabels.length ? weekdayLabels.join('/') : '–'}, `
-            + `über die nächsten ${maxWeeks} Woche${maxWeeks === 1 ? '' : 'n'} (max. ${maxSuggestions} Vorschläge).`;
+        dom.searchSummary.textContent = `Sucht ab ${startDateLabel}, ${startTime} Uhr einen komplett freien Block von ${formatDurationWithDays(durationMin)}, `
+            + `an ${weekdayLabels.length ? weekdayLabels.join('/') : '–'} `
+            + `(max. ${maxSuggestions} Vorschläge).`;
     }
 
+    dom.startDateInput.value = toDateInputValue(new Date());
+    dom.startDateInput.min = dom.startDateInput.value;
     updateSearchSummary();
 </script>
 
