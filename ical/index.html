@@ -655,27 +655,32 @@
     // ausschließlich Start-/Endzeit(punkte) und all_day ausgewertet – Serientermine
     // sind dort bereits zu Einzelterminen aufgelöst, daher genügt der reine
     // Zeit-Abgleich ohne erneute RRULE-Expansion.
+    /** Parst den eingefügten CSV-Text und hängt ihn als Kalender an. Gibt false zurück, wenn das Textfeld leer ist (kein Fehler) */
+    function addPastedCsv() {
+        const text = dom.csvPasteInput.value;
+        if (!text.trim()) return false;
+        const events = parseCsvToEvents(text);
+        calendars.push({
+            id: calendarIdSeq++,
+            name: `CSV-Eintrag (${events.length} Termin${events.length === 1 ? '' : 'e'})`,
+            calendarName: null,
+            events,
+            error: null,
+            respectAvailability: true,
+            allDayMode: 'stored',
+        });
+        renderFileList();
+        dom.csvPasteInput.value = '';
+        return true;
+    }
+
     dom.addCsvBtn.addEventListener('click', () => {
         dom.csvPasteError.style.display = 'none';
-        const text = dom.csvPasteInput.value;
-        if (!text.trim()) {
-            dom.csvPasteError.textContent = 'Bitte zuerst CSV-Text einfügen.';
-            dom.csvPasteError.style.display = 'block';
-            return;
-        }
         try {
-            const events = parseCsvToEvents(text);
-            calendars.push({
-                id: calendarIdSeq++,
-                name: `CSV-Eintrag (${events.length} Termin${events.length === 1 ? '' : 'e'})`,
-                calendarName: null,
-                events,
-                error: null,
-                respectAvailability: true,
-                allDayMode: 'stored',
-            });
-            renderFileList();
-            dom.csvPasteInput.value = '';
+            if (!addPastedCsv()) {
+                dom.csvPasteError.textContent = 'Bitte zuerst CSV-Text einfügen.';
+                dom.csvPasteError.style.display = 'block';
+            }
         } catch (err) {
             dom.csvPasteError.textContent = err.message || 'CSV konnte nicht gelesen werden.';
             dom.csvPasteError.style.display = 'block';
@@ -1017,6 +1022,13 @@
 
     function runSearch() {
         clearError();
+        dom.csvPasteError.style.display = 'none';
+
+        try {
+            addPastedCsv();
+        } catch (err) {
+            return showError(err.message || 'CSV konnte nicht gelesen werden.');
+        }
 
         const startMin = parseTimeToMinutes(dom.startTimeInput.value);
         const durationMin = parseDuration(dom.durationInput.value);
@@ -1026,7 +1038,7 @@
             Array.from(document.querySelectorAll('#weekdayCheckboxes input:checked')).map(cb => parseInt(cb.value, 10))
         );
 
-        if (calendars.length === 0) return showError('Bitte mindestens eine iCal-Datei hochladen.');
+        if (calendars.length === 0) return showError('Bitte mindestens eine .ics-Datei hochladen oder CSV-Text einfügen.');
         if (durationMin <= 0) return showError('Bitte eine gültige Dauer angeben.');
         if (selectedWeekdays.size === 0) return showError('Bitte mindestens einen Wochentag auswählen.');
         if (calendars.some(c => c.error)) return showError('Mindestens eine Datei konnte nicht gelesen werden. Bitte fehlerhafte Datei entfernen.');
