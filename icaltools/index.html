@@ -8,19 +8,19 @@
     <link rel="stylesheet" href="../assets/css/reset.css">
     <style>
         :root {
-            --bg-color: #f4f6f9;
+            --bg-color: #f6f4fb;
             --container-bg: #ffffff;
             --text-color: #2d3748;
             --text-muted: #718096;
-            --primary: #3182ce;
-            --primary-light: #ebf8ff;
+            --primary: #7c3aed;
+            --primary-light: #f3e8ff;
             --success: #38a169;
             --success-light: #f0fff4;
             --danger: #e53e3e;
             --warning: #dd6b20;
             --warning-light: #fffaf0;
-            --border-color: #e2e8f0;
-            --highlight-bg: #f7fafc;
+            --border-color: #e5e0f2;
+            --highlight-bg: #faf8fd;
         }
 
         button, input, textarea {
@@ -43,7 +43,8 @@
             max-width: 800px;
             background: var(--container-bg);
             border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            border-top: 5px solid var(--primary);
+            box-shadow: 0 4px 20px rgba(124, 58, 237, 0.08);
             padding: 30px;
         }
 
@@ -56,6 +57,7 @@
         h1 {
             font-size: 24px;
             font-weight: 700;
+            color: var(--primary);
         }
 
         header p {
@@ -799,29 +801,27 @@
         });
     }
 
-    /** Baut aus einem konkreten Zeitblock das Ausgabe-Event: nur UID/Start/Ende/Ganztägig. Die UID wird immer neu zufällig vergeben. */
-    function buildOutputEvent(block, allDay) {
-        return { uid: generateUuid(), start: block.start, end: block.end, allDay };
+    /** Baut aus einem konkreten Zeitblock das Ausgabe-Event: nur UID/Start/Ende. Die UID wird immer neu zufällig vergeben. */
+    function buildOutputEvent(block) {
+        return { uid: generateUuid(), start: block.start, end: block.end };
     }
 
     /**
      * Fasst sich überlappende oder direkt aneinanderstoßende Zeitblöcke zu einem einzigen Block zusammen
      * (Datenschutz: verhindert, dass sich aus der Anzahl oder den Grenzen einzelner Termine etwas über den
      * ursprünglichen Kalenderinhalt ablesen lässt). Erwartet nach Start aufsteigend sortierte Blöcke.
-     * Ein zusammengefasster Block ist nur dann noch "ganztägig", wenn alle enthaltenen Termine es waren.
      */
     function mergeOverlappingEvents(blocks) {
         if (!blocks.length) return [];
         const merged = [];
-        let current = { start: blocks[0].start, end: blocks[0].end, allDay: blocks[0].allDay };
+        let current = { start: blocks[0].start, end: blocks[0].end };
         for (let i = 1; i < blocks.length; i++) {
             const b = blocks[i];
             if (b.start.getTime() <= current.end.getTime()) {
                 if (b.end.getTime() > current.end.getTime()) current.end = b.end;
-                if (!b.allDay) current.allDay = false;
             } else {
                 merged.push(current);
-                current = { start: b.start, end: b.end, allDay: b.allDay };
+                current = { start: b.start, end: b.end };
             }
         }
         merged.push(current);
@@ -844,13 +844,13 @@
                     occurrences = [{ start: ev.start, end: ev.end }];
                 }
                 occurrences.forEach(occ => {
-                    blocks.push({ start: occ.start, end: occ.end, allDay: ev.allDay });
+                    blocks.push({ start: occ.start, end: occ.end });
                 });
             });
         });
 
         blocks.sort((a, b) => a.start.getTime() - b.start.getTime());
-        return mergeOverlappingEvents(blocks).map(b => buildOutputEvent(b, b.allDay));
+        return mergeOverlappingEvents(blocks).map(buildOutputEvent);
     }
 
     // ── ICS-AUSGABE ───────────────────────────────────────────────────────
@@ -858,9 +858,6 @@
 
     function buildIcsDateTimeLocal(d) {
         return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}T${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}`;
-    }
-    function buildIcsDateOnly(d) {
-        return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`;
     }
     function buildIcsDateTimeUtc(d) {
         return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}T${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}${pad2(d.getUTCSeconds())}Z`;
@@ -886,13 +883,8 @@
             lines.push('BEGIN:VEVENT');
             lines.push(foldLine('UID:' + ev.uid));
             lines.push('DTSTAMP:' + nowStamp);
-            if (ev.allDay) {
-                lines.push('DTSTART;VALUE=DATE:' + buildIcsDateOnly(ev.start));
-                lines.push('DTEND;VALUE=DATE:' + buildIcsDateOnly(ev.end));
-            } else {
-                lines.push('DTSTART:' + buildIcsDateTimeLocal(ev.start));
-                lines.push('DTEND:' + buildIcsDateTimeLocal(ev.end));
-            }
+            lines.push('DTSTART:' + buildIcsDateTimeLocal(ev.start));
+            lines.push('DTEND:' + buildIcsDateTimeLocal(ev.end));
             lines.push('END:VEVENT');
         });
         lines.push('END:VCALENDAR');
@@ -903,7 +895,7 @@
     // Maschinenlesbares Text-Format zur Weiterverarbeitung durch andere Tools
     // (kein Markdown, keine für Menschen optimierte Darstellung): eine Zeile
     // pro Termin, feste Spalten, RFC-4180-Quoting.
-    const CSV_COLUMNS = ['start', 'end', 'all_day'];
+    const CSV_COLUMNS = ['start', 'end'];
 
     /** Lokale Zeit ohne Zeitzonen-Suffix im Format "YYYY-MM-DDTHH:MM:SS" (konsistent mit der restlichen "floating local time"-Vereinfachung) */
     function isoLocal(d) {
@@ -920,7 +912,6 @@
         return {
             start: isoLocal(ev.start),
             end: isoLocal(ev.end),
-            all_day: ev.allDay ? 'true' : 'false',
         };
     }
 

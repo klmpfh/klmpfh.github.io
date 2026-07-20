@@ -541,7 +541,7 @@
 
         <div class="csv-paste">
             <label for="csvPasteInput">Oder CSV einfügen (z. B. aus den iCal Tools kopiert) – ausschließlich Start-/Endzeiten werden berücksichtigt</label>
-            <textarea id="csvPasteInput" class="csv-textarea" placeholder="start,end,all_day&#10;2026-07-20T09:00:00,2026-07-20T10:00:00,false"></textarea>
+            <textarea id="csvPasteInput" class="csv-textarea" placeholder="start,end&#10;2026-07-20T09:00:00,2026-07-20T10:00:00"></textarea>
             <button id="addCsvBtn" class="btn-copy" type="button">CSV hinzufügen</button>
             <div id="csvPasteError" class="warning-banner" style="display:none"></div>
         </div>
@@ -751,9 +751,11 @@
 
     // ── CSV-EINFÜGEN ──────────────────────────────────────────────────────
     // Alternative zum .ics-Upload, z. B. für CSV aus den iCal Tools. Es werden
-    // ausschließlich Start-/Endzeit(punkte) und all_day ausgewertet – Serientermine
-    // sind dort bereits zu Einzelterminen aufgelöst, daher genügt der reine
-    // Zeit-Abgleich ohne erneute RRULE-Expansion.
+    // ausschließlich Start-/Endzeitpunkte ausgewertet – Serientermine sind dort
+    // bereits zu Einzelterminen aufgelöst, daher genügt der reine Zeit-Abgleich
+    // ohne erneute RRULE-Expansion. „Ganztägig“ gibt es als eigenes Feld nicht
+    // (Datenschutz); es wird stattdessen daran erkannt, dass Start und Ende
+    // beide auf Mitternacht fallen (siehe isMidnightToMidnight).
     /** Parst den eingefügten CSV-Text und hängt ihn als Kalender an. Gibt false zurück, wenn das Textfeld leer ist (kein Fehler) */
     function addPastedCsv() {
         const text = dom.csvPasteInput.value;
@@ -814,14 +816,19 @@
         return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
     }
 
-    /** CSV-Text → Termine (nur start/end/all_day werden ausgewertet, weitere Spalten ignoriert) */
+    /** Erkennt ganztägige Termine ohne eigenes Feld: Start und Ende liegen beide exakt auf Mitternacht (Start vor Ende) */
+    function isMidnightToMidnight(start, end) {
+        const isMidnight = d => d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0;
+        return start.getTime() < end.getTime() && isMidnight(start) && isMidnight(end);
+    }
+
+    /** CSV-Text → Termine (nur start/end werden ausgewertet, weitere Spalten ignoriert; „ganztägig“ wird aus Mitternacht-zu-Mitternacht-Zeiten abgeleitet) */
     function parseCsvToEvents(text) {
         const rows = parseCsvRows(text);
         if (!rows.length) throw new Error('Keine Daten gefunden.');
         const header = rows[0].map(h => h.trim().toLowerCase());
         const startIdx = header.indexOf('start');
         const endIdx = header.indexOf('end');
-        const allDayIdx = header.indexOf('all_day');
         if (startIdx === -1 || endIdx === -1) throw new Error('CSV benötigt mindestens die Spalten „start“ und „end“.');
 
         const events = [];
@@ -831,7 +838,7 @@
             const start = parseIsoLocalDateTime(r[startIdx]);
             const end = parseIsoLocalDateTime(r[endIdx]);
             if (!start || !end) throw new Error(`Zeile ${i + 1}: ungültiges Datum-/Zeit-Format (erwartet z. B. 2026-07-20T09:00:00).`);
-            const allDay = allDayIdx !== -1 && (r[allDayIdx] || '').trim().toLowerCase() === 'true';
+            const allDay = isMidnightToMidnight(start, end);
             events.push({ start, end, allDay, transparent: false, cancelled: false, rrule: null });
         }
         if (!events.length) throw new Error('Keine gültigen Termine im CSV gefunden.');

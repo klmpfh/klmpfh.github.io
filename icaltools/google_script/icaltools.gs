@@ -56,13 +56,17 @@ function processCalendars(input) {
 
 // ── AUSGABE-EVENT ─────────────────────────────────────────────────────────
 
-/** Liest nur Start/Ende/Ganztägig eines Kalender-Events aus – alle sonstigen Felder werden nie berücksichtigt. */
+/**
+ * Liest nur Start/Ende eines Kalender-Events aus – alle sonstigen Felder werden nie berücksichtigt.
+ * Bei ganztägigen Terminen liefert die Calendar-API als Ende bereits Mitternacht des Folgetags nach
+ * dem letzten Tag; dadurch bleibt die Ganztägig-Eigenschaft implizit in Start-/Endzeit erhalten, ohne
+ * dass sie als eigenes Feld ausgegeben werden muss (weniger personenbezogene Daten im Export).
+ */
 function readEventInterval(ev) {
   var allDay = ev.isAllDayEvent();
   return {
     start: allDay ? ev.getAllDayStartDate() : ev.getStartTime(),
     end: allDay ? ev.getAllDayEndDate() : ev.getEndTime(),
-    allDay: allDay,
   };
 }
 
@@ -70,33 +74,30 @@ function readEventInterval(ev) {
  * Fasst sich überlappende oder direkt aneinanderstoßende Zeitblöcke zu einem einzigen Block zusammen
  * (Datenschutz: verhindert, dass sich aus der Anzahl oder den Grenzen einzelner Termine etwas über den
  * ursprünglichen Kalenderinhalt ablesen lässt). Erwartet nach Start aufsteigend sortierte Blöcke.
- * Ein zusammengefasster Block ist nur dann noch "ganztägig", wenn alle enthaltenen Termine es waren.
  */
 function mergeOverlappingEvents(blocks) {
   if (!blocks.length) return [];
   var merged = [];
-  var current = { start: blocks[0].start, end: blocks[0].end, allDay: blocks[0].allDay };
+  var current = { start: blocks[0].start, end: blocks[0].end };
   for (var i = 1; i < blocks.length; i++) {
     var b = blocks[i];
     if (b.start.getTime() <= current.end.getTime()) {
       if (b.end.getTime() > current.end.getTime()) current.end = b.end;
-      if (!b.allDay) current.allDay = false;
     } else {
       merged.push(current);
-      current = { start: b.start, end: b.end, allDay: b.allDay };
+      current = { start: b.start, end: b.end };
     }
   }
   merged.push(current);
   return merged;
 }
 
-/** Baut aus einem zusammengefassten Zeitblock das Ausgabe-Event: nur UID/Start/Ende/Ganztägig. Die UID wird immer neu zufällig vergeben. */
+/** Baut aus einem zusammengefassten Zeitblock das Ausgabe-Event: nur UID/Start/Ende. Die UID wird immer neu zufällig vergeben. */
 function buildOutputEvent(block) {
   return {
     uid: Utilities.getUuid(),
     start: block.start,
     end: block.end,
-    allDay: block.allDay,
   };
 }
 
@@ -107,9 +108,6 @@ function pad2(n) { return ('' + n).length < 2 ? '0' + n : '' + n; }
 function buildIcsDateTimeLocal(d) {
   return d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + 'T' +
     pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds());
-}
-function buildIcsDateOnly(d) {
-  return d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate());
 }
 function buildIcsDateTimeUtc(d) {
   return d.getUTCFullYear() + pad2(d.getUTCMonth() + 1) + pad2(d.getUTCDate()) + 'T' +
@@ -136,13 +134,8 @@ function buildIcs(events) {
     lines.push('BEGIN:VEVENT');
     lines.push(foldLine('UID:' + ev.uid));
     lines.push('DTSTAMP:' + nowStamp);
-    if (ev.allDay) {
-      lines.push('DTSTART;VALUE=DATE:' + buildIcsDateOnly(ev.start));
-      lines.push('DTEND;VALUE=DATE:' + buildIcsDateOnly(ev.end));
-    } else {
-      lines.push('DTSTART:' + buildIcsDateTimeLocal(ev.start));
-      lines.push('DTEND:' + buildIcsDateTimeLocal(ev.end));
-    }
+    lines.push('DTSTART:' + buildIcsDateTimeLocal(ev.start));
+    lines.push('DTEND:' + buildIcsDateTimeLocal(ev.end));
     lines.push('END:VEVENT');
   });
   lines.push('END:VCALENDAR');
@@ -151,7 +144,7 @@ function buildIcs(events) {
 
 // ── CSV-AUSGABE ──────────────────────────────────────────────────────────
 
-var CSV_COLUMNS = ['start', 'end', 'all_day'];
+var CSV_COLUMNS = ['start', 'end'];
 
 function isoLocal(d) {
   return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + 'T' +
@@ -167,7 +160,6 @@ function buildCsvRowObject(ev) {
   return {
     start: isoLocal(ev.start),
     end: isoLocal(ev.end),
-    all_day: ev.allDay ? 'true' : 'false',
   };
 }
 
