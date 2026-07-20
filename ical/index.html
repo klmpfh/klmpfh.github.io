@@ -451,26 +451,26 @@
         }
 
         .heatmap-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
             margin-top: 12px;
+            overflow-x: auto;
         }
 
-        .heatmap-month {
-            flex: 0 0 auto;
-        }
-
-        .heatmap-month-title {
-            font-size: 13px;
-            font-weight: 700;
-            margin-bottom: 8px;
-        }
-
-        .heatmap-grid {
+        .heatmap-table {
             display: grid;
-            grid-template-columns: repeat(7, 26px);
+            grid-template-columns: max-content repeat(7, 26px);
             gap: 3px;
+            align-items: center;
+        }
+
+        .heatmap-table-label {
+            height: 26px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            white-space: nowrap;
         }
 
         .heatmap-weekday {
@@ -494,9 +494,9 @@
             border: 1px solid var(--border-color);
         }
 
-        .heatmap-cell-empty {
-            border: none;
-            background: transparent;
+        .heatmap-cell-today {
+            box-shadow: 0 0 0 2px var(--primary) inset;
+            font-weight: 800;
         }
 
         .heatmap-level-1 { background: #9ec5f4; color: #1a4971; border-color: #86b6ef; }
@@ -601,7 +601,7 @@
 
         <div id="heatmapSection" class="heatmap-section" style="display:none">
             <h2>Heatmap</h2>
-            <p class="dropzone-hint">Zeigt den Zeitraum, in dem Treffer liegen – je dunkler, desto mehr Treffer an diesem Tag.</p>
+            <p class="dropzone-hint">Zeigt den Zeitraum, in dem Treffer liegen – je dunkler, desto mehr Treffer an diesem Tag. Der heutige Tag ist umrandet, sofern er im angezeigten Zeitraum liegt.</p>
             <div id="heatmapContainer" class="heatmap-container"></div>
             <div class="heatmap-legend">
                 <span>Weniger</span>
@@ -616,7 +616,7 @@
     </section>
 
     <p class="footer-note">Hinweis: Zeitzonen in den iCal-Dateien werden vereinfacht als lokale Zeit interpretiert. Sehr komplexe Wiederholungsregeln (z.&nbsp;B. BYSETPOS) werden nicht vollständig unterstützt.</p>
-    <p class="footer-note">Version 1.6</p>
+    <p class="footer-note">Version 1.7</p>
 </div>
 
 <script>
@@ -1303,33 +1303,47 @@
         return { counts, minDay, maxDay };
     }
 
-    /** Rendert eine Monatstabelle (Mo-So) mit eingefärbten Tagen entsprechend der Trefferzahl */
-    function renderMonthGrid(monthStart, counts, maxCount) {
-        const year = monthStart.getFullYear(), month = monthStart.getMonth();
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        const leadingBlanks = mondayOffset(new Date(year, month, 1).getDay());
+    const heatmapWeekdayLabels = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
-        let cellsHtml = '';
-        for (let i = 0; i < leadingBlanks; i++) cellsHtml += `<div class="heatmap-cell heatmap-cell-empty"></div>`;
-        for (let day = 1; day <= daysInMonth; day++) {
-            const d = new Date(year, month, day);
-            const count = counts.get(toDateInputValue(d)) || 0;
-            const level = count === 0 ? 0 : Math.min(4, Math.max(1, Math.ceil((count / maxCount) * 4)));
-            cellsHtml += `<div class="heatmap-cell${level ? ' heatmap-level-' + level : ''}" title="${formatDate(d)}: ${count} Treffer">${day}</div>`;
+    /** Rendert die durchgehende Wochentabelle: Spalten = Wochentage, links steht der Monatsname, sobald ein neuer Monat beginnt */
+    function renderHeatmapTable(counts, minDay, maxDay, maxCount) {
+        const todayKey = toDateInputValue(startOfDay(new Date()));
+        const lastWeekStart = startOfWeekMonday(maxDay);
+
+        let headerHtml = '<div class="heatmap-table-label"></div>'
+            + heatmapWeekdayLabels.map(w => `<div class="heatmap-weekday">${w}</div>`).join('');
+
+        let rowsHtml = '';
+        let weekCursor = startOfWeekMonday(minDay);
+        let isFirstRow = true;
+        while (weekCursor.getTime() <= lastWeekStart.getTime()) {
+            const days = Array.from({ length: 7 }, (_, i) => addDays(weekCursor, i));
+            const newMonthDay = days.find(d => d.getDate() === 1);
+            const label = isFirstRow
+                ? `${monthNames[days[0].getMonth()]} ${days[0].getFullYear()}`
+                : (newMonthDay ? `${monthNames[newMonthDay.getMonth()]} ${newMonthDay.getFullYear()}` : '');
+
+            const cellsHtml = days.map(d => {
+                const key = toDateInputValue(d);
+                const count = counts.get(key) || 0;
+                const level = count === 0 ? 0 : Math.min(4, Math.max(1, Math.ceil((count / maxCount) * 4)));
+                const isToday = key === todayKey;
+                const classes = ['heatmap-cell'];
+                if (level) classes.push('heatmap-level-' + level);
+                if (isToday) classes.push('heatmap-cell-today');
+                const titleSuffix = isToday ? ' (heute)' : '';
+                return `<div class="${classes.join(' ')}" title="${formatDate(d)}: ${count} Treffer${titleSuffix}">${d.getDate()}</div>`;
+            }).join('');
+
+            rowsHtml += `<div class="heatmap-table-label">${label}</div>${cellsHtml}`;
+            weekCursor = addDays(weekCursor, 7);
+            isFirstRow = false;
         }
 
-        return `<div class="heatmap-month">
-            <div class="heatmap-month-title">${monthNames[month]} ${year}</div>
-            <div class="heatmap-grid">
-                <div class="heatmap-weekday">Mo</div><div class="heatmap-weekday">Di</div><div class="heatmap-weekday">Mi</div>
-                <div class="heatmap-weekday">Do</div><div class="heatmap-weekday">Fr</div><div class="heatmap-weekday">Sa</div>
-                <div class="heatmap-weekday">So</div>
-                ${cellsHtml}
-            </div>
-        </div>`;
+        return `<div class="heatmap-table">${headerHtml}${rowsHtml}</div>`;
     }
 
-    /** Zeigt eine monatsweise Heatmap-Kalenderansicht für den Zeitraum, in dem Treffer liegen */
+    /** Zeigt eine durchgehende Wochentabelle als Heatmap für den Zeitraum, in dem Treffer liegen */
     function renderHeatmap(suggestions) {
         if (!suggestions.length) {
             dom.heatmapSection.style.display = 'none';
@@ -1339,15 +1353,7 @@
         const { counts, minDay, maxDay } = buildHeatmapData(suggestions);
         const maxCount = Math.max(...counts.values());
 
-        const months = [];
-        let cursor = new Date(minDay.getFullYear(), minDay.getMonth(), 1);
-        const endCursor = new Date(maxDay.getFullYear(), maxDay.getMonth(), 1);
-        while (cursor.getTime() <= endCursor.getTime()) {
-            months.push(cursor);
-            cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
-        }
-
-        dom.heatmapContainer.innerHTML = months.map(m => renderMonthGrid(m, counts, maxCount)).join('');
+        dom.heatmapContainer.innerHTML = renderHeatmapTable(counts, minDay, maxDay, maxCount);
         dom.heatmapSection.style.display = '';
     }
 
