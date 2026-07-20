@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="Teilt Dateien direkt zwischen zwei Browsern per WebRTC – ohne Upload auf einen Server.">
-<title>Transf</title>
+<title>Fileshare</title>
 <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../assets/css/reset.css">
 <style>
@@ -379,7 +379,7 @@
 
 <div class="container">
     <header>
-        <h1><span>Transf</span></h1>
+        <h1><span>Fileshare</span></h1>
         <p>Peer-to-Peer-Dateitransfer direkt zwischen zwei Browsern (WebRTC) – nichts wird auf einen Server hochgeladen.</p>
     </header>
 
@@ -432,8 +432,8 @@
 (function () {
     if (typeof window.RTCPeerConnection === 'undefined' || typeof window.Peer === 'undefined') {
         document.querySelector('.container').innerHTML =
-            '<header><h1><span>Transf</span></h1></header>' +
-            '<p class="unsupported">Dein Browser unterstützt WebRTC leider nicht – Transf funktioniert hier nicht.</p>';
+            '<header><h1><span>Fileshare</span></h1></header>' +
+            '<p class="unsupported">Dein Browser unterstützt WebRTC leider nicht – Fileshare funktioniert hier nicht.</p>';
         return;
     }
 
