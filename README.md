@@ -29,6 +29,8 @@ im Browser funktionieren.
 - `/ical/` – iCal Terminsuche, findet freie Termin-Slots anhand mehrerer iCal-Dateien.
 - `/icaltools/` – entfernt/anonymisiert persönliche Daten aus iCal-Dateien und
   exportiert sie im gewünschten Zeitraum als .ics oder als maschinenlesbares CSV.
+- `/transf/` – Teilt Dateien direkt zwischen zwei Browsern per WebRTC (Peer-to-Peer),
+  ohne Upload auf einen Server. Sitzungslink/QR-Code enthält eine zufällige 128-Bit-ID.
 - `/knallbum/` – Berechnet aus Preisen an der Bar die beste Option (ml Alkohol/€).
 - `/laserfeelings/` – Szenario-Generator für Laser & Feelings.
 - `/zauberkloppen/` – Szenario-Generator für Fantasy-Rollenspiele.
