@@ -1245,7 +1245,7 @@
         if (suggestions.length === 0) {
             dom.resultsSummary.textContent = 'Keine passenden freien Termine im gewählten Zeitraum gefunden.';
             dom.resultsList.innerHTML = '';
-            renderHeatmap([]);
+            renderHeatmap([], meta.searchStartDate);
             return;
         }
         dom.resultsSummary.textContent = `${suggestions.length} freie${suggestions.length === 1 ? 'r' : ''} Termin${suggestions.length === 1 ? '' : 'e'} gefunden.`;
@@ -1256,7 +1256,7 @@
                 <span class="result-duration">${formatDurationWithDays(durMin)}</span>
             </li>`;
         }).join('');
-        renderHeatmap(suggestions);
+        renderHeatmap(suggestions, meta.searchStartDate);
     }
 
     /** Baut den kopierbaren Markdown-Text: Suchparameter, berücksichtigte Kalender, Ergebnistabelle */
@@ -1315,13 +1315,10 @@
 
         let rowsHtml = '';
         let weekCursor = startOfWeekMonday(minDay);
-        let isFirstRow = true;
         while (weekCursor.getTime() <= lastWeekStart.getTime()) {
             const days = Array.from({ length: 7 }, (_, i) => addDays(weekCursor, i));
             const newMonthDay = days.find(d => d.getDate() === 1);
-            const label = isFirstRow
-                ? `${monthNames[days[0].getMonth()]} ${days[0].getFullYear()}`
-                : (newMonthDay ? `${monthNames[newMonthDay.getMonth()]} ${newMonthDay.getFullYear()}` : '');
+            const label = newMonthDay ? `${monthNames[newMonthDay.getMonth()]} ${newMonthDay.getFullYear()}` : '';
 
             const cellsHtml = days.map(d => {
                 const key = toDateInputValue(d);
@@ -1337,20 +1334,20 @@
 
             rowsHtml += `<div class="heatmap-table-label">${label}</div>${cellsHtml}`;
             weekCursor = addDays(weekCursor, 7);
-            isFirstRow = false;
         }
 
         return `<div class="heatmap-table">${headerHtml}${rowsHtml}</div>`;
     }
 
-    /** Zeigt eine durchgehende Wochentabelle als Heatmap für den Zeitraum, in dem Treffer liegen */
-    function renderHeatmap(suggestions) {
+    /** Zeigt eine durchgehende Wochentabelle als Heatmap, beginnend immer am Suchstartdatum (nicht erst am ersten Treffer) */
+    function renderHeatmap(suggestions, searchStartDate) {
         if (!suggestions.length) {
             dom.heatmapSection.style.display = 'none';
             dom.heatmapContainer.innerHTML = '';
             return;
         }
-        const { counts, minDay, maxDay } = buildHeatmapData(suggestions);
+        const { counts, maxDay } = buildHeatmapData(suggestions);
+        const minDay = startOfDay(searchStartDate);
         const maxCount = Math.max(...counts.values());
 
         dom.heatmapContainer.innerHTML = renderHeatmapTable(counts, minDay, maxDay, maxCount);
