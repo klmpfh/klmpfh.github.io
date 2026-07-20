@@ -403,6 +403,8 @@
             <div class="qr-card"><div id="qrcode"></div></div>
         </div>
         <p class="status-row" id="hostStatus">Warte auf Verbindung …</p>
+        <label class="field-label">Geteilte Dateien</label>
+        <ul class="sel-list" id="sharedFileList"></ul>
         <button type="button" class="danger-btn" id="endBtn">Sitzung beenden</button>
     </section>
 
@@ -467,6 +469,7 @@
     const copyBtn = document.getElementById('copyBtn');
     const hostStatus = document.getElementById('hostStatus');
     const endBtn = document.getElementById('endBtn');
+    const sharedFileList = document.getElementById('sharedFileList');
 
     let files = [];
     let peer = null;
@@ -488,6 +491,14 @@
                 <button type="button" class="remove-btn" data-i="${i}" title="Entfernen">×</button>
             </li>`).join('');
         startBtn.disabled = files.length === 0;
+    }
+
+    function renderSharedFileList() {
+        sharedFileList.innerHTML = files.map(f => `
+            <li class="sel-row">
+                <span class="file-name">${escapeHtml(f.name)}</span>
+                <span class="file-size">${formatBytes(f.size)}</span>
+            </li>`).join('');
     }
 
     dropzone.addEventListener('click', () => fileInput.click());
@@ -565,6 +576,7 @@
         peer.on('open', () => {
             senderPanel.hidden = true;
             sharePanel.hidden = false;
+            renderSharedFileList();
 
             const link = `${location.origin}${location.pathname}?s=${sessionId}`;
             shareLinkInput.value = link;
