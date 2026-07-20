@@ -6,6 +6,8 @@
  * nie ausgelesen. Wiederkehrende Termine werden von der Calendar-API bereits
  * als einzelne Vorkommen im angefragten Zeitraum zurückgegeben, eine eigene
  * RRULE-Auflösung ist daher (anders als in der Browser-Variante) nicht nötig.
+ * Sich überlappende oder direkt aneinanderstoßende Termine (auch über mehrere
+ * ausgewählte Kalender hinweg) werden zu einem gemeinsamen Zeitblock zusammengefasst.
  */
 
 function doGet() {
@@ -33,16 +35,17 @@ function processCalendars(input) {
     throw new Error('Das Startdatum muss vor dem Enddatum liegen (oder mit ihm übereinstimmen).');
   }
 
-  var events = [];
+  var blocks = [];
   input.calendarIds.forEach(function (calId) {
     var cal = CalendarApp.getCalendarById(calId);
     if (!cal) return;
     cal.getEvents(rangeStart, rangeEndExclusive).forEach(function (ev) {
-      events.push(buildOutputEvent(ev));
+      blocks.push(readEventInterval(ev));
     });
   });
 
-  events.sort(function (a, b) { return a.start.getTime() - b.start.getTime(); });
+  blocks.sort(function (a, b) { return a.start.getTime() - b.start.getTime(); });
+  var events = mergeOverlappingEvents(blocks).map(buildOutputEvent);
 
   return {
     count: events.length,
@@ -53,17 +56,47 @@ function processCalendars(input) {
 
 // ── AUSGABE-EVENT ─────────────────────────────────────────────────────────
 
-/** Nur UID/Start/Ende/Ganztägig – alle sonstigen Felder werden nie übernommen. Die UID wird immer neu zufällig vergeben. */
-function buildOutputEvent(ev) {
+/** Liest nur Start/Ende/Ganztägig eines Kalender-Events aus – alle sonstigen Felder werden nie berücksichtigt. */
+function readEventInterval(ev) {
   var allDay = ev.isAllDayEvent();
-  var start = allDay ? ev.getAllDayStartDate() : ev.getStartTime();
-  var end = allDay ? ev.getAllDayEndDate() : ev.getEndTime();
+  return {
+    start: allDay ? ev.getAllDayStartDate() : ev.getStartTime(),
+    end: allDay ? ev.getAllDayEndDate() : ev.getEndTime(),
+    allDay: allDay,
+  };
+}
 
+/**
+ * Fasst sich überlappende oder direkt aneinanderstoßende Zeitblöcke zu einem einzigen Block zusammen
+ * (Datenschutz: verhindert, dass sich aus der Anzahl oder den Grenzen einzelner Termine etwas über den
+ * ursprünglichen Kalenderinhalt ablesen lässt). Erwartet nach Start aufsteigend sortierte Blöcke.
+ * Ein zusammengefasster Block ist nur dann noch "ganztägig", wenn alle enthaltenen Termine es waren.
+ */
+function mergeOverlappingEvents(blocks) {
+  if (!blocks.length) return [];
+  var merged = [];
+  var current = { start: blocks[0].start, end: blocks[0].end, allDay: blocks[0].allDay };
+  for (var i = 1; i < blocks.length; i++) {
+    var b = blocks[i];
+    if (b.start.getTime() <= current.end.getTime()) {
+      if (b.end.getTime() > current.end.getTime()) current.end = b.end;
+      if (!b.allDay) current.allDay = false;
+    } else {
+      merged.push(current);
+      current = { start: b.start, end: b.end, allDay: b.allDay };
+    }
+  }
+  merged.push(current);
+  return merged;
+}
+
+/** Baut aus einem zusammengefassten Zeitblock das Ausgabe-Event: nur UID/Start/Ende/Ganztägig. Die UID wird immer neu zufällig vergeben. */
+function buildOutputEvent(block) {
   return {
     uid: Utilities.getUuid(),
-    start: start,
-    end: end,
-    allDay: allDay,
+    start: block.start,
+    end: block.end,
+    allDay: block.allDay,
   };
 }
 

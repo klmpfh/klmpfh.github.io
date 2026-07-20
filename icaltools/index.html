@@ -365,6 +365,7 @@
         <h1>iCal Tools</h1>
         <p>Lädt eine oder mehrere .ics-Kalenderdateien und gibt die Termine im gewünschten Zeitraum neu aus. Alle geladenen Dateien werden gemeinsam verarbeitet.</p>
         <p class="privacy-note">Alle privaten Informationen außer Start- und Endzeit werden aus allen Terminen entfernt (Titel, Beschreibung, Ort, Organisator:in, Teilnehmer:innen, Kategorien, Link/URL).</p>
+        <p class="privacy-note">Überlappende oder direkt aneinanderstoßende Termine werden zu einem einzigen Zeitblock zusammengefasst, damit sich aus Anzahl oder Grenzen einzelner Termine nichts über den ursprünglichen Kalender ablesen lässt.</p>
         <p class="privacy-note">Läuft vollständig lokal im Browser. Es werden keine Daten hochgeladen, übertragen oder online gespeichert.</p>
         <p class="tool-hint">Nutzt du Google Kalender? Dann geht das auch direkt, ohne Datei-Export: <a href="https://script.google.com/macros/s/AKfycbxq5X5tdBZOGBZ7oxJ4_ZjLzxw3mDMCVRl4EvEkNL9kAakuIo5RM4nE1G_ju9KmPLyO/exec" target="_blank" rel="noopener">Google-Kalender-Variante öffnen</a></p>
     </header>
@@ -381,7 +382,7 @@
 
     <section class="card">
         <h2>2. Persönliche Daten</h2>
-        <p class="dropzone-hint">Titel, Beschreibung, Ort, Organisator:in, Teilnehmer:innen, Kategorien und Link/URL werden beim Export immer entfernt, die Kalender-ID (UID) wird immer durch eine zufällige ID ersetzt – übrig bleiben ausschließlich Start- und Endzeit jedes Termins.</p>
+        <p class="dropzone-hint">Titel, Beschreibung, Ort, Organisator:in, Teilnehmer:innen, Kategorien und Link/URL werden beim Export immer entfernt, die Kalender-ID (UID) wird immer durch eine zufällige ID ersetzt – übrig bleiben ausschließlich Start- und Endzeit jedes Termins. Sich überlappende oder direkt aneinanderstoßende Termine (auch aus verschiedenen hochgeladenen Kalendern) werden dabei zu einem gemeinsamen Zeitblock zusammengefasst.</p>
     </section>
 
     <section class="card">
@@ -798,16 +799,40 @@
         });
     }
 
-    /** Baut aus einer konkreten Vorkommens-Zeit das Ausgabe-Event: nur UID/Start/Ende/Ganztägig. Die UID wird immer neu zufällig vergeben. */
-    function buildOutputEvent(occ, allDay) {
-        return { uid: generateUuid(), start: occ.start, end: occ.end, allDay };
+    /** Baut aus einem konkreten Zeitblock das Ausgabe-Event: nur UID/Start/Ende/Ganztägig. Die UID wird immer neu zufällig vergeben. */
+    function buildOutputEvent(block, allDay) {
+        return { uid: generateUuid(), start: block.start, end: block.end, allDay };
     }
 
-    /** Sammelt alle Termine aller geladenen Kalender im Zeitraum [fromStr, toStr] ("YYYY-MM-DD") und löst RRULEs auf */
+    /**
+     * Fasst sich überlappende oder direkt aneinanderstoßende Zeitblöcke zu einem einzigen Block zusammen
+     * (Datenschutz: verhindert, dass sich aus der Anzahl oder den Grenzen einzelner Termine etwas über den
+     * ursprünglichen Kalenderinhalt ablesen lässt). Erwartet nach Start aufsteigend sortierte Blöcke.
+     * Ein zusammengefasster Block ist nur dann noch "ganztägig", wenn alle enthaltenen Termine es waren.
+     */
+    function mergeOverlappingEvents(blocks) {
+        if (!blocks.length) return [];
+        const merged = [];
+        let current = { start: blocks[0].start, end: blocks[0].end, allDay: blocks[0].allDay };
+        for (let i = 1; i < blocks.length; i++) {
+            const b = blocks[i];
+            if (b.start.getTime() <= current.end.getTime()) {
+                if (b.end.getTime() > current.end.getTime()) current.end = b.end;
+                if (!b.allDay) current.allDay = false;
+            } else {
+                merged.push(current);
+                current = { start: b.start, end: b.end, allDay: b.allDay };
+            }
+        }
+        merged.push(current);
+        return merged;
+    }
+
+    /** Sammelt alle Termine aller geladenen Kalender im Zeitraum [fromStr, toStr] ("YYYY-MM-DD"), löst RRULEs auf und fasst überlappende/aneinanderstoßende Termine zusammen */
     function collectOutputEvents(fromStr, toStr) {
         const rangeStart = startOfDay(parseDateInput(fromStr));
         const rangeEnd = new Date(addDays(startOfDay(parseDateInput(toStr)), 1).getTime() - 1); // Ende des "Bis"-Tages, 23:59:59.999
-        const output = [];
+        const blocks = [];
 
         calendars.forEach(cal => {
             cal.events.forEach(ev => {
@@ -819,13 +844,13 @@
                     occurrences = [{ start: ev.start, end: ev.end }];
                 }
                 occurrences.forEach(occ => {
-                    output.push(buildOutputEvent(occ, ev.allDay));
+                    blocks.push({ start: occ.start, end: occ.end, allDay: ev.allDay });
                 });
             });
         });
 
-        output.sort((a, b) => a.start.getTime() - b.start.getTime());
-        return output;
+        blocks.sort((a, b) => a.start.getTime() - b.start.getTime());
+        return mergeOverlappingEvents(blocks).map(b => buildOutputEvent(b, b.allDay));
     }
 
     // ── ICS-AUSGABE ───────────────────────────────────────────────────────

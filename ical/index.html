@@ -340,9 +340,8 @@
             flex-wrap: wrap;
         }
 
-        .result-date { font-weight: 700; }
-
-        .result-time {
+        .result-date {
+            font-weight: 700;
             font-family: monospace;
             font-size: 15px;
         }
@@ -443,6 +442,81 @@
         .csv-paste .btn-copy {
             margin-top: 10px;
         }
+
+        /* ── Heatmap ── */
+        .heatmap-section {
+            margin-top: 22px;
+            padding-top: 18px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .heatmap-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-top: 12px;
+        }
+
+        .heatmap-month {
+            flex: 0 0 auto;
+        }
+
+        .heatmap-month-title {
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .heatmap-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 26px);
+            gap: 3px;
+        }
+
+        .heatmap-weekday {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-align: center;
+            padding-bottom: 2px;
+        }
+
+        .heatmap-cell {
+            width: 26px;
+            height: 26px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: var(--text-muted);
+            background: var(--highlight-bg);
+            border: 1px solid var(--border-color);
+        }
+
+        .heatmap-cell-empty {
+            border: none;
+            background: transparent;
+        }
+
+        .heatmap-level-1 { background: #9ec5f4; color: #1a4971; border-color: #86b6ef; }
+        .heatmap-level-2 { background: #5598e7; color: #fff; border-color: #3987e5; }
+        .heatmap-level-3 { background: #2a78d6; color: #fff; border-color: #256abf; }
+        .heatmap-level-4 { background: #184f95; color: #fff; border-color: #104281; }
+
+        .heatmap-legend {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 12px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .heatmap-legend .heatmap-cell {
+            width: 16px;
+            height: 16px;
+        }
     </style>
 </head>
 <body>
@@ -481,8 +555,12 @@
                 <input type="time" id="startTimeInput" value="09:00">
             </div>
             <div class="input-group">
-                <label for="durationInput">Dauer</label>
-                <input type="text" id="durationInput" class="duration-input" value="1:00" placeholder="H:MM" maxlength="6">
+                <label for="durationDaysInput">Dauer (Tage)</label>
+                <input type="number" id="durationDaysInput" min="0" max="365" value="0">
+            </div>
+            <div class="input-group">
+                <label for="durationInput">Dauer (Std:Min)</label>
+                <input type="text" id="durationInput" class="duration-input" value="1:00" placeholder="H:MM" maxlength="5">
             </div>
             <div class="input-group">
                 <label for="startDateInput">Startdatum</label>
@@ -490,10 +568,10 @@
             </div>
             <div class="input-group">
                 <label for="maxSuggestionsInput">Max. Vorschläge</label>
-                <input type="number" id="maxSuggestionsInput" min="1" max="200" value="5">
+                <input type="number" id="maxSuggestionsInput" min="1" max="50" value="5">
             </div>
         </div>
-        <p class="dropzone-hint">Sucht ab „Startdatum“/„Startzeit ab“ einen komplett freien Block von „Dauer“ – auch tagesübergreifend (z.&nbsp;B. 3 Tage = 72:00).</p>
+        <p class="dropzone-hint">Sucht ab „Startdatum“/„Startzeit ab“ einen komplett freien Block der angegebenen Dauer (Tage + Std:Min) – auch tagesübergreifend.</p>
 
         <div class="weekday-group">
             <label>Wochentage</label>
@@ -520,10 +598,25 @@
         </div>
         <div id="resultsSummary" class="results-summary"></div>
         <ul id="resultsList" class="results-list"></ul>
+
+        <div id="heatmapSection" class="heatmap-section" style="display:none">
+            <h2>Heatmap</h2>
+            <p class="dropzone-hint">Zeigt den Zeitraum, in dem Treffer liegen – je dunkler, desto mehr Treffer an diesem Tag.</p>
+            <div id="heatmapContainer" class="heatmap-container"></div>
+            <div class="heatmap-legend">
+                <span>Weniger</span>
+                <span class="heatmap-cell"></span>
+                <span class="heatmap-cell heatmap-level-1"></span>
+                <span class="heatmap-cell heatmap-level-2"></span>
+                <span class="heatmap-cell heatmap-level-3"></span>
+                <span class="heatmap-cell heatmap-level-4"></span>
+                <span>Mehr</span>
+            </div>
+        </div>
     </section>
 
     <p class="footer-note">Hinweis: Zeitzonen in den iCal-Dateien werden vereinfacht als lokale Zeit interpretiert. Sehr komplexe Wiederholungsregeln (z.&nbsp;B. BYSETPOS) werden nicht vollständig unterstützt.</p>
-    <p class="footer-note">Version 1.5</p>
+    <p class="footer-note">Version 1.6</p>
 </div>
 
 <script>
@@ -538,6 +631,7 @@
         fileInput:           document.getElementById('fileInput'),
         fileList:            document.getElementById('fileList'),
         startTimeInput:      document.getElementById('startTimeInput'),
+        durationDaysInput:   document.getElementById('durationDaysInput'),
         durationInput:       document.getElementById('durationInput'),
         startDateInput:      document.getElementById('startDateInput'),
         maxSuggestionsInput: document.getElementById('maxSuggestionsInput'),
@@ -546,6 +640,8 @@
         resultsSection:      document.getElementById('resultsSection'),
         resultsSummary:      document.getElementById('resultsSummary'),
         resultsList:         document.getElementById('resultsList'),
+        heatmapSection:      document.getElementById('heatmapSection'),
+        heatmapContainer:    document.getElementById('heatmapContainer'),
         copyResultsBtn:      document.getElementById('copyResultsBtn'),
         searchSummary:       document.getElementById('searchSummary'),
         csvPasteInput:       document.getElementById('csvPasteInput'),
@@ -557,7 +653,7 @@
     dom.copyResultsBtn.addEventListener('click', copyResultsToClipboard);
 
     // ── LIVE-ZUSAMMENFASSUNG DER SUCHKRITERIEN ───────────────────────────
-    [dom.startTimeInput, dom.durationInput, dom.startDateInput, dom.maxSuggestionsInput]
+    [dom.startTimeInput, dom.durationDaysInput, dom.durationInput, dom.startDateInput, dom.maxSuggestionsInput]
         .forEach(el => el.addEventListener('input', updateSearchSummary));
     document.querySelectorAll('#weekdayCheckboxes input').forEach(cb => cb.addEventListener('change', updateSearchSummary));
 
@@ -1034,8 +1130,8 @@
         }
 
         const startMin = parseTimeToMinutes(dom.startTimeInput.value);
-        const durationMin = parseDuration(dom.durationInput.value);
-        const maxSuggestions = clampInt(parseInt(dom.maxSuggestionsInput.value, 10) || 0, 1, 200);
+        const durationMin = getTotalDurationMinutes();
+        const maxSuggestions = clampInt(parseInt(dom.maxSuggestionsInput.value, 10) || 0, 1, 50);
         const selectedWeekdays = new Set(
             Array.from(document.querySelectorAll('#weekdayCheckboxes input:checked')).map(cb => parseInt(cb.value, 10))
         );
@@ -1104,7 +1200,7 @@
         const meta = {
             calendarNames: calendars.map(getCalendarDisplayName),
             startTime: dom.startTimeInput.value,
-            durationLabel: dom.durationInput.value.trim(),
+            durationMin: durationMin,
             weekdayLabels: weekdayOrder.filter(d => selectedWeekdays.has(d)).map(d => weekdayNames[d]),
             searchStartDate: searchStartDay,
         };
@@ -1126,13 +1222,13 @@
         return merged;
     }
 
-    /** Formatiert einen Vorschlag als Datums-/Zeit-Label; zeigt bei tagesübergreifenden Slots Start- und Enddatum. Da die Dauer fest ist, genügt die Startzeit. */
-    function formatSuggestionRange(s) {
-        const startLabel = `${formatWeekday(s.start)}, ${formatDate(s.start)}`;
-        const dateLabel = isSameDay(s.start, s.end)
-            ? startLabel
-            : `${startLabel} – ${formatWeekday(s.end)}, ${formatDate(s.end)}`;
-        return { dateLabel, timeLabel: formatTime(s.start) };
+    /** Formatiert einen Vorschlag als "Mo. 13.06.26 15:00 - 18:00" (gleicher Tag) bzw. "Mo. 13.06.26 15:00 - Di. 15.06.26 18:00" (Tagwechsel) */
+    function formatResultRange(s) {
+        const startLabel = `${formatWeekdayAbbr(s.start)} ${formatDateShortYear(s.start)} ${formatTime(s.start)}`;
+        if (isSameDay(s.start, s.end)) {
+            return `${startLabel} - ${formatTime(s.end)}`;
+        }
+        return `${startLabel} - ${formatWeekdayAbbr(s.end)} ${formatDateShortYear(s.end)} ${formatTime(s.end)}`;
     }
 
     function renderResults(suggestions, meta) {
@@ -1142,18 +1238,18 @@
         if (suggestions.length === 0) {
             dom.resultsSummary.textContent = 'Keine passenden freien Termine im gewählten Zeitraum gefunden.';
             dom.resultsList.innerHTML = '';
+            renderHeatmap([]);
             return;
         }
         dom.resultsSummary.textContent = `${suggestions.length} freie${suggestions.length === 1 ? 'r' : ''} Termin${suggestions.length === 1 ? '' : 'e'} gefunden.`;
         dom.resultsList.innerHTML = suggestions.map(s => {
             const durMin = Math.round((s.end.getTime() - s.start.getTime()) / 60000);
-            const { dateLabel, timeLabel } = formatSuggestionRange(s);
             return `<li class="result-item">
-                <span class="result-date">${dateLabel}</span>
-                <span class="result-time">${timeLabel} Uhr</span>
-                <span class="result-duration">${formatDuration(durMin)} h</span>
+                <span class="result-date">${formatResultRange(s)}</span>
+                <span class="result-duration">${formatDurationWithDays(durMin)}</span>
             </li>`;
         }).join('');
+        renderHeatmap(suggestions);
     }
 
     /** Baut den kopierbaren Markdown-Text: Suchparameter, berücksichtigte Kalender, Ergebnistabelle */
@@ -1164,7 +1260,7 @@
             `**Kalender:** ${meta.calendarNames.length ? meta.calendarNames.join(', ') : '–'}`,
             `**Startdatum:** ${formatDate(meta.searchStartDate)}`,
             `**Startzeit ab:** ${meta.startTime} Uhr`,
-            `**Dauer:** ${meta.durationLabel} h`,
+            `**Dauer:** ${formatDurationWithDays(meta.durationMin)}`,
             `**Wochentage:** ${meta.weekdayLabels.join(', ')}`,
             '',
         ];
@@ -1173,11 +1269,79 @@
         } else {
             suggestions.forEach(s => {
                 const durMin = Math.round((s.end.getTime() - s.start.getTime()) / 60000);
-                const { dateLabel, timeLabel } = formatSuggestionRange(s);
-                lines.push(`- ${dateLabel}: ${timeLabel} Uhr (${formatDuration(durMin)} h)`);
+                lines.push(`- ${formatResultRange(s)} (${formatDurationWithDays(durMin)})`);
             });
         }
         return lines.join('\n');
+    }
+
+    // ── HEATMAP (Kalenderansicht über den Zeitraum der Treffer) ──────────
+    const monthNames = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+
+    /** Zählt pro Kalendertag, wie viele Treffer diesen Tag berühren (mehrtägige Treffer zählen an jedem berührten Tag) */
+    function buildHeatmapData(suggestions) {
+        const counts = new Map();
+        let minDay = null, maxDay = null;
+        suggestions.forEach(s => {
+            const lastDay = startOfDay(new Date(s.end.getTime() - 1));
+            let d = startOfDay(s.start);
+            while (d.getTime() <= lastDay.getTime()) {
+                const key = toDateInputValue(d);
+                counts.set(key, (counts.get(key) || 0) + 1);
+                if (!minDay || d.getTime() < minDay.getTime()) minDay = d;
+                if (!maxDay || d.getTime() > maxDay.getTime()) maxDay = d;
+                d = addDays(d, 1);
+            }
+        });
+        return { counts, minDay, maxDay };
+    }
+
+    /** Rendert eine Monatstabelle (Mo-So) mit eingefärbten Tagen entsprechend der Trefferzahl */
+    function renderMonthGrid(monthStart, counts, maxCount) {
+        const year = monthStart.getFullYear(), month = monthStart.getMonth();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const leadingBlanks = mondayOffset(new Date(year, month, 1).getDay());
+
+        let cellsHtml = '';
+        for (let i = 0; i < leadingBlanks; i++) cellsHtml += `<div class="heatmap-cell heatmap-cell-empty"></div>`;
+        for (let day = 1; day <= daysInMonth; day++) {
+            const d = new Date(year, month, day);
+            const count = counts.get(toDateInputValue(d)) || 0;
+            const level = count === 0 ? 0 : Math.min(4, Math.max(1, Math.ceil((count / maxCount) * 4)));
+            cellsHtml += `<div class="heatmap-cell${level ? ' heatmap-level-' + level : ''}" title="${formatDate(d)}: ${count} Treffer">${day}</div>`;
+        }
+
+        return `<div class="heatmap-month">
+            <div class="heatmap-month-title">${monthNames[month]} ${year}</div>
+            <div class="heatmap-grid">
+                <div class="heatmap-weekday">Mo</div><div class="heatmap-weekday">Di</div><div class="heatmap-weekday">Mi</div>
+                <div class="heatmap-weekday">Do</div><div class="heatmap-weekday">Fr</div><div class="heatmap-weekday">Sa</div>
+                <div class="heatmap-weekday">So</div>
+                ${cellsHtml}
+            </div>
+        </div>`;
+    }
+
+    /** Zeigt eine monatsweise Heatmap-Kalenderansicht für den Zeitraum, in dem Treffer liegen */
+    function renderHeatmap(suggestions) {
+        if (!suggestions.length) {
+            dom.heatmapSection.style.display = 'none';
+            dom.heatmapContainer.innerHTML = '';
+            return;
+        }
+        const { counts, minDay, maxDay } = buildHeatmapData(suggestions);
+        const maxCount = Math.max(...counts.values());
+
+        const months = [];
+        let cursor = new Date(minDay.getFullYear(), minDay.getMonth(), 1);
+        const endCursor = new Date(maxDay.getFullYear(), maxDay.getMonth(), 1);
+        while (cursor.getTime() <= endCursor.getTime()) {
+            months.push(cursor);
+            cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+        }
+
+        dom.heatmapContainer.innerHTML = months.map(m => renderMonthGrid(m, counts, maxCount)).join('');
+        dom.heatmapSection.style.display = '';
     }
 
     function copyResultsToClipboard() {
@@ -1212,8 +1376,9 @@
     function minDate(a, b) { return a < b ? a : b; }
 
     const weekdayNames = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
-    function formatWeekday(d) { return weekdayNames[d.getDay()]; }
+    function formatWeekdayAbbr(d) { return `${weekdayNames[d.getDay()]}.`; }
     function formatDate(d) { return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`; }
+    function formatDateShortYear(d) { return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getFullYear()).slice(-2)}`; }
     function formatTime(d) { return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
 
     /** Date → "YYYY-MM-DD" für <input type="date"> */
@@ -1246,6 +1411,12 @@
         return isNaN(hours) ? 0 : Math.round(hours * 60);
     }
 
+    /** Kombiniert "Dauer (Tage)" und "Dauer (Std:Min)" zu einer Gesamtdauer in Minuten */
+    function getTotalDurationMinutes() {
+        const days = Math.max(0, parseInt(dom.durationDaysInput.value, 10) || 0);
+        return days * 24 * 60 + parseDuration(dom.durationInput.value);
+    }
+
     /** Minuten → "H:MM" Dauer-String */
     function formatDuration(totalMin) {
         totalMin = Math.round(totalMin);
@@ -1266,8 +1437,8 @@
     /** Aktualisiert die Live-Zusammenfassung der Suchkriterien über dem Suchen-Knopf */
     function updateSearchSummary() {
         const startTime = dom.startTimeInput.value || '–';
-        const durationMin = parseDuration(dom.durationInput.value);
-        const maxSuggestions = clampInt(parseInt(dom.maxSuggestionsInput.value, 10) || 0, 1, 200);
+        const durationMin = getTotalDurationMinutes();
+        const maxSuggestions = clampInt(parseInt(dom.maxSuggestionsInput.value, 10) || 0, 1, 50);
         const weekdayOrder = [1, 2, 3, 4, 5, 6, 0]; // Mo…So
         const selectedWeekdays = new Set(
             Array.from(document.querySelectorAll('#weekdayCheckboxes input:checked')).map(cb => parseInt(cb.value, 10))

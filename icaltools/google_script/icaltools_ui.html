@@ -4,49 +4,304 @@
   <base target="_top">
   <meta charset="UTF-8">
   <title>iCal Tools – Google Kalender</title>
+  <style>
+    :root {
+      --bg: #f5f6f8;
+      --card-bg: #ffffff;
+      --text: #1c1e21;
+      --muted: #6b7280;
+      --border: #e3e5e8;
+      --accent: #3b5bdb;
+      --accent-hover: #2f4bc4;
+      --accent-contrast: #ffffff;
+      --danger: #d33;
+      --radius: 10px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #17181a;
+        --card-bg: #212225;
+        --text: #e7e8ea;
+        --muted: #9aa0a6;
+        --border: #35373b;
+        --accent: #6d87f0;
+        --accent-hover: #8298f3;
+        --accent-contrast: #14162b;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .page {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 20px 16px 32px;
+    }
+
+    .page-header h1 {
+      font-size: 19px;
+      font-weight: 600;
+      margin: 0 0 6px;
+    }
+
+    .subtitle {
+      margin: 0 0 12px;
+      color: var(--muted);
+    }
+
+    .info-box {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      margin-bottom: 16px;
+      color: var(--muted);
+      font-size: 12.5px;
+    }
+    .info-box p { margin: 4px 0; }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+
+    .card h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14.5px;
+      font-weight: 600;
+      margin: 0 0 10px;
+    }
+
+    .step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: var(--accent-contrast);
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .hint, .muted {
+      color: var(--muted);
+      font-size: 12.5px;
+      margin: 0 0 10px;
+    }
+
+    .calendar-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .calendar-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .calendar-item:hover {
+      background: var(--bg);
+    }
+    .calendar-item input {
+      accent-color: var(--accent);
+      width: 15px;
+      height: 15px;
+      flex-shrink: 0;
+    }
+    .calendar-item span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .date-row {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .field label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    input[type="date"] {
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 6px 8px;
+      font-size: 13.5px;
+      font-family: inherit;
+    }
+    input[type="date"]:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      appearance: none;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      padding: 8px 14px;
+      font-size: 13.5px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s ease, opacity 0.15s ease;
+    }
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--accent-contrast);
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+
+    .btn-secondary {
+      background: var(--bg);
+      color: var(--text);
+      border-color: var(--border);
+    }
+    .btn-secondary:hover:not(:disabled) {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .error-text {
+      color: var(--danger);
+      font-size: 12.5px;
+      margin: 8px 0 0;
+      min-height: 1em;
+    }
+
+    .summary {
+      color: var(--muted);
+      font-size: 13px;
+      margin: 0 0 10px;
+    }
+
+    textarea#csvPreview {
+      width: 100%;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 8px 10px;
+      font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 12px;
+      resize: vertical;
+      margin-top: 4px;
+    }
+
+    .note {
+      color: var(--muted);
+      font-size: 11.5px;
+      margin: 16px 2px 0;
+      line-height: 1.6;
+    }
+
+    a {
+      color: var(--accent);
+    }
+  </style>
 </head>
 <body>
 
-<h1>iCal Tools – Google Kalender</h1>
-<p>Wählt einen oder mehrere eigene Google-Kalender aus und gibt die Termine im gewünschten Zeitraum als .ics-Datei oder CSV-Text aus.</p>
-<p>Alle privaten Informationen außer Start- und Endzeit werden aus allen Terminen entfernt (Titel, Beschreibung, Ort, Organisator:in, Teilnehmer:innen, Kategorien, Link/URL). Die Kalender-ID (UID) wird immer durch eine zufällige ID ersetzt.</p>
-<p>Das Skript läuft mit den Rechten der ausführenden Person und liest nur deren eigene Google-Kalender. Es werden keine Daten an Dritte übertragen.</p>
+<div class="page">
 
-<h2>1. Kalender auswählen</h2>
-<p>Standardmäßig ist kein Kalender ausgewählt.</p>
-<div id="calendarList">
-  <p>Kalender werden geladen …</p>
+  <header class="page-header">
+    <h1>iCal Tools – Google Kalender</h1>
+    <p class="subtitle">Wählt einen oder mehrere eigene Google-Kalender aus und gibt die Termine im gewünschten Zeitraum als .ics-Datei oder CSV-Text aus.</p>
+  </header>
+
+  <div class="info-box">
+    <p>Alle privaten Informationen außer Start- und Endzeit werden aus allen Terminen entfernt (Titel, Beschreibung, Ort, Organisator:in, Teilnehmer:innen, Kategorien, Link/URL). Die Kalender-ID (UID) wird immer durch eine zufällige ID ersetzt.</p>
+    <p>Überlappende oder direkt aneinanderstoßende Termine (auch über mehrere ausgewählte Kalender hinweg) werden zu einem einzigen Zeitblock zusammengefasst, damit sich aus Anzahl oder Grenzen einzelner Termine nichts über den ursprünglichen Kalender ablesen lässt.</p>
+    <p>Das Skript läuft mit den Rechten der ausführenden Person und liest nur deren eigene Google-Kalender. Es werden keine Daten an Dritte übertragen.</p>
+  </div>
+
+  <section class="card">
+    <h2><span class="step-num">1</span> Kalender auswählen</h2>
+    <p class="hint">Standardmäßig ist kein Kalender ausgewählt.</p>
+    <div id="calendarList" class="calendar-list">
+      <p class="muted">Kalender werden geladen …</p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><span class="step-num">2</span> Zeitraum der Ausgabe</h2>
+    <div class="date-row">
+      <div class="field">
+        <label for="vonInput">Von</label>
+        <input type="date" id="vonInput">
+      </div>
+      <div class="field">
+        <label for="bisInput">Bis</label>
+        <input type="date" id="bisInput">
+      </div>
+    </div>
+    <div class="actions">
+      <button id="processBtn" type="button" class="btn btn-primary">Termine verarbeiten</button>
+    </div>
+    <p id="processError" class="error-text"></p>
+  </section>
+
+  <section class="card" id="resultsSection">
+    <h2><span class="step-num">3</span> Ergebnis</h2>
+    <p id="resultsSummary" class="summary"></p>
+    <div class="actions">
+      <button id="downloadIcsBtn" type="button" class="btn btn-secondary">Als .ics herunterladen</button>
+      <button id="copyCsvBtn" type="button" class="btn btn-secondary">CSV kopieren</button>
+    </div>
+    <textarea id="csvPreview" readonly rows="12"></textarea>
+    <p class="hint" style="margin-top: 10px;">Mit der heruntergeladenen .ics-Datei (z. B. zusammen mit denen anderer Personen) können auf <a href="https://klmpfh.github.io/ical/" target="_blank" rel="noopener">klmpfh.github.io/ical</a> freie Termine gesucht werden.</p>
+  </section>
+
+  <p class="note">Hinweis: Titel, Beschreibung, Ort, Organisator:in, Teilnehmer:innen, Kategorien/Tags, Link/URL und Erinnerungen (Alarme) werden nie ausgelesen und daher immer weggelassen – übrig bleiben ausschließlich Start- und Endzeit. Zeitzonen werden in der Zeitzone des Skript-Projekts interpretiert.</p>
+
 </div>
-
-<h2>2. Zeitraum der Ausgabe</h2>
-<table>
-  <tr>
-    <td><label for="vonInput">Von</label></td>
-    <td><input type="date" id="vonInput"></td>
-  </tr>
-  <tr>
-    <td><label for="bisInput">Bis</label></td>
-    <td><input type="date" id="bisInput"></td>
-  </tr>
-</table>
-
-<p><button id="processBtn" type="button">Termine verarbeiten</button></p>
-<p id="processError"></p>
-
-<h2>3. Ergebnis</h2>
-<div id="resultsSection">
-  <p id="resultsSummary"></p>
-  <p>
-    <button id="downloadIcsBtn" type="button">Als .ics herunterladen</button>
-    <button id="copyCsvBtn" type="button">CSV kopieren</button>
-  </p>
-  <p>
-    <textarea id="csvPreview" readonly rows="16" cols="100"></textarea>
-  </p>
-</div>
-
-<hr>
-<p><small>Hinweis: Titel, Beschreibung, Ort, Organisator:in, Teilnehmer:innen, Kategorien/Tags, Link/URL und Erinnerungen (Alarme) werden nie ausgelesen und daher immer weggelassen – übrig bleiben ausschließlich Start- und Endzeit. Zeitzonen werden in der Zeitzone des Skript-Projekts interpretiert.</small></p>
 
 <script>
   var lastIcsText = '';
@@ -76,19 +331,19 @@
   function renderCalendarList(calendars) {
     var container = document.getElementById('calendarList');
     if (!calendars.length) {
-      container.innerHTML = '<p>Keine Kalender gefunden.</p>';
+      container.innerHTML = '<p class="muted">Keine Kalender gefunden.</p>';
       return;
     }
     container.innerHTML = calendars.map(function (cal) {
-      return '<p><label>' +
+      return '<label class="calendar-item">' +
         '<input type="checkbox" class="calendarCheckbox" value="' + escapeHtml(cal.id) + '">' +
-        ' ' + escapeHtml(cal.name) +
-        '</label></p>';
+        '<span>' + escapeHtml(cal.name) + '</span>' +
+        '</label>';
     }).join('');
   }
 
   google.script.run.withSuccessHandler(renderCalendarList).withFailureHandler(function (err) {
-    document.getElementById('calendarList').innerHTML = '<p>Fehler beim Laden der Kalender: ' + escapeHtml(err.message) + '</p>';
+    document.getElementById('calendarList').innerHTML = '<p class="muted">Fehler beim Laden der Kalender: ' + escapeHtml(err.message) + '</p>';
   }).listCalendars();
 
   document.getElementById('processBtn').addEventListener('click', function () {

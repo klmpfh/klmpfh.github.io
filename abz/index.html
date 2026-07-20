@@ -339,7 +339,26 @@
             font-size: 13px;
             color: #744210;
             font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
         }
+
+        .btn-add-missing-pause {
+            background-color: var(--warning);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 5px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: opacity 0.2s;
+        }
+        .btn-add-missing-pause:hover { opacity: 0.85; }
 
         /* ── Timeline ── */
         .timeline-container {
@@ -533,7 +552,7 @@
         </div>
     </div>
 
-    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden. Letzte Aktualisierung: <span id="lastUpdate">–</span> · v<span id="versionNumber">6.7</span></div>
+    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden. Letzte Aktualisierung: <span id="lastUpdate">–</span> · v<span id="versionNumber">6.8</span></div>
 </div>
 
 <script>
@@ -906,25 +925,47 @@
     }
 
     // ── WARNUNGEN ─────────────────────────────────────────────────────────
-    function renderWarnings(netWorkMin, elapsedPauseMin) {
+    /**
+     * warnMarkersAll liefert je Schwelle auch die Uhrzeit (clockMin), zu der die Pflichtpause fällig
+     * wurde – darüber lässt sich die fehlende Pause per Knopfdruck exakt ab diesem Zeitpunkt eintragen.
+     */
+    function renderWarnings(netWorkMin, elapsedPauseMin, warnMarkersAll) {
         const container = dom.legalWarnings;
         const warnings  = [];
 
-        if (netWorkMin > 360 && elapsedPauseMin < 30) {
-            const missing = Math.ceil(30 - elapsedPauseMin);
-            warnings.push(`&#9888; Bei über 6h Arbeitszeit sind mindestens 30 min Pause vorgeschrieben. Es fehlen noch <strong>${missing} min</strong>.`);
-        }
-        if (netWorkMin > 540 && elapsedPauseMin < 45) {
-            const missing = Math.ceil(45 - elapsedPauseMin);
-            warnings.push(`&#9888; Bei über 9h Arbeitszeit sind mindestens 45 min Pause vorgeschrieben. Es fehlen noch <strong>${missing} min</strong>.`);
-        }
+        warnMarkersAll.forEach(w => {
+            if (!w.active || w.requiredPauseMin === null) return;
+            const missing = Math.ceil(w.requiredPauseMin - elapsedPauseMin);
+            warnings.push(
+                `<div class="warning-banner">`
+                + `<span>&#9888; Bei über ${w.label} Arbeitszeit sind mindestens ${w.requiredPauseMin} min Pause vorgeschrieben. `
+                + `Es fehlen noch <strong>${missing} min</strong>.</span>`
+                + `<button type="button" class="btn-add-missing-pause" onclick="addMissingPause(${w.clockMin}, ${missing})">Pause automatisch eintragen</button>`
+                + `</div>`
+            );
+        });
+
         if (netWorkMin > 600) {
-            warnings.push(`&#9888; Die gesetzliche Höchstarbeitszeit von 10h pro Tag ist überschritten.`);
+            warnings.push(`<div class="warning-banner"><span>&#9888; Die gesetzliche Höchstarbeitszeit von 10h pro Tag ist überschritten.</span></div>`);
         }
 
-        container.innerHTML = warnings
-            .map(w => `<div class="warning-banner">${w}</div>`)
-            .join('');
+        container.innerHTML = warnings.join('');
+    }
+
+    /** Trägt die fehlende Pflichtpause automatisch ein, beginnend zum Zeitpunkt, zu dem die Warnung entstand */
+    function addMissingPause(startClockMin, missingMin) {
+        if (!(missingMin > 0)) return;
+
+        const fromMin = Math.round(startClockMin);
+        const toMin   = fromMin + Math.round(missingMin);
+
+        if (findOverlappingPauseIndex(fromMin, toMin, null) !== -1) {
+            alert('Die automatisch erzeugte Pause würde sich mit einer bereits eingetragenen Pause überschneiden. Bitte manuell eintragen.');
+            return;
+        }
+
+        pauses.push({ startMin: fromMin, durationMin: toMin - fromMin });
+        updateTracker();
     }
 
     // ── ZIELZEIT-BERECHNUNG ──────────────────────────────────────────────
@@ -1064,7 +1105,7 @@
         // Warnschwellen (6h/9h/10h) als Uhrzeit-Marker für den Zeitstrahl, mit Bezug zum "Jetzt"-Zeiger.
         // Pflichtpausen-Schwellen (6h/9h) werden ausgeblendet, sobald bis zu diesem Zeitpunkt bereits
         // genug Pause genommen wurde/geplant ist – die Regel würde zu diesem Zeitpunkt dann nicht mehr greifen.
-        const warnMarkers = [
+        const warnMarkersAll = [
             { thresholdMin: 360, label: '6h', requiredPauseMin: 30,   active: netWorkMin > 360 && elapsedPauseMin < 30 },
             { thresholdMin: 540, label: '9h', requiredPauseMin: 45,   active: netWorkMin > 540 && elapsedPauseMin < 45 },
             { thresholdMin: 600, label: '10h', requiredPauseMin: null, active: netWorkMin > 600 }
@@ -1072,8 +1113,9 @@
             const clockMin              = computeClockTimeForNetMinutes(startMin, w.thresholdMin, pauseIntervals);
             const pauseElapsedAtMarker  = clockMin - startMin - w.thresholdMin;
             const alreadySatisfied      = w.requiredPauseMin !== null && pauseElapsedAtMarker >= w.requiredPauseMin;
-            return { clockMin, label: w.label, active: w.active, visible: !alreadySatisfied };
-        }).filter(w => w.visible);
+            return { clockMin, label: w.label, requiredPauseMin: w.requiredPauseMin, active: w.active, visible: !alreadySatisfied };
+        });
+        const warnMarkers = warnMarkersAll.filter(w => w.visible);
 
         // Dynamische Länge der Zeitachse: wächst mit, damit verstrichene Zeit, Zielzeit, die 10h-Grenze
         // und geplante Pausen immer sichtbar sind, statt bei einer fixen Länge abgeschnitten zu werden.
@@ -1086,7 +1128,7 @@
         axisMaxDuration = Math.ceil((axisMaxDuration + 15) / 60) * 60; // aufrunden + etwas Platz am rechten Rand
 
         renderPauseList(currentMinOfDay, effectivePauses, runningPauseMin);
-        renderWarnings(netWorkMin, elapsedPauseMin);
+        renderWarnings(netWorkMin, elapsedPauseMin, warnMarkersAll);
         drawTimeline(elapsedMin, startMin, currentMinOfDay, runningPauseMin, targetEndMin, warnMarkers, effectivePauses, axisMaxDuration);
         updateUrlParams();
 
