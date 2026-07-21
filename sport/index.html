@@ -644,6 +644,39 @@
             }
         }
 
+        /* --- Rückfrage-Dialog (z. B. Sport-Modus vorzeitig beenden) --- */
+        .confirm-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 10001;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .confirm-overlay[hidden] {
+            display: none;
+        }
+
+        .confirm-box {
+            background: var(--theme-surface);
+            border-radius: var(--theme-radius-lg);
+            box-shadow: var(--theme-shadow);
+            padding: 26px;
+            max-width: 320px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .confirm-text {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--theme-text-strong);
+            margin-bottom: 18px;
+        }
+
         /* --- Übungsdatenbank-Overlay --- */
         .db-overlay {
             position: fixed;
@@ -865,6 +898,19 @@
         <div class="sport-body" id="sportBody"></div>
     </div>
 
+    <!-- Rückfrage vor dem vorzeitigen Beenden des Sport-Modus (Schließen-Button
+         oder Esc), damit ein laufendes Training nicht versehentlich abgebrochen
+         wird. -->
+    <div class="confirm-overlay" id="sportExitConfirm" hidden>
+        <div class="confirm-box">
+            <p class="confirm-text">Sport-Modus wirklich beenden?</p>
+            <div class="sport-controls">
+                <button type="button" class="sport-btn sport-btn-secondary" id="sportExitConfirmNoBtn">Nein</button>
+                <button type="button" class="sport-btn sport-btn-primary" id="sportExitConfirmYesBtn">Ja</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Übungsdatenbank: reine Referenzansicht aller hinterlegten Übungen,
          unabhängig von der aktuellen Filterung, gruppiert nach Muskelbereich. -->
     <div class="db-overlay" id="dbOverlay" hidden>
@@ -1080,6 +1126,9 @@
         var sportStepCounterEl = document.getElementById("sportStepCounter");
         var sportElapsedTimerEl = document.getElementById("sportElapsedTimer");
         var sportExitBtn = document.getElementById("sportExitBtn");
+        var sportExitConfirmEl = document.getElementById("sportExitConfirm");
+        var sportExitConfirmYesBtn = document.getElementById("sportExitConfirmYesBtn");
+        var sportExitConfirmNoBtn = document.getElementById("sportExitConfirmNoBtn");
 
         var currentWorkout = null; // { intensity, cfg, exercises: [...], warmup: [...], aufwaermenEnabled, cooldownEnabled }
         var lastSignature = "";    // Namen der zuletzt generierten Übungen, um Duplikate zu vermeiden
@@ -1933,7 +1982,7 @@
 
         function handleSportKeydown(e) {
             if (e.key === "Escape") {
-                exitSportMode();
+                requestExitSportMode();
                 return;
             }
             if (e.code === "Space" || e.key === " ") {
@@ -1981,6 +2030,17 @@
         }
         window.exitSportMode = exitSportMode;
 
+        // Zeigt vor dem vorzeitigen Beenden (Schließen-Button oder Esc) eine
+        // Ja/Nein-Rückfrage, damit ein laufendes Training nicht versehentlich
+        // abgebrochen wird.
+        function requestExitSportMode() {
+            sportExitConfirmEl.hidden = false;
+        }
+
+        function hideSportExitConfirm() {
+            sportExitConfirmEl.hidden = true;
+        }
+
         /* =====================================================================
          * Event-Listener & Initialisierung
          * ===================================================================== */
@@ -2013,7 +2073,15 @@
 
         generateBtn.addEventListener("click", generateWorkout);
         sportModeBtn.addEventListener("click", enterSportMode);
-        sportExitBtn.addEventListener("click", exitSportMode);
+        sportExitBtn.addEventListener("click", requestExitSportMode);
+        sportExitConfirmYesBtn.addEventListener("click", function () {
+            hideSportExitConfirm();
+            exitSportMode();
+        });
+        sportExitConfirmNoBtn.addEventListener("click", hideSportExitConfirm);
+        sportExitConfirmEl.addEventListener("click", function (e) {
+            if (e.target === sportExitConfirmEl) hideSportExitConfirm();
+        });
         dbShowBtn.addEventListener("click", showDatabase);
         dbExitBtn.addEventListener("click", hideDatabase);
 
