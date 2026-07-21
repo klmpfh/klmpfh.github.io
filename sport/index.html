@@ -1486,15 +1486,16 @@
         }
 
         function playCompletionBeep() {
-            playTone(1040, 80, 1);
-            setTimeout(function () { playTone(880, 80, 1); }, 100);
-            setTimeout(function () { playTone(880, 80, 1); }, 200);
-            setTimeout(function () { playTone(880, 80, 1); }, 300);
+            playTone(800, 80, 1);
+            setTimeout(function () { playTone(800, 80, 1); }, 100);
+            setTimeout(function () { playTone(800, 80, 1); }, 200);
+            setTimeout(function () { playTone(800, 80, 1); }, 300);
+            setTimeout(function () { playTone(800, 80, 1); }, 400);
         }
 
         function playTestBeep() {
             ensureAudioContext();
-            playTone(1040, 400, 1);
+            playTone(800, 400, 1);
         }
 
         function vibrate(pattern) {
@@ -1757,7 +1758,7 @@
 
         function updateTimerButtonLabel() {
             var btn = document.getElementById("sportTimerBtn");
-            if (btn) btn.textContent = sportState.running ? "Pause" : "Start";
+            if (btn) btn.textContent = sportState.running ? "Anhalten" : "Weiter";
         }
 
         function sportTick() {
