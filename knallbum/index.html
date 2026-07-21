@@ -7,32 +7,27 @@
 <title>Knall-Bumm</title>
 <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../assets/css/reset.css">
+<link rel="stylesheet" href="../assets/css/theme.css">
 <style>
     :root {
-        --bg-color: #16121a;
-        --container-bg: #211c29;
-        --card-bg: #2a2334;
-        --text-color: #f0eaf7;
-        --text-muted: #a89bb8;
-        --primary: #e0529c;
-        --primary-light: rgba(224, 82, 156, 0.15);
-        --accent: #ffcf4d;
-        --success: #4de0a0;
-        --success-light: rgba(77, 224, 160, 0.12);
-        --danger: #ff6b6b;
-        --danger-light: rgba(255, 107, 107, 0.12);
-        --border-color: #3a3145;
-        --code-bg: #17131d;
-    }
-
-    * {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        --bg-color: var(--theme-bg);
+        --container-bg: var(--theme-surface);
+        --card-bg: var(--theme-surface-muted);
+        --text-color: var(--theme-text);
+        --text-muted: var(--theme-text-muted);
+        --primary: var(--theme-accent);
+        --primary-light: var(--theme-accent-soft);
+        --accent: var(--theme-warning);
+        --success: var(--theme-success);
+        --success-light: var(--theme-success-soft);
+        --danger: var(--theme-danger);
+        --danger-light: var(--theme-danger-soft);
+        --border-color: var(--theme-border);
+        --code-bg: var(--theme-gray-100);
     }
 
     body {
-        background: radial-gradient(circle at top, #241d2c 0%, var(--bg-color) 60%);
-        color: var(--text-color);
-        padding: 30px 15px 60px;
+        padding: calc(var(--theme-nav-height) + 30px) 15px 60px;
         display: flex;
         justify-content: center;
         min-height: 100vh;
@@ -54,13 +49,6 @@
         letter-spacing: 0.5px;
     }
 
-    header h1 span {
-        background: linear-gradient(90deg, var(--primary), var(--accent));
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-    }
-
     header p {
         color: var(--text-muted);
         font-size: 13px;
@@ -70,10 +58,11 @@
     .panel {
         background: var(--container-bg);
         border: 1px solid var(--border-color);
+        border-top: 3px solid var(--primary);
         border-radius: 12px;
         padding: 20px;
         margin-bottom: 18px;
-        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+        box-shadow: var(--theme-shadow-sm);
     }
 
     label.field-label {
@@ -136,7 +125,7 @@
     }
 
     .field input::placeholder {
-        color: #5a4f68;
+        color: var(--theme-gray-400);
     }
 
     .field input:focus {
@@ -314,6 +303,7 @@
 </style>
 </head>
 <body>
+<script src="../assets/js/nav.js"></script>
 
 <div class="container">
     <header>

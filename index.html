@@ -8,31 +8,31 @@
     <title>klmpfh</title>
     <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="assets/css/reset.css">
+    <link rel="stylesheet" href="assets/css/theme.css">
     <style>
         body {
-            font-family: 'Courier New', Courier, monospace;
-            background-color: var(--site-bg);
-            color: var(--site-text);
             min-height: 100vh;
-            padding: 60px 24px;
+            padding: calc(var(--theme-nav-height) + 48px) 24px 60px;
             display: flex;
             flex-direction: column;
             align-items: center;
         }
 
         header {
-            margin-bottom: 48px;
+            margin-bottom: 40px;
             text-align: center;
         }
 
         header h1 {
-            font-size: 2.1rem;
-            letter-spacing: 6px;
-            text-transform: uppercase;
+            font-size: 2rem;
+            font-weight: 800;
+            letter-spacing: 1px;
         }
 
-        header h1 span {
-            transition: color 1.5s ease;
+        header p {
+            margin-top: 8px;
+            color: var(--theme-text-muted);
+            font-size: 0.9rem;
         }
 
         ul {
@@ -41,31 +41,41 @@
             width: 100%;
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
+            gap: 12px;
         }
 
         li {
-            padding: 14px 16px;
-            border-radius: 8px;
+            background: var(--theme-surface);
+            border: 1px solid var(--theme-border);
+            border-top: 3px solid var(--theme-accent);
+            border-radius: var(--theme-radius);
+            padding: 16px 18px;
+            box-shadow: var(--theme-shadow-sm);
+            transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+        }
+
+        li:hover {
+            border-color: var(--theme-accent-border);
+            border-top-color: var(--theme-accent);
+            box-shadow: var(--theme-shadow);
+            transform: translateY(-2px);
         }
 
         a {
-            color: #eee;
+            color: var(--theme-accent-strong);
             text-decoration: none;
             font-size: 1rem;
-            font-weight: bold;
-            letter-spacing: 1px;
+            font-weight: 700;
         }
 
-        a:hover {
-            color: #fff;
-            text-decoration: underline;
+        li:hover a {
+            color: var(--theme-red-700);
         }
 
         p {
             margin-top: 4px;
-            font-size: 0.78rem;
-            color: #666;
+            font-size: 0.8rem;
+            color: var(--theme-text-muted);
             line-height: 1.4;
         }
 
@@ -80,53 +90,19 @@
         }
 
         footer a {
-            color: #666;
+            color: var(--theme-text-muted);
             font-size: 0.85rem;
         }
     </style>
 </head>
 
 <body>
+    <script src="assets/js/nav.js"></script>
+
     <header>
-        <h1 id="title"></h1>
+        <h1>klmpfh</h1>
+        <p>Sammlung kleiner Web-Tools und Spielereien.</p>
     </header>
-
-    <script>
-        const letters = 'klmpfh'.split('');
-        const h1 = document.getElementById('title');
-
-        const colors = [
-            '#e05', '#e80', '#0b8', '#08e', '#a3e', '#e43',
-            '#0cc', '#c0c', '#cc0', '#f66', '#6f6', '#66f'
-        ];
-
-        function randomColor() {
-            return colors[Math.floor(Math.random() * colors.length)];
-        }
-
-        letters.forEach(l => {
-            const span = document.createElement('span');
-            span.textContent = l;
-            span.style.color = randomColor();
-            h1.appendChild(span);
-
-            function cycle() {
-                const delay = 1400 + Math.random() * 800;
-                setTimeout(() => {
-                    span.style.color = randomColor();
-                    cycle();
-                }, delay);
-            }
-            cycle();
-        });
-
-        document.addEventListener('DOMContentLoaded', () => {
-            document.querySelectorAll('ul li').forEach(li => {
-                const hue = Math.floor(Math.random() * 360);
-                li.style.backgroundColor = `hsl(${hue}, 25%, 15%)`;
-            });
-        });
-    </script>
 
     <ul>
         <li>

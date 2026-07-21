@@ -8,17 +8,36 @@ Kleine Sammlung eigenständiger Web-Tools und Spielereien, statisch gehostet üb
 index.html              Startseite mit Links zu allen Projekten
 <projekt>/index.html    jede Unterseite ist ein eigenständiges Tool
 assets/css/reset.css     gemeinsamer CSS-Reset (box-sizing, margin, padding)
+assets/css/theme.css     gemeinsames Design-System (Farb-/Radius-/Schatten-Tokens)
+assets/js/nav.js                gemeinsames, minimales Kopfmenü (siehe unten)
 assets/js/escape-html.js        gemeinsamer escapeHtml()-Helfer
 assets/js/scenario-generator.js gemeinsame Engine für die W12-Szenario-Generatoren
 ```
 
-Jede Unterseite bleibt ansonsten bewusst eigenständig (eigenes Farbschema, eigenes
-Layout, eigene Logik) – nur wirklich doppelter Code (Reset, escapeHtml, der
-Szenario-Wurf) liegt zentral in `assets/`.
+Alle Seiten teilen sich ein einheitliches, modernes Design (helles Grau, akzentuiert
+durch eine Highlight-Farbe) und ein gemeinsames Kopfmenü. Jede Unterseite bleibt
+technisch trotzdem eigenständig: eigenes `<style>` mit eigenem Layout/eigener Logik,
+das aber die Tokens aus `assets/css/theme.css` referenziert (z. B.
+`--primary: var(--theme-accent);`) statt eigene Farbwerte fest zu verdrahten. Wer
+Farbe, Radius oder Schatten global ändern will, tut das an einer Stelle in
+`theme.css` – nicht auf jeder Seite einzeln.
+
+**Kopfmenü (`assets/js/nav.js`):** Jede Seite bindet es direkt nach `<body>` per
+`<script src="../assets/js/nav.js"></script>` ein. Das Script fügt sich selbst an
+dieser Stelle in die Seite ein (Logo + Menü-Button mit Liste aller Tools) und
+erkennt anhand des Pfads, welche Seite gerade aktiv ist. Neue Unterseiten,
+umbenannte Tools oder ein geändertes Menü-Design werden ausschließlich in `nav.js`
+gepflegt – keine einzelne Seite muss dafür angefasst werden.
+
+**Zufällige Highlight-Farbe & Verlauf:** `nav.js` würfelt bei jedem Seitenaufruf
+sowohl die Richtung des Hintergrund-Verlaufs als auch den Farbton (Hue) der
+Akzentfarbe neu (Sättigung/Helligkeit bleiben über `--theme-accent-hue` in
+`theme.css` konstant) und schreibt beides als CSS-Variablen auf `<html>`.
 
 Alle Links und `<link>`/`<script>`-Pfade sind relativ (kein führender `/`), damit
 die Seiten sowohl über GitHub Pages als auch direkt per Doppelklick (`file://`)
-im Browser funktionieren.
+im Browser funktionieren. `nav.js` bestimmt den Pfad zur Startseite ebenfalls
+relativ, über die eigene `src`-Angabe.
 
 ## Projekte
 

@@ -7,23 +7,22 @@
 <title>Mermaid Editor</title>
 <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../assets/css/reset.css">
+<link rel="stylesheet" href="../assets/css/theme.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/neat.min.css">
 <style>
     :root {
-        --accent: #2dd4bf;
-        --accent-dark: #14b8a6;
-        --panel-bg: #1e1e1e;
-        --console-bg: #141414;
-        --border: #333;
-        --error: #ff6b6b;
+        --accent: var(--theme-accent);
+        --accent-dark: var(--theme-accent-strong);
+        --panel-bg: var(--theme-surface);
+        --console-bg: var(--theme-surface-muted);
+        --border: var(--theme-border);
+        --error: var(--theme-danger);
     }
 
     body {
-        font-family: 'Courier New', Courier, monospace;
-        background: var(--site-bg);
-        color: var(--site-text);
         min-height: 100vh;
+        padding-top: var(--theme-nav-height);
         display: flex;
         flex-direction: column;
     }
@@ -35,6 +34,7 @@
         flex-wrap: wrap;
         gap: 10px;
         padding: 12px 18px;
+        background: var(--panel-bg);
         border-bottom: 1px solid var(--border);
     }
 
@@ -45,7 +45,7 @@
     }
 
     .brand a {
-        color: #888;
+        color: var(--theme-text-muted);
         text-decoration: none;
         font-size: 0.85rem;
     }
@@ -56,8 +56,7 @@
 
     header h1 {
         font-size: 1.1rem;
-        letter-spacing: 1px;
-        color: var(--site-text-strong);
+        letter-spacing: 0.5px;
     }
 
     .controls {
@@ -69,8 +68,8 @@
     select, button {
         font-family: inherit;
         font-size: 0.82rem;
-        background: #262626;
-        color: var(--site-text);
+        background: var(--theme-surface-muted);
+        color: var(--theme-text);
         border: 1px solid var(--border);
         border-radius: 5px;
         padding: 7px 10px;
@@ -79,12 +78,12 @@
 
     select:hover, button:hover:not(:disabled) {
         border-color: var(--accent);
-        color: #fff;
+        color: var(--theme-text-strong);
     }
 
     button.primary {
         background: var(--accent-dark);
-        color: #06251f;
+        color: #fff;
         font-weight: bold;
         border-color: var(--accent-dark);
     }
@@ -124,7 +123,7 @@
 
     .editor-wrap .CodeMirror {
         height: 100%;
-        font-family: 'Courier New', Courier, monospace;
+        font-family: var(--theme-font-mono);
         font-size: 14px;
     }
 
@@ -133,7 +132,8 @@
         flex-shrink: 0;
         background: var(--console-bg);
         border-top: 1px solid var(--border);
-        color: #6bcf6b;
+        color: var(--theme-success);
+        font-family: var(--theme-font-mono);
         font-size: 0.78rem;
         line-height: 1.5;
         padding: 8px 12px;
@@ -147,7 +147,7 @@
     }
 
     .console .placeholder {
-        color: #666;
+        color: var(--theme-text-muted);
     }
 
     .divider {
@@ -161,7 +161,7 @@
     }
 
     .pane-right {
-        background: #f4f4f4;
+        background: var(--theme-gray-150);
     }
 
     .diagram-scroll {
@@ -199,7 +199,7 @@
         letter-spacing: 0.5px;
         text-transform: uppercase;
         font-weight: normal;
-        color: #999;
+        color: var(--theme-text-muted);
         cursor: pointer;
         text-align: left;
     }
@@ -238,8 +238,8 @@
         min-width: 0;
         font-family: inherit;
         font-size: 0.82rem;
-        background: #262626;
-        color: var(--site-text);
+        background: var(--theme-surface-muted);
+        color: var(--theme-text);
         border: 1px solid var(--border);
         border-radius: 5px;
         padding: 6px 8px;
@@ -260,7 +260,7 @@
     }
 
     .storage-list .storage-empty {
-        color: #666;
+        color: var(--theme-text-muted);
         font-size: 0.78rem;
         padding: 4px 2px;
     }
@@ -271,7 +271,7 @@
         gap: 6px;
         padding: 3px;
         border-radius: 4px;
-        background: #262626;
+        background: var(--theme-surface-muted);
     }
 
     .storage-item-name {
@@ -284,7 +284,7 @@
         text-align: left;
         background: none;
         border: none;
-        color: var(--site-text);
+        color: var(--theme-text);
         padding: 4px 6px;
     }
 
@@ -312,7 +312,7 @@
         gap: 12px;
         padding: 8px 12px;
         border-bottom: 1px solid var(--border);
-        background: #1e1e1e;
+        background: var(--panel-bg);
         flex-shrink: 0;
     }
 
@@ -321,7 +321,7 @@
         align-items: center;
         gap: 6px;
         font-size: 0.78rem;
-        color: #999;
+        color: var(--theme-text-muted);
     }
 
     .render-settings select {
@@ -335,7 +335,7 @@
         padding: 2px;
         border: 1px solid var(--border);
         border-radius: 5px;
-        background: #262626;
+        background: var(--theme-surface-muted);
         cursor: pointer;
     }
 
@@ -356,6 +356,7 @@
 </style>
 </head>
 <body>
+<script src="../assets/js/nav.js"></script>
 
 <header>
     <div class="brand">
@@ -524,7 +525,7 @@
 
     const cm = CodeMirror.fromTextArea(document.getElementById('editor'), {
         mode: 'mermaid',
-        theme: 'dracula',
+        theme: 'neat',
         lineNumbers: true,
         lineWrapping: true,
         tabSize: 2,

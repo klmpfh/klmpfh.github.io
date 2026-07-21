@@ -8,11 +8,3 @@
     margin: 0;
     padding: 0;
 }
-
-/* Kernfarben der Startseite (index.html), als Variablen statt an
-   mehreren Stellen fest verdrahteter Hex-Werte. */
-:root {
-    --site-bg: #111;
-    --site-text: #ccc;
-    --site-text-strong: #fff;
-}

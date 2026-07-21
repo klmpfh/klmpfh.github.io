@@ -7,34 +7,28 @@
 <title>Fileshare</title>
 <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../assets/css/reset.css">
+<link rel="stylesheet" href="../assets/css/theme.css">
 <style>
     :root {
-        --bg: #0a090d;
-        --bg-glow: #1a1420;
-        --panel-bg: #15131b;
-        --card-bg: #1c1922;
-        --border-color: #2e2838;
-        --text-color: #f3f1f6;
-        --text-muted: #9d94ab;
-        --primary: #ff7a1a;
-        --primary-strong: #ff9142;
-        --primary-light: rgba(255, 122, 26, 0.14);
-        --primary-glow: rgba(255, 122, 26, 0.55);
-        --accent: #18e3ff;
-        --accent-light: rgba(24, 227, 255, 0.14);
-        --accent-glow: rgba(24, 227, 255, 0.5);
-        --danger: #ff4d6d;
-        --danger-light: rgba(255, 77, 109, 0.14);
-    }
-
-    * {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        --bg: var(--theme-bg);
+        --panel-bg: var(--theme-surface);
+        --card-bg: var(--theme-surface-muted);
+        --border-color: var(--theme-border);
+        --text-color: var(--theme-text);
+        --text-muted: var(--theme-text-muted);
+        --primary: var(--theme-accent);
+        --primary-strong: var(--theme-accent-strong);
+        --primary-light: var(--theme-accent-soft);
+        --primary-glow: rgba(239, 68, 68, 0.35);
+        --accent: var(--theme-warning);
+        --accent-light: var(--theme-warning-soft);
+        --accent-glow: rgba(217, 119, 6, 0.35);
+        --danger: var(--theme-danger);
+        --danger-light: var(--theme-danger-soft);
     }
 
     body {
-        background: radial-gradient(circle at top, var(--bg-glow) 0%, var(--bg) 60%);
-        color: var(--text-color);
-        padding: 30px 15px 60px;
+        padding: calc(var(--theme-nav-height) + 30px) 15px 60px;
         display: flex;
         justify-content: center;
         min-height: 100vh;
@@ -56,13 +50,6 @@
         letter-spacing: 0.5px;
     }
 
-    header h1 span {
-        background: linear-gradient(90deg, var(--primary), var(--accent));
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-    }
-
     header p {
         color: var(--text-muted);
         font-size: 13px;
@@ -73,10 +60,11 @@
     .panel {
         background: var(--panel-bg);
         border: 1px solid var(--border-color);
+        border-top: 3px solid var(--primary);
         border-radius: 14px;
         padding: 22px;
         margin-bottom: 18px;
-        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+        box-shadow: var(--theme-shadow-sm);
     }
 
     .field-label {
@@ -173,7 +161,7 @@
 
     .primary-btn {
         background: linear-gradient(90deg, var(--primary), var(--primary-strong));
-        color: #1a0d02;
+        color: #fff;
         box-shadow: 0 0 18px var(--primary-glow);
     }
 
@@ -311,7 +299,7 @@
         text-decoration: none;
         font-size: 12px;
         font-weight: 700;
-        color: #1a0d02;
+        color: #fff;
         background: linear-gradient(90deg, var(--primary), var(--primary-strong));
         padding: 7px 12px;
         border-radius: 8px;
@@ -376,6 +364,7 @@
 </style>
 </head>
 <body>
+<script src="../assets/js/nav.js"></script>
 
 <div class="container">
     <header>

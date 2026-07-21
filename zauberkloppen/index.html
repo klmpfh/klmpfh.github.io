@@ -8,47 +8,41 @@
     <title>Zaubern &amp; Kloppen – Szenario-Generator</title>
     <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="../assets/css/reset.css">
+    <link rel="stylesheet" href="../assets/css/theme.css">
     <style>
-        * {
-            font-family: 'Courier New', Courier, monospace;
-        }
-
         body {
-            background-color: #1a1510;
-            color: #c0a87a;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             min-height: 100vh;
-            padding: 20px;
+            padding: calc(var(--theme-nav-height) + 20px) 20px 20px;
         }
 
         h1 {
-            color: #c8a84e;
             font-size: 1.6rem;
             margin-bottom: 6px;
             text-align: center;
-            letter-spacing: 4px;
-            text-transform: uppercase;
+            letter-spacing: 2px;
         }
 
         .subtitle {
-            color: #7a6040;
+            color: var(--theme-text-muted);
             font-size: 0.85rem;
             margin-bottom: 30px;
             text-align: center;
-            letter-spacing: 2px;
+            letter-spacing: 1px;
         }
 
         .container {
             max-width: 600px;
             width: 100%;
             padding: 28px;
-            border: 2px solid #5c4230;
-            border-radius: 10px;
-            background-color: #221910;
-            box-shadow: 0 0 24px rgba(180, 120, 40, 0.12);
+            border: 1px solid var(--theme-border);
+            border-top: 3px solid var(--theme-accent);
+            border-radius: var(--theme-radius-lg);
+            background-color: var(--theme-surface);
+            box-shadow: var(--theme-shadow);
         }
 
         .scenario {
@@ -59,7 +53,7 @@
         }
 
         .scenario .label {
-            color: #7a6040;
+            color: var(--theme-text-muted);
             font-size: 0.75rem;
             display: block;
             letter-spacing: 2px;
@@ -68,7 +62,7 @@
         }
 
         .scenario .value {
-            color: #d4b870;
+            color: var(--theme-accent-strong);
             font-weight: bold;
             font-size: 1.2rem;
             display: block;
@@ -76,44 +70,44 @@
 
         .dice {
             font-size: 0.75rem;
-            color: #5c4230;
+            color: var(--theme-text-muted);
             letter-spacing: 2px;
         }
 
         .btn {
             display: block;
             width: 100%;
-            background-color: #4a2e18;
-            color: #c8b08a;
-            font-family: 'Courier New', Courier, monospace;
+            background-color: var(--theme-accent);
+            color: #fff;
             font-size: 1rem;
             font-weight: bold;
             border: none;
             padding: 14px 0;
-            border-radius: 6px;
+            border-radius: var(--theme-radius-sm);
             cursor: pointer;
-            letter-spacing: 3px;
+            letter-spacing: 2px;
             text-transform: uppercase;
             transition: background-color 0.15s;
         }
 
         .btn:hover {
-            background-color: #5c3a20;
+            background-color: var(--theme-accent-strong);
         }
 
         .btn:active {
-            background-color: #3a2010;
+            background-color: var(--theme-red-700);
         }
 
         .separator {
             border: none;
-            border-top: 1px solid #3a2810;
+            border-top: 1px solid var(--theme-border);
             margin: 16px 0;
         }
     </style>
 </head>
 
 <body>
+    <script src="../assets/js/nav.js"></script>
     <h1>Zaubern &amp; Kloppen</h1>
     <p class="subtitle">Szenario-Generator</p>
 

@@ -1,0 +1,109 @@
+/* Gemeinsames Design-System für alle Seiten: modernes, helles Grau mit einer
+   Akzentfarbe, deren Farbton (Hue) bei jedem Seitenaufruf per nav.js neu
+   zufällig gewürfelt wird (Sättigung/Helligkeit bleiben konstant, siehe
+   --theme-accent-hue). Einzelne Seiten definieren i.d.R. weiterhin ein
+   eigenes :root mit ihren eigenen Variablennamen, verweisen darin aber auf
+   diese Tokens (z. B. --primary: var(--theme-accent);), statt eigene
+   Farbwerte fest zu verdrahten. So bleibt jede Seite technisch unabhängig,
+   während Farbe/Look zentral hier gepflegt werden.
+
+   Alle Tokens sind mit "--theme-" prefixiert, damit sie nie mit den
+   Seiten-eigenen Variablennamen kollidieren (sonst würde z. B.
+   "--text-muted: var(--text-muted);" eine zirkuläre Referenz ergeben statt
+   auf diese Datei zu verweisen).
+
+   Reihenfolge im <head>: reset.css, dann theme.css, danach das
+   Seiten-eigene <style> (das die Tokens referenziert). */
+
+:root {
+    --theme-gray-50:  #fafafa;
+    --theme-gray-100: #f4f4f5;
+    --theme-gray-150: #ececef;
+    --theme-gray-200: #e4e4e7;
+    --theme-gray-300: #d4d4d8;
+    --theme-gray-400: #a1a1aa;
+    --theme-gray-500: #71717a;
+    --theme-gray-600: #52525b;
+    --theme-gray-700: #3f3f46;
+    --theme-gray-800: #27272a;
+    --theme-gray-900: #18181b;
+
+    --theme-red-50:  #fef2f2;
+    --theme-red-100: #fee2e2;
+    --theme-red-300: #fca5a5;
+    --theme-red-400: #f87171;
+    --theme-red-500: #ef4444;
+    --theme-red-600: #dc2626;
+    --theme-red-700: #b91c1c;
+
+    /* Basis */
+    --theme-bg:            var(--theme-gray-100);
+    --theme-surface:       #ffffff;
+    --theme-surface-muted: var(--theme-gray-50);
+    --theme-border:        var(--theme-gray-200);
+    --theme-text:          var(--theme-gray-800);
+    --theme-text-muted:    var(--theme-gray-500);
+    --theme-text-strong:   var(--theme-gray-900);
+
+    /* Akzent/Highlight-Farbe: wird von nav.js bei jedem Seitenaufruf zufällig
+       über den Farbwinkel (Hue) neu berechnet, Sättigung und Helligkeit
+       bleiben je Stufe konstant (siehe --theme-accent-hue). Der Hue-Wert
+       hier (0 = Rot) ist nur der Fallback ohne JavaScript.
+       Helligkeit bewusst deutlich unter 50%: bei HSL ist z. B. Gelb/Grün bei
+       gleicher Helligkeit viel greller als Rot/Blau – erst so bleibt weiße
+       Schrift auf --theme-accent (Buttons) über möglichst alle Farbtöne hinweg
+       lesbar, statt nur bei den zufällig "günstigen" Hue-Werten. */
+    --theme-accent-hue: 0;
+    --theme-accent:        hsl(var(--theme-accent-hue), 75%, 34%);
+    --theme-accent-strong: hsl(var(--theme-accent-hue), 72%, 25%);
+    --theme-accent-soft:   hsl(var(--theme-accent-hue), 86%, 97%);
+    --theme-accent-border: hsl(var(--theme-accent-hue), 75%, 72%);
+
+    /* Status */
+    --theme-success:      #16a34a;
+    --theme-success-soft: #f0fdf4;
+    --theme-warning:      #d97706;
+    --theme-warning-soft: #fffbeb;
+    --theme-danger:       var(--theme-red-600);
+    --theme-danger-soft:  var(--theme-red-50);
+
+    /* Form */
+    --theme-radius-sm: 6px;
+    --theme-radius:    10px;
+    --theme-radius-lg: 14px;
+    --theme-shadow-sm: 0 1px 3px rgba(24, 24, 27, 0.06);
+    --theme-shadow:    0 8px 24px rgba(24, 24, 27, 0.08);
+
+    --theme-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --theme-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+    /* Höhe der von assets/js/nav.js eingefügten Kopfleiste. Seiten reservieren
+       diesen Platz selbst (z. B. body { padding-top: var(--theme-nav-height); }),
+       da die Leiste fixed positioniert ist und aus dem Layoutfluss der
+       jeweiligen Seite herausgelöst wird. */
+    --theme-nav-height: 56px;
+
+    /* Richtung des Hintergrund-Verlaufs; wird von nav.js bei jedem Laden neu
+       zufällig gesetzt (document.documentElement.style.setProperty). Der
+       Wert hier ist nur der Fallback, falls JavaScript deaktiviert ist. */
+    --theme-bg-angle: 135deg;
+}
+
+html {
+    background: linear-gradient(var(--theme-bg-angle), var(--theme-gray-50) 0%, var(--theme-accent-soft) 45%, var(--theme-gray-150) 100%);
+}
+
+body {
+    font-family: var(--theme-font-sans);
+    background: linear-gradient(var(--theme-bg-angle), var(--theme-gray-50) 0%, var(--theme-accent-soft) 45%, var(--theme-gray-150) 100%);
+    background-attachment: fixed;
+    color: var(--theme-text);
+}
+
+a {
+    color: var(--theme-accent-strong);
+}
+
+h1 {
+    color: var(--theme-accent-strong);
+}

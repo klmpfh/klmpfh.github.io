@@ -8,27 +8,26 @@
     <title>??? Album</title>
     <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="../assets/css/reset.css">
+    <link rel="stylesheet" href="../assets/css/theme.css">
     <style>
         body {
-            font-family: 'Courier New', Courier, monospace;
-            background-color: #1a1a1a;
-            color: #f0f0f0;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 85vh;
-            margin: 0;
+            min-height: 100vh;
+            padding: calc(var(--theme-nav-height) + 20px) 16px 20px;
             text-align: center;
         }
 
         .container {
             max-width: 600px;
-            padding: 20px;
-            border: 2px solid #ffcc00;
-            border-radius: 10px;
-            background-color: #2a2a2a;
-            box-shadow: 0 0 20px rgba(255, 204, 0, 0.2);
+            width: 100%;
+            padding: 24px;
+            border: 1px solid var(--theme-border);
+            border-radius: var(--theme-radius-lg);
+            background-color: var(--theme-surface);
+            box-shadow: var(--theme-shadow);
         }
 
         #result {
@@ -44,7 +43,6 @@
             gap: 12px;
             background-color: #1DB954;
             color: #000;
-            font-family: 'Courier New', Courier, monospace;
             font-size: 1.1rem;
             font-weight: bold;
             text-decoration: none;
@@ -67,6 +65,7 @@
 </head>
 
 <body>
+    <script src="../assets/js/nav.js"></script>
 
     <div class="container">
         <div id="result">

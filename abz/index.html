@@ -7,21 +7,22 @@
     <title>Arbeitszeit-Tracker</title>
     <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="../assets/css/reset.css">
+    <link rel="stylesheet" href="../assets/css/theme.css">
     <style>
         :root {
-            --bg-color: #f4f6f9;
-            --container-bg: #ffffff;
-            --text-color: #2d3748;
-            --text-muted: #718096;
-            --primary: #3182ce;
-            --primary-light: #ebf8ff;
-            --success: #38a169;
-            --success-light: #f0fff4;
-            --danger: #e53e3e;
-            --warning: #dd6b20;
-            --warning-light: #fffaf0;
-            --border-color: #e2e8f0;
-            --highlight-bg: #f7fafc;
+            --bg-color: var(--theme-bg);
+            --container-bg: var(--theme-surface);
+            --text-color: var(--theme-text);
+            --text-muted: var(--theme-text-muted);
+            --primary: var(--theme-accent);
+            --primary-light: var(--theme-accent-soft);
+            --success: var(--theme-success);
+            --success-light: var(--theme-success-soft);
+            --danger: var(--theme-danger);
+            --warning: var(--theme-warning);
+            --warning-light: var(--theme-warning-soft);
+            --border-color: var(--theme-border);
+            --highlight-bg: var(--theme-surface-muted);
         }
 
         button, input {
@@ -29,10 +30,9 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-color);
-            padding: 30px 15px;
+            padding: calc(var(--theme-nav-height) + 30px) 15px 30px;
             display: flex;
             justify-content: center;
             align-items: flex-start;
@@ -398,6 +398,7 @@
         .stat-card {
             background: var(--highlight-bg);
             border: 2px solid var(--border-color);
+            border-top: 3px solid var(--primary);
             border-radius: 8px;
             padding: 16px;
             text-align: center;
@@ -406,7 +407,7 @@
         }
 
         .stat-card:hover {
-            border-color: #a0c8e8;
+            border-color: var(--theme-accent-border);
         }
 
         .stat-card.selected {
@@ -461,6 +462,7 @@
     </style>
 </head>
 <body>
+<script src="../assets/js/nav.js"></script>
 
 <div class="container">
     <header>
@@ -1138,7 +1140,15 @@
     }
 
     // ── TIMELINE ──────────────────────────────────────────────────────────
+    /** Liest eine --theme-*-Variable (siehe assets/css/theme.css) als fertigen CSS-Farbstring aus,
+     *  damit die per nav.js zufällig gewürfelte Akzentfarbe auch im SVG (fill/stroke) ankommt. */
+    function themeColor(varName) {
+        return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+    }
+
     function drawTimeline(elapsedMin, startMinOfDay, currentMinOfDay, runningPauseMin, targetEndMin, warnMarkers, pausesList, maxDuration) {
+        const accent       = themeColor('--theme-accent');
+        const accentStrong = themeColor('--theme-accent-strong');
         const width        = svg.clientWidth || 940;
         const paddingLeft  = 30;
         const paddingRight = 30;
@@ -1153,16 +1163,16 @@
         svg.innerHTML = '';
 
         // 1. Hintergrundbalken
-        svg.appendChild(svgEl('rect', { x: paddingLeft, y: barY, width: chartWidth, height: barHeight, fill: '#edf2f7', rx: 4 }));
+        svg.appendChild(svgEl('rect', { x: paddingLeft, y: barY, width: chartWidth, height: barHeight, fill: '#ececef', rx: 4 }));
 
-        // 2. Grüner Fortschrittsbalken (verstrichene Uhr-Zeit)
+        // 2. Fortschrittsbalken (verstrichene Uhr-Zeit)
         const elapsedX = getX(elapsedMin);
         if (elapsedX > paddingLeft) {
             svg.appendChild(svgEl('rect', {
                 x: paddingLeft, y: barY + 2,
                 width: Math.min(elapsedX - paddingLeft, chartWidth),
                 height: barHeight - 4,
-                fill: '#48bb78', opacity: 0.85, rx: 2
+                fill: '#16a34a', opacity: 0.85, rx: 2
             }));
         }
 
@@ -1176,7 +1186,7 @@
             svg.appendChild(svgEl('rect', {
                 x: pX1, y: barY,
                 width: Math.max(0, pX2 - pX1), height: barHeight,
-                fill: p.isDraft ? 'rgba(221,107,32,0.35)' : (isFuture ? 'rgba(49,130,206,0.22)' : 'rgba(113,128,150,0.5)')
+                fill: p.isDraft ? 'rgba(217,119,6,0.35)' : (isFuture ? 'rgba(161,161,170,0.3)' : 'rgba(113,113,122,0.45)')
             }));
         });
 
@@ -1189,7 +1199,7 @@
                 svg.appendChild(svgEl('rect', {
                     x: getX(offsetMin), y: barY,
                     width: Math.max(0, getX(offsetMin + runningPauseMin) - getX(offsetMin)),
-                    height: barHeight, fill: 'rgba(56,161,105,0.4)'
+                    height: barHeight, fill: 'rgba(22,163,74,0.4)'
                 }));
             }
         }
@@ -1198,8 +1208,8 @@
         const maxHours = Math.floor(maxDuration / 60);
         for (let h = 0; h <= maxHours; h++) {
             const tX  = getX(h * 60);
-            svg.appendChild(svgEl('line', { x1: tX, y1: barY - 5, x2: tX, y2: barY, stroke: '#cbd5e0', 'stroke-width': 1.5 }));
-            const txt = svgEl('text', { x: tX, y: barY - 9, 'text-anchor': 'middle', 'font-size': '11px', fill: '#718096', 'font-weight': 500 });
+            svg.appendChild(svgEl('line', { x1: tX, y1: barY - 5, x2: tX, y2: barY, stroke: '#d4d4d8', 'stroke-width': 1.5 }));
+            const txt = svgEl('text', { x: tX, y: barY - 9, 'text-anchor': 'middle', 'font-size': '11px', fill: '#71717a', 'font-weight': 500 });
             txt.textContent = `${h}h`;
             svg.appendChild(txt);
         }
@@ -1212,14 +1222,14 @@
             const fullText  = `Tagesziel (${labelTime})`;
             const levelY    = barY + barHeight + 20;
 
-            svg.appendChild(svgEl('line', { x1: mX, y1: barY - 2, x2: mX, y2: levelY - 8, stroke: '#e53e3e', 'stroke-width': 2, 'stroke-dasharray': '3,2' }));
-            svg.appendChild(svgEl('circle', { cx: mX, cy: levelY - 9, r: 3, fill: '#e53e3e' }));
+            svg.appendChild(svgEl('line', { x1: mX, y1: barY - 2, x2: mX, y2: levelY - 8, stroke: accent, 'stroke-width': 2, 'stroke-dasharray': '3,2' }));
+            svg.appendChild(svgEl('circle', { cx: mX, cy: levelY - 9, r: 3, fill: accent }));
 
             const approxW = fullText.length * 6 + 10;
             const bgRect  = svgEl('rect', { x: mX - approxW / 2, y: levelY - 8, width: approxW, height: 14, class: 'label-bg' });
             svg.appendChild(bgRect);
 
-            const lTxt = svgEl('text', { x: mX, y: levelY + 3, 'text-anchor': 'middle', 'font-size': '11px', 'font-weight': 600, fill: '#c53030' });
+            const lTxt = svgEl('text', { x: mX, y: levelY + 3, 'text-anchor': 'middle', 'font-size': '11px', 'font-weight': 600, fill: accentStrong });
             lTxt.textContent = fullText;
             svg.appendChild(lTxt);
         }
@@ -1230,7 +1240,7 @@
                 const offsetMin = w.clockMin - startMinOfDay;
                 if (offsetMin < 0 || offsetMin > maxDuration) return;
                 const wX    = getX(offsetMin);
-                const color = w.active ? '#dd6b20' : '#cbd5e0';
+                const color = w.active ? '#d97706' : '#d4d4d8';
 
                 svg.appendChild(svgEl('line', {
                     x1: wX, y1: barY - 18, x2: wX, y2: barY,
@@ -1253,9 +1263,9 @@
             const nowX       = getX(elapsedMin);
             const nowTimeStr = formatMinutesToTime(startMinOfDay + elapsedMin);
 
-            svg.appendChild(svgEl('line', { x1: nowX, y1: barY - 12, x2: nowX, y2: barY + barHeight + 8, stroke: '#3182ce', 'stroke-width': 2.5 }));
+            svg.appendChild(svgEl('line', { x1: nowX, y1: barY - 12, x2: nowX, y2: barY + barHeight + 8, stroke: accent, 'stroke-width': 2.5 }));
 
-            svg.appendChild(svgEl('rect', { x: nowX - 36, y: barY - 26, width: 72, height: 14, fill: '#3182ce', rx: 4 }));
+            svg.appendChild(svgEl('rect', { x: nowX - 36, y: barY - 26, width: 72, height: 14, fill: accent, rx: 4 }));
 
             const nowTxt = svgEl('text', { x: nowX, y: barY - 16, 'text-anchor': 'middle', 'font-size': '10px', 'font-weight': 'bold', fill: '#ffffff' });
             nowTxt.textContent = `Jetzt: ${nowTimeStr}`;

@@ -7,21 +7,22 @@
     <title>iCal Terminsuche</title>
     <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="../assets/css/reset.css">
+    <link rel="stylesheet" href="../assets/css/theme.css">
     <style>
         :root {
-            --bg-color: #f4f6f9;
-            --container-bg: #ffffff;
-            --text-color: #2d3748;
-            --text-muted: #718096;
-            --primary: #3182ce;
-            --primary-light: #ebf8ff;
-            --success: #38a169;
-            --success-light: #f0fff4;
-            --danger: #e53e3e;
-            --warning: #dd6b20;
-            --warning-light: #fffaf0;
-            --border-color: #e2e8f0;
-            --highlight-bg: #f7fafc;
+            --bg-color: var(--theme-bg);
+            --container-bg: var(--theme-surface);
+            --text-color: var(--theme-text);
+            --text-muted: var(--theme-text-muted);
+            --primary: var(--theme-accent);
+            --primary-light: var(--theme-accent-soft);
+            --success: var(--theme-success);
+            --success-light: var(--theme-success-soft);
+            --danger: var(--theme-danger);
+            --warning: var(--theme-warning);
+            --warning-light: var(--theme-warning-soft);
+            --border-color: var(--theme-border);
+            --highlight-bg: var(--theme-surface-muted);
         }
 
         button, input {
@@ -29,10 +30,9 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-color);
-            padding: 30px 15px;
+            padding: calc(var(--theme-nav-height) + 30px) 15px 30px;
             display: flex;
             justify-content: center;
             align-items: flex-start;
@@ -73,6 +73,7 @@
         .card {
             background: var(--highlight-bg);
             border: 1px solid var(--border-color);
+            border-left: 3px solid var(--primary);
             border-radius: 8px;
             padding: 18px 20px;
             margin-bottom: 20px;
@@ -500,10 +501,10 @@
             font-weight: 800;
         }
 
-        .heatmap-level-1 { background: #9ec5f4; color: #1a4971; border-color: #86b6ef; }
-        .heatmap-level-2 { background: #5598e7; color: #fff; border-color: #3987e5; }
-        .heatmap-level-3 { background: #2a78d6; color: #fff; border-color: #256abf; }
-        .heatmap-level-4 { background: #184f95; color: #fff; border-color: #104281; }
+        .heatmap-level-1 { background: #fecaca; color: #7f1d1d; border-color: #fca5a5; }
+        .heatmap-level-2 { background: #f87171; color: #fff; border-color: #ef4444; }
+        .heatmap-level-3 { background: #dc2626; color: #fff; border-color: #b91c1c; }
+        .heatmap-level-4 { background: #7f1d1d; color: #fff; border-color: #651313; }
 
         .heatmap-legend {
             display: flex;
@@ -521,6 +522,7 @@
     </style>
 </head>
 <body>
+<script src="../assets/js/nav.js"></script>
 
 <div class="container">
     <header>
