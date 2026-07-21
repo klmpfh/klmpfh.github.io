@@ -159,14 +159,22 @@
 
         .duration-highlight {
             display: flex;
-            align-items: baseline;
+            flex-direction: column;
+            align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 6px;
             background: var(--theme-accent-soft);
             border: 2px solid var(--theme-accent);
             border-radius: var(--theme-radius);
             padding: 14px;
             margin-bottom: 18px;
+        }
+
+        .duration-main {
+            display: flex;
+            align-items: baseline;
+            justify-content: center;
+            gap: 8px;
         }
 
         .duration-number {
@@ -181,6 +189,17 @@
             font-size: 0.8rem;
             color: var(--theme-text-muted);
             font-weight: 600;
+        }
+
+        .duration-meta {
+            font-size: 0.82rem;
+            color: var(--theme-text-muted);
+            text-align: center;
+            line-height: 1.4;
+        }
+
+        .duration-meta strong {
+            color: var(--theme-text-strong);
         }
 
         .controls-actions {
@@ -256,18 +275,6 @@
         /* --- Ausgabe --- */
         .output[hidden] {
             display: none;
-        }
-
-        .summary {
-            text-align: center;
-            color: var(--theme-text-muted);
-            font-size: 0.85rem;
-            margin-bottom: 22px;
-            line-height: 1.5;
-        }
-
-        .summary strong {
-            color: var(--theme-text-strong);
         }
 
         .phase {
@@ -787,8 +794,11 @@
             </details>
 
             <div class="duration-highlight" id="durationHighlight">
-                <span class="duration-number" id="durationNumber">–</span>
-                <span class="duration-label">geschätzte Minuten</span>
+                <div class="duration-main">
+                    <span class="duration-number" id="durationNumber">–</span>
+                    <span class="duration-label">geschätzte Minuten</span>
+                </div>
+                <div class="duration-meta" id="durationMeta"></div>
             </div>
 
             <div class="controls-actions">
@@ -798,7 +808,6 @@
         </div>
 
         <div class="output" id="output" hidden aria-live="polite">
-            <p class="summary" id="summary"></p>
             <button type="button" class="btn" id="sportModeBtn">Sport-Modus starten</button>
 
             <section class="phase warmup" id="warmupSection">
@@ -1020,8 +1029,8 @@
         var dbOverlayEl = document.getElementById("dbOverlay");
         var dbBodyEl = document.getElementById("dbBody");
         var durationNumberEl = document.getElementById("durationNumber");
+        var durationMetaEl = document.getElementById("durationMeta");
         var outputEl = document.getElementById("output");
-        var summaryEl = document.getElementById("summary");
         var warmupSectionEl = document.getElementById("warmupSection");
         var warmupTimeLabelEl = document.getElementById("warmupTimeLabel");
         var warmupListEl = document.getElementById("warmupList");
@@ -1185,7 +1194,7 @@
             if (toggleAufwaermen.checked && mainCount > 0) totalSec += warmupMinutesEstimate(mainCount) * 60;
             if (toggleCooldown.checked && mainCount > 0) totalSec += COOLDOWN_MIN * 60;
 
-            return Math.max(0, Math.round(totalSec / 60));
+            return roundUpToFiveMinutes(totalSec);
         }
 
         // Exakte Dauer-Schätzung anhand der tatsächlich gewürfelten Übungen.
@@ -1201,15 +1210,29 @@
 
             if (workout.aufwaermenEnabled) totalSec += warmupMinutesEstimate(workout.exercises.length) * 60;
             if (workout.cooldownEnabled) totalSec += COOLDOWN_MIN * 60;
-            return Math.max(0, Math.round(totalSec / 60));
+            return roundUpToFiveMinutes(totalSec);
+        }
+
+        // Rundet eine Sekundenzahl auf die nächsten vollen 5 Minuten auf.
+        function roundUpToFiveMinutes(totalSec) {
+            if (totalSec <= 0) return 0;
+            return Math.ceil(totalSec / 60 / 5) * 5;
         }
 
         function updateDurationDisplay(minutes) {
             durationNumberEl.textContent = minutes > 0 ? String(minutes) : "–";
         }
 
+        function formatDurationMeta(exerciseCount, intensity) {
+            return exerciseCount + " Übungen · Intensität " + intensity + " (" + INTENSITY_LABELS[intensity] + ")";
+        }
+
         function refreshLiveEstimate() {
+            var mainCount = totalCategoryCount(getCategoryCounts());
             updateDurationDisplay(estimateDurationMinutesLive());
+            durationMetaEl.innerHTML = mainCount > 0
+                ? formatDurationMeta(mainCount, Number(intensityRange.value))
+                : "Bitte mindestens eine Übung auswählen";
         }
 
         /* =====================================================================
@@ -1274,12 +1297,11 @@
             var cooldownEnabled = toggleCooldown.checked;
 
             if (totalCategoryCount(counts) === 0) {
+                // Kein Workout möglich - der Hinweis steht bereits live in der
+                // Dauer-Anzeige (siehe refreshLiveEstimate), daher hier nur
+                // die Ausgabe verstecken statt sie mit einer Warnung zu füllen.
                 currentWorkout = null;
-                outputEl.hidden = false;
-                summaryEl.innerHTML = "<strong>Bitte mindestens eine Übung auswählen</strong> – stelle bei mindestens einer Muskelgruppe die Anzahl über 0.";
-                warmupSectionEl.hidden = true;
-                exerciseListEl.innerHTML = "";
-                cooldownSectionEl.hidden = true;
+                outputEl.hidden = true;
                 sportModeBtn.hidden = true;
                 return;
             }
@@ -1340,9 +1362,7 @@
             outputEl.hidden = false;
             sportModeBtn.hidden = false;
 
-            summaryEl.innerHTML = "<strong>" + workout.exercises.length + " Übungen</strong> · Intensität " +
-                workout.intensity + " (" + INTENSITY_LABELS[workout.intensity] + ")";
-
+            durationMetaEl.innerHTML = formatDurationMeta(workout.exercises.length, workout.intensity);
             updateDurationDisplay(estimateDurationMinutes(workout));
 
             warmupSectionEl.hidden = !workout.aufwaermenEnabled;
@@ -1431,7 +1451,7 @@
          * ===================================================================== */
         var audioCtx = null;
         var muted = false;
-        var volume = 0.6;
+        var volume = 1;
 
         var SPEAKER_ICON_ON = "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" aria-hidden=\"true\"><polygon points=\"3,9 8,9 13,4 13,20 8,15 3,15\" fill=\"currentColor\"/><path d=\"M16,8 C18,10 18,14 16,16\" stroke=\"currentColor\" stroke-width=\"2\" fill=\"none\" stroke-linecap=\"round\"/><path d=\"M18.5,5.5 C22,9 22,15 18.5,18.5\" stroke=\"currentColor\" stroke-width=\"2\" fill=\"none\" stroke-linecap=\"round\"/></svg>";
         var SPEAKER_ICON_OFF = "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" aria-hidden=\"true\"><polygon points=\"3,9 8,9 13,4 13,20 8,15 3,15\" fill=\"currentColor\"/><path d=\"M16,8 L21,16 M21,8 L16,16\" stroke=\"currentColor\" stroke-width=\"2\" fill=\"none\" stroke-linecap=\"round\"/></svg>";
@@ -1474,7 +1494,8 @@
 
         function playCompletionBeep() {
             playTone(880, 110, 1);
-            setTimeout(function () { playTone(880, 140, 1); }, 160);
+            setTimeout(function () { playTone(880, 140, 1); }, 100);
+            setTimeout(function () { playTone(880, 140, 1); }, 200);
         }
 
         function playTestBeep() {
