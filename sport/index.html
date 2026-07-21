@@ -792,14 +792,14 @@
             </div>
 
             <div class="controls-actions">
-                <button class="btn" id="generateBtn" type="button">Training generieren</button>
+                <button class="btn btn-outline" id="generateBtn" type="button">neues Training generieren</button>
                 <button class="btn btn-outline" id="dbShowBtn" type="button">Datenbank anzeigen</button>
             </div>
         </div>
 
         <div class="output" id="output" hidden aria-live="polite">
             <p class="summary" id="summary"></p>
-            <button type="button" class="btn btn-outline" id="sportModeBtn">Sport-Modus starten</button>
+            <button type="button" class="btn" id="sportModeBtn">Sport-Modus starten</button>
 
             <section class="phase warmup" id="warmupSection">
                 <h2>Aufwärmen <span class="phase-time" id="warmupTimeLabel">ca. 5 Min.</span></h2>
@@ -871,7 +871,7 @@
             { name: "Kniebeugen-Sprünge", category: "beine", type: "reps", difficulty: "schwer", muscles: "Quadrizeps, Gesäß, Waden", description: "Aus der Kniebeuge explosiv nach oben abspringen, weich in den Knien landen und direkt in die nächste Wiederholung übergehen." },
             { name: "Bulgarische Ausfallschritte", category: "beine", type: "reps", difficulty: "schwer", muscles: "Quadrizeps, Gesäß", equipment: ["elevated"], description: "Den hinteren Fuß erhöht ablegen (z. B. auf einem Stuhl), das vordere Bein tief beugen, bis das hintere Knie fast den Boden berührt, dann hochdrücken. Seite wechseln." },
             { name: "Hüftheben", category: "beine", type: "reps", difficulty: "leicht", muscles: "Gesäß, hintere Oberschenkel", description: "Rückenlage, Füße aufgestellt. Die Hüfte nach oben drücken, bis Schultern, Hüfte und Knie eine Linie bilden, kurz halten, kontrolliert absenken." },
-            { name: "Einbeinige Hüftheben", category: "beine", type: "reps", difficulty: "mittel", muscles: "Gesäß, hintere Oberschenkel", description: "Wie Hüftheben, aber ein Bein gestreckt in der Luft halten und die Hüfte nur mit dem Standbein anheben. Seite wechseln." },
+            { name: "Einbeinige Hüftheben", category: "beine", type: "reps", difficulty: "mittel", muscles: "Gesäß, hintere Oberschenkel", description: "Wie Hüftheben (Rückenlage, Füße aufgestellt, Hüfte nach oben drücken), aber ein Bein gestreckt in der Luft halten und die Hüfte nur mit dem Standbein anheben. Seite wechseln." },
             { name: "Treppensteiger", category: "beine", type: "reps", difficulty: "mittel", muscles: "Quadrizeps, Gesäß", equipment: ["elevated"], description: "Auf eine stabile Erhöhung (Stufe, Bank) steigen, oben durchstrecken, dann kontrolliert wieder herabsteigen. Seite wechseln." },
             { name: "Wadenheben", category: "beine", type: "reps", difficulty: "leicht", muscles: "Waden", description: "Im Stehen langsam auf die Zehenspitzen erheben, oben kurz halten, dann kontrolliert absenken." },
             { name: "Knicks-Ausfallschritte", category: "beine", type: "reps", difficulty: "mittel", muscles: "Gesäß, Quadrizeps, Adduktoren", description: "Ein Bein diagonal hinter das Standbein kreuzen und in die Knie gehen wie bei einem Knicks, dann zurück in den Stand. Seite wechseln." },
@@ -885,7 +885,7 @@
 
             // --- Rücken (Pull) ---------------------------------------------------
             { name: "Rumpfheber (Halten)", category: "ruecken", type: "time", difficulty: "leicht", muscles: "unterer Rücken, Gesäß", description: "Bauchlage, Arme nach vorne gestreckt. Arme, Oberkörper und Beine gleichzeitig leicht vom Boden abheben und die Position halten." },
-            { name: "Rumpfheber (Pulsierend)", category: "ruecken", type: "reps", difficulty: "mittel", muscles: "unterer Rücken, Gesäß, Schultern", description: "Wie beim Rumpfheber-Halten, aber Arme und Beine im gehobenen Zustand rhythmisch in kleinen Pulsen auf- und ab bewegen." },
+            { name: "Rumpfheber (Pulsierend)", category: "ruecken", type: "reps", difficulty: "mittel", muscles: "unterer Rücken, Gesäß, Schultern", description: "Wie beim Rumpfheber-Halten (Bauchlage, Arme, Oberkörper und Beine gemeinsam leicht vom Boden abheben), aber Arme und Beine im gehobenen Zustand rhythmisch in kleinen Pulsen auf- und ab bewegen." },
             { name: "Rückwärts-Schneeengel", category: "ruecken", type: "reps", difficulty: "leicht", muscles: "oberer Rücken, Schultern", description: "Bauchlage, Arme seitlich am Körper. Arme über die Seiten Richtung Kopf führen wie beim Schneeengel und wieder zurück." },
             { name: "Rückenstrecker", category: "ruecken", type: "reps", difficulty: "mittel", muscles: "unterer Rücken", description: "Bauchlage, Hände locker an den Schläfen. Oberkörper langsam vom Boden abheben, kurz halten, dann kontrolliert absenken." },
             { name: "Diagonalheben (Vierfüßlerstand)", category: "ruecken", type: "reps", difficulty: "leicht", muscles: "unterer Rücken, Core, Gesäß", description: "Vierfüßlerstand, gegenüberliegenden Arm und Bein gleichzeitig gerade ausstrecken, kurz halten, dann die Seite wechseln." },
@@ -899,12 +899,12 @@
             { name: "Negative Klimmzüge", category: "ruecken", type: "reps", difficulty: "mittel", muscles: "breiter Rücken, Bizeps", equipment: ["pullup"], description: "Mit Hilfe (z. B. Sprung oder Kasten) mit dem Kinn über die Stange gelangen und den Körper anschließend so langsam wie möglich kontrolliert wieder absenken." },
             { name: "Hängendes Schulterblatt-Ziehen", category: "ruecken", type: "reps", difficulty: "leicht", muscles: "oberer Rücken, Schulterblatt-Stabilisatoren", equipment: ["pullup"], description: "Passiv an der Stange hängen und die Schulterblätter nach unten zusammenziehen, den Körper dabei minimal anheben, ohne die Arme zu beugen. Kontrolliert wieder hängen lassen." },
             { name: "Inverses Rudern", category: "ruecken", type: "reps", difficulty: "mittel", muscles: "gesamter Rücken, Bizeps", equipment: ["bar"], description: "Unter eine tief abgehängte Stange legen, diese im Obergriff greifen, Körper gestreckt lassen und die Brust zur Stange ziehen, dann kontrolliert absenken." },
-            { name: "Einarmiges Inverses Rudern", category: "ruecken", type: "reps", difficulty: "schwer", muscles: "gesamter Rücken, Bizeps, Rumpf", equipment: ["bar"], description: "Wie inverses Rudern, aber nur mit einer Hand an der Stange greifen, die andere Hand locker am Körper. Rumpf stabil halten, Brust zur Stange ziehen. Seite wechseln." },
+            { name: "Einarmiges Inverses Rudern", category: "ruecken", type: "reps", difficulty: "schwer", muscles: "gesamter Rücken, Bizeps, Rumpf", equipment: ["bar"], description: "Wie beim Inversen Rudern (unter eine tief abgehängte Stange legen, gestreckt die Brust zur Stange ziehen), aber nur mit einer Hand an der Stange greifen, die andere Hand locker am Körper. Rumpf stabil halten. Seite wechseln." },
             { name: "Rückwärts-Brücke", category: "ruecken", type: "time", difficulty: "mittel", muscles: "unterer Rücken, Gesäß, hintere Oberschenkel, Schultern", description: "Im Sitzen die Hände hinter dem Körper aufstellen, Fingerspitzen zeigen zu den Füßen, Hüfte anheben, bis der Körper eine gerade Linie bildet, Kopf neutral lassen, Position halten." },
 
             // --- Brust/Schulter/Arme (Push) --------------------------------------
             { name: "Liegestütze", category: "push", type: "reps", difficulty: "mittel", muscles: "Brust, Schultern, Trizeps", description: "Hände etwas breiter als schulterbreit aufsetzen, Körper bildet eine gerade Linie. Brust kontrolliert Richtung Boden senken und wieder hochdrücken." },
-            { name: "Knie-Liegestütze", category: "push", type: "reps", difficulty: "leicht", muscles: "Brust, Schultern, Trizeps", description: "Wie Liegestütze, aber auf den Knien statt auf den Zehenspitzen abgestützt, um die Belastung zu reduzieren." },
+            { name: "Knie-Liegestütze", category: "push", type: "reps", difficulty: "leicht", muscles: "Brust, Schultern, Trizeps", description: "Wie Liegestütze (Hände etwas breiter als schulterbreit, Brust Richtung Boden senken und wieder hochdrücken), aber auf den Knien statt auf den Zehenspitzen abgestützt, um die Belastung zu reduzieren." },
             { name: "Diamant-Liegestütze", category: "push", type: "reps", difficulty: "schwer", muscles: "Trizeps, Brust", description: "Hände unter der Brust so zusammenstellen, dass Daumen und Zeigefinger eine Raute bilden, dann Liegestütze ausführen." },
             { name: "Breite Liegestütze", category: "push", type: "reps", difficulty: "mittel", muscles: "Brust, Schultern", description: "Hände deutlich breiter als schulterbreit aufsetzen und Liegestütze ausführen, um verstärkt die Brust anzusprechen." },
             { name: "Spitzwinkel-Liegestütze", category: "push", type: "reps", difficulty: "schwer", muscles: "Schultern, Trizeps", description: "Po nach oben strecken, sodass der Körper ein umgekehrtes V bildet. Kopf Richtung Boden senken und wieder hochdrücken – wie ein Schulterdrücken." },
@@ -954,7 +954,7 @@
             { name: "Schlittschuhsprünge", category: "cardio", type: "reps", difficulty: "schwer", muscles: "Beine, Gesäß, Balance", description: "Seitlich von einem Bein zum anderen springen wie ein Schlittschuhläufer, weich landen und kurz die Balance halten." },
             { name: "Kniebeugen mit Armkreisen", category: "cardio", type: "reps", difficulty: "leicht", muscles: "Ganzkörper (Aufwärmen)", description: "Langsame Kniebeugen ausführen und dabei gleichzeitig die Arme locker nach vorne kreisen, um Gelenke und Kreislauf aufzuwärmen." },
             { name: "Liegestütz-Strecksprung", category: "cardio", type: "reps", difficulty: "schwer", muscles: "Ganzkörper, Herz-Kreislauf", description: "Aus dem Stand in die Hocke gehen, in den hohen Liegestütz zurückspringen, einen Liegestütz ausführen, die Füße wieder heranziehen und mit einem Strecksprung nach oben abschließen." },
-            { name: "Grätschsprünge mit Kniebeuge", category: "cardio", type: "reps", difficulty: "mittel", muscles: "Beine, Gesäß, Herz-Kreislauf", description: "Wie Hampelmänner, aber bei geöffneten Beinen jeweils zusätzlich in eine kurze Kniebeuge absinken, bevor die Beine wieder zusammenspringen." },
+            { name: "Grätschsprünge mit Kniebeuge", category: "cardio", type: "reps", difficulty: "mittel", muscles: "Beine, Gesäß, Herz-Kreislauf", description: "Wie Hampelmänner (im Stand mit einem Sprung die Beine seitlich öffnen und die Arme über dem Kopf zusammenführen), aber bei geöffneten Beinen jeweils zusätzlich in eine kurze Kniebeuge absinken, bevor die Beine wieder zusammenspringen." },
             { name: "Seitliches Knieheben im Stand", category: "cardio", type: "reps", difficulty: "leicht", muscles: "schräge Bauchmuskeln, Beine", description: "Im Stehen abwechselnd ein Knie seitlich anheben und mit dem gegenüberliegenden Ellbogen antippen, dabei zügig im Wechsel bleiben." }
         ];
 
