@@ -498,6 +498,18 @@
             white-space: nowrap;
         }
 
+        .sport-elapsed-timer {
+            font-size: 0.75rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            color: var(--theme-accent-strong);
+            white-space: nowrap;
+        }
+
+        .sport-elapsed-timer[hidden] {
+            display: none;
+        }
+
         .sport-body {
             flex: 1;
             display: flex;
@@ -744,23 +756,23 @@
                 </div>
                 <div class="control-row">
                     <label for="countRuecken">Rücken</label>
-                    <input type="range" id="countRuecken" min="0" max="5" step="1" value="1">
-                    <span class="control-value" id="countRueckenValue">1</span>
+                    <input type="range" id="countRuecken" min="0" max="5" step="1" value="2">
+                    <span class="control-value" id="countRueckenValue">2</span>
                 </div>
                 <div class="control-row">
                     <label for="countPush">Brust/Schulter/Arme</label>
-                    <input type="range" id="countPush" min="0" max="5" step="1" value="1">
-                    <span class="control-value" id="countPushValue">1</span>
+                    <input type="range" id="countPush" min="0" max="5" step="1" value="2">
+                    <span class="control-value" id="countPushValue">2</span>
                 </div>
                 <div class="control-row">
                     <label for="countCore">Core / Rumpf</label>
-                    <input type="range" id="countCore" min="0" max="5" step="1" value="1">
-                    <span class="control-value" id="countCoreValue">1</span>
+                    <input type="range" id="countCore" min="0" max="5" step="1" value="2">
+                    <span class="control-value" id="countCoreValue">2</span>
                 </div>
                 <div class="control-row">
                     <label for="countCardio">Cardio/Mobility</label>
-                    <input type="range" id="countCardio" min="0" max="5" step="1" value="1">
-                    <span class="control-value" id="countCardioValue">1</span>
+                    <input type="range" id="countCardio" min="0" max="5" step="1" value="2">
+                    <span class="control-value" id="countCardioValue">2</span>
                 </div>
                 <div class="control-row checkbox-row">
                     <label class="checkbox-label"><input type="checkbox" id="toggleAufwaermen" checked> Aufwärmen</label>
@@ -832,6 +844,7 @@
     <div class="sport-overlay" id="sportOverlay" hidden>
         <div class="sport-topbar">
             <span class="sport-step-counter" id="sportStepCounter"></span>
+            <span class="sport-elapsed-timer" id="sportElapsedTimer" hidden>0:00</span>
             <div class="sport-progress-track">
                 <div class="sport-progress-fill" id="sportProgressFill"></div>
             </div>
@@ -1041,6 +1054,7 @@
         var sportBodyEl = document.getElementById("sportBody");
         var sportProgressFillEl = document.getElementById("sportProgressFill");
         var sportStepCounterEl = document.getElementById("sportStepCounter");
+        var sportElapsedTimerEl = document.getElementById("sportElapsedTimer");
         var sportExitBtn = document.getElementById("sportExitBtn");
 
         var currentWorkout = null; // { intensity, cfg, exercises: [...], warmup: [...], aufwaermenEnabled, cooldownEnabled }
@@ -1536,7 +1550,7 @@
          * erledigt" oder "Überspringen"), bereits als Start-Signal zählt.
          * Schritte ohne feste Zeit (Wiederholungen) haben keinen Timer.
          * ===================================================================== */
-        var sportState = null;   // { steps, index, remaining, running, deadline, intervalId, lastBeepSecond }
+        var sportState = null;   // { steps, index, remaining, running, deadline, intervalId, lastBeepSecond, elapsedStart, elapsedIntervalId, elapsedTotalSec }
         var wakeLockSentinel = null;
 
         // Baut die flache Schrittliste für den Sport-Modus aus dem aktuellen Training.
@@ -1644,13 +1658,30 @@
                 "<p class=\"sport-hint\">" + o.hint + "</p>";
         }
 
+        // Sammelt alle Muskelgruppen aus Aufwärmen + Training (ohne Duplikate,
+        // in Reihenfolge des ersten Auftretens) - fürs Dehnen im Cool-down.
+        function collectWorkoutMuscles(workout) {
+            var seen = [];
+            workout.warmup.concat(workout.exercises).forEach(function (ex) {
+                if (!ex.muscles) return;
+                ex.muscles.split(",").forEach(function (m) {
+                    var name = m.trim();
+                    if (name && seen.indexOf(name) === -1) seen.push(name);
+                });
+            });
+            return seen;
+        }
+
         function sportDoneHtml(cooldownEnabled) {
+            var muscles = collectWorkoutMuscles(currentWorkout);
             var reminder = cooldownEnabled
-                ? "<p class=\"sport-desc\">Stark durchgezogen. Nimm dir jetzt noch ca. 5 Minuten zum Dehnen – 20–30 Sekunden pro Muskelgruppe, ruhig weiteratmen.</p>"
+                ? "<p class=\"sport-desc\">Stark durchgezogen. Nimm dir jetzt noch ca. 5 Minuten zum Dehnen – 20–30 Sekunden pro Muskelgruppe, ruhig weiteratmen.</p>" +
+                  (muscles.length ? "<p class=\"sport-muscles\">Dehnen: " + muscles.join(", ") + "</p>" : "")
                 : "<p class=\"sport-desc\">Stark durchgezogen!</p>";
             return "" +
                 "<div class=\"sport-kicker\">Geschafft</div>" +
                 "<h2 class=\"sport-exercise-name\">Training abgeschlossen!</h2>" +
+                "<div class=\"sport-set-info\">Trainingszeit: " + formatTime(sportState.elapsedTotalSec || 0) + "</div>" +
                 reminder +
                 "<div class=\"sport-controls\">" +
                 "  <button type=\"button\" class=\"sport-btn sport-btn-primary\" onclick=\"exitSportMode()\">Sport-Modus verlassen</button>" +
@@ -1762,9 +1793,36 @@
             }
         }
 
+        // Trainings-Stoppuhr: läuft ab dem ersten Start eines Schritts (egal ob
+        // Aufwärmen, Zeit- oder Wiederholungs-Übung) durchgehend bis zum Ende
+        // des Sport-Modus, unabhängig von den einzelnen Schritt-Timern.
+        function startOverallTimer() {
+            if (!sportState || sportState.elapsedStart) return;
+            sportState.elapsedStart = Date.now();
+            sportElapsedTimerEl.hidden = false;
+            updateOverallTimerDisplay();
+            sportState.elapsedIntervalId = setInterval(updateOverallTimerDisplay, 500);
+        }
+
+        function updateOverallTimerDisplay() {
+            if (!sportState || !sportState.elapsedStart) return;
+            sportElapsedTimerEl.textContent = formatTime(Math.floor((Date.now() - sportState.elapsedStart) / 1000));
+        }
+
+        function stopOverallTimer() {
+            if (!sportState || !sportState.elapsedStart) return;
+            if (sportState.elapsedIntervalId) {
+                clearInterval(sportState.elapsedIntervalId);
+                sportState.elapsedIntervalId = null;
+            }
+            sportState.elapsedTotalSec = Math.floor((Date.now() - sportState.elapsedStart) / 1000);
+            updateOverallTimerDisplay();
+        }
+
         function startSportTimer() {
             if (!sportState || sportState.running) return;
             ensureAudioContext();
+            startOverallTimer();
             sportState.running = true;
             sportState.deadline = Date.now() + sportState.remaining * 1000;
             updateTimerButtonLabel();
@@ -1789,6 +1847,7 @@
         function advanceSportStep() {
             if (sportState.index < sportState.steps.length - 1) {
                 sportState.index++;
+                if (sportState.steps[sportState.index].kind === "done") stopOverallTimer();
                 renderSportStep();
             }
         }
@@ -1797,6 +1856,7 @@
         // "Satz erledigt" bei Wiederholungs-Übungen ohne eigenen Timer.
         function sportSkipStep() {
             if (!sportState) return;
+            startOverallTimer();
             if (sportState.intervalId) {
                 clearInterval(sportState.intervalId);
                 sportState.intervalId = null;
@@ -1881,7 +1941,9 @@
         function enterSportMode() {
             if (!currentWorkout) return;
             ensureAudioContext();
-            sportState = { steps: buildSportSteps(currentWorkout), index: 0, remaining: 0, running: false, deadline: 0, intervalId: null, lastBeepSecond: null };
+            sportState = { steps: buildSportSteps(currentWorkout), index: 0, remaining: 0, running: false, deadline: 0, intervalId: null, lastBeepSecond: null, elapsedStart: null, elapsedIntervalId: null, elapsedTotalSec: 0 };
+            sportElapsedTimerEl.hidden = true;
+            sportElapsedTimerEl.textContent = "0:00";
             sportOverlayEl.hidden = false;
             if (isMobileDevice()) requestFullscreenSafe(sportOverlayEl);
             requestWakeLock();
@@ -1893,6 +1955,9 @@
         function exitSportMode() {
             if (sportState && sportState.intervalId) {
                 clearInterval(sportState.intervalId);
+            }
+            if (sportState && sportState.elapsedIntervalId) {
+                clearInterval(sportState.elapsedIntervalId);
             }
             document.removeEventListener("visibilitychange", handleVisibilityChange);
             document.removeEventListener("keydown", handleSportKeydown);
