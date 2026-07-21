@@ -82,6 +82,12 @@
             background-color: var(--theme-accent-strong);
             transform: scale(1.04);
         }
+
+        .update-note {
+            margin-top: 14px;
+            font-size: 0.75rem;
+            opacity: 0.5;
+        }
     </style>
 </head>
 
@@ -94,248 +100,334 @@
         <button type="button" class="new-album-btn" id="newAlbumBtn">Neues Album</button>
     </div>
 
+    <footer class="update-note">Alben-Liste zuletzt aktualisiert: 21.07.2026</footer>
+
     <script>
+        /*
+         * PROMPT ZUM AKTUALISIEREN DIESER LISTE (in einen neuen Chat kopieren):
+         *
+         * Aktualisiere die Liste `albumLinks` in fragezeichen/index.html auf
+         * klmpfh.github.io. Das ist die Liste der Spotify-Alben, aus denen
+         * der Zufallsgenerator dieser Seite ein "Die drei ???"-Hörspiel
+         * auswählt. Ziel: alle bisher fehlenden Hörspiel-Alben ergänzen.
+         *
+         * EINSCHLIESSEN:
+         * - Hauptreihe (Folge 1, 2, 3, ... fortlaufend), außer reinen
+         *   Musik-/Soundtrack-Veröffentlichungen ohne Geschichte (z. B.
+         *   Europa-Nr. 29 "Die Original-Musik der Europa-Jugendserie").
+         * - Sonderveröffentlichungen, die als echtes, mehrstimmig
+         *   inszeniertes Hörspiel erschienen sind: Kurzgeschichten-
+         *   Sammlungen, Adventskalender, Live-Mitschnitte, Neufassungen,
+         *   Top Secret Editions, Midi-Bände, Graphic-Novel-Vertonungen,
+         *   Sonderfolgen wie "und der dreiTag".
+         *
+         * AUSSCHLIESSEN (keine Hörbücher/Fremdserien):
+         * - Alles mit "<Name> liest ..." im Titel (Einzelsprecher-Lesung,
+         *   z. B. "Oliver Rohrbeck liest ...").
+         * - "Rocky Beach Crimes" (Tante Mathilda, Victor Hugenay, Kommissar
+         *   Reynolds, Skinny Norris, Morton ermittelt) - von EUROPA selbst
+         *   als "Hörbücher" geführt, siehe Spotify-Playlist
+         *   "Rocky Beach Crimes - Alle Hörbücher".
+         * - "Mitratefälle" - bisher nur als Buch erschienen, kein Hörspiel.
+         * - Die separate Serie "Die drei ??? Kids" (jüngere Zielgruppe).
+         * - Sachbücher, Detektivhandbücher, Bildbände, fremdsprachige
+         *   Ausgaben, Filme (keine Hörspiel-Alben).
+         *
+         * VORGEHEN:
+         * 1. Neue Folgen/Specials recherchieren, z. B. über die deutsche
+         *    Wikipedia-Seite "Liste der Die-drei-???-Folgen" oder die
+         *    offizielle Spotify-Playlist "Die drei ??? - Die drei
+         *    Fragezeichen - Alle Hörspiele".
+         * 2. Für jedes neue Album die Spotify-Album-ID ermitteln und über
+         *    https://open.spotify.com/oembed?url=https://open.spotify.com/album/<ID>
+         *    den Titel verifizieren (Titel darf NICHT "... liest ..."
+         *    enthalten).
+         * 3. Spieldauer ermitteln: HTML von
+         *    https://open.spotify.com/embed/album/<ID> abrufen, das JSON in
+         *    <script id="__NEXT_DATA__"> auslesen und alle "duration"-Werte
+         *    (ms) in props.pageProps.state.data.entity.trackList aufsummieren,
+         *    dann in Minuten runden. Falls trackList.length >= 100 (Spotify
+         *    kappt dort), zusätzlich `approx: true` setzen.
+         * 4. Neuen Eintrag im gleichen Format ergänzen:
+         *    { url: "https://open.spotify.com/embed/album/<ID>", min: <Minuten> },
+         *    optional mit `, approx: true` und einem `// <Titel/Hinweis>`-
+         *    Kommentar bei Sonderveröffentlichungen.
+         * 5. Datum im Footer (Klasse "update-note", Text "Alben-Liste zuletzt
+         *    aktualisiert: ...") auf das heutige Datum setzen.
+         *
+         * Hinweis: Spotifys oEmbed-/Embed-Endpunkte sind inoffiziell und
+         * antworten bei zu vielen parallelen Anfragen kurzzeitig mit
+         * HTTP 429. Bei mehreren neuen Alben Anfragen seriell mit ca. 1
+         * Sekunde Abstand stellen statt parallel/gebündelt.
+         */
         const albumLinks = [
-            "https://open.spotify.com/embed/album/4N9tvSjWfZXx3eHKblYEWQ",
-            "https://open.spotify.com/embed/album/0xldqK4Ocdt8dwQSxUzt6x",
-            "https://open.spotify.com/embed/album/61OtrnMm1lqoMgMRb1aw7g",
-            "https://open.spotify.com/embed/album/2w902iYtkf0ipmTImyLlsL",
-            "https://open.spotify.com/embed/album/5YWM39RnabpxekZuHriTam",
-            "https://open.spotify.com/embed/album/54eP8BYMR270sTqklv83V0",
-            "https://open.spotify.com/embed/album/3nGyW4ETDrDpInYEAQCyYS",
-            "https://open.spotify.com/embed/album/6MRsf5IcfqJIogaNqtESnh",
-            "https://open.spotify.com/embed/album/0aNqdp5ayuUNsOdUwu8x0b",
-            "https://open.spotify.com/embed/album/4h75QQIxW1etThTuw6vWzg",
-            "https://open.spotify.com/embed/album/07EhJ6uxWcQQWKeXJ1e8Lb",
-            "https://open.spotify.com/embed/album/0bSrvyOjOzFoFJfx3uaFgk",
-            "https://open.spotify.com/embed/album/2AZ7zFBophWEIuBPjAG60I",
-            "https://open.spotify.com/embed/album/3O5STjjugoL5cNKfeRuBiU",
-            "https://open.spotify.com/embed/album/2dQYcaTRh5qEYk2oH7WoBC",
-            "https://open.spotify.com/embed/album/16dOhg07DVqoSxlS7ToLM5",
-            "https://open.spotify.com/embed/album/0CMsNalUakIcv6znyVLALr",
-            "https://open.spotify.com/embed/album/1yqICFWBL4l7fJkrFWvfWL",
-            "https://open.spotify.com/embed/album/3JqJ2zIt3UzKug7onmbmAo",
-            "https://open.spotify.com/embed/album/5ilbdbGu5eQRUIsbslyiLe",
-            "https://open.spotify.com/embed/album/2koZEkq7vQnHjMP73gVXCo",
-            "https://open.spotify.com/embed/album/7i50aK2wKvszWNnay4DtxP",
-            "https://open.spotify.com/embed/album/67qFOAxbhNRHEIeOjQ9Zkp",
-            "https://open.spotify.com/embed/album/211IEWHi59nUsHx8li8G9r",
-            "https://open.spotify.com/embed/album/6RXr8BmKNSK9Zk11k0I7Dl",
-            "https://open.spotify.com/embed/album/2NSreywe8UbWo7BJVY3Spk",
-            "https://open.spotify.com/embed/album/2AisAUu4deLpNi6g6qlTLC",
-            "https://open.spotify.com/embed/album/7Dbd2rya9glmBLVxclcU4d",
-            "https://open.spotify.com/embed/album/0zV9pnaXLuogDr6prsvb4M",
-            "https://open.spotify.com/embed/album/0tPetsUWuZIC0E85x6eVN5",
-            "https://open.spotify.com/embed/album/7K3VEzD1rm0dgUGBi1i5PW",
-            "https://open.spotify.com/embed/album/1imKVIfJIM0vKNymevqKjP",
-            "https://open.spotify.com/embed/album/2L18qTB1EfS4FuBk2M6QwV",
-            "https://open.spotify.com/embed/album/2REEfC6tVMiYv1eKMlGiOX",
-            "https://open.spotify.com/embed/album/4R24oyyqxGkczNpqWGCXBZ",
-            "https://open.spotify.com/embed/album/6R4gnRHXKgw2cxneWgTiEL",
-            "https://open.spotify.com/embed/album/6d3Pavm0enVICdOvBEqxYA",
-            "https://open.spotify.com/embed/album/0AKPkUh4ElyZNipc0lZoiR",
-            "https://open.spotify.com/embed/album/2IIw1KESZrJQBFdZQAWcKY",
-            "https://open.spotify.com/embed/album/5KUXX8H2LNsuik46M5XLx0",
-            "https://open.spotify.com/embed/album/24bba3w45LGGm7ps3qonkc",
-            "https://open.spotify.com/embed/album/48QVzskevXtA0KpJjXzvb1",
-            "https://open.spotify.com/embed/album/6JNNLdq9ELeKENK3RmxLWQ",
-            "https://open.spotify.com/embed/album/39mWWzaUZp0AXyN9Vnp4od",
-            "https://open.spotify.com/embed/album/6YX4i7aMCYmn20zvAFM3lG",
-            "https://open.spotify.com/embed/album/3iWNsrEs9D0FFlKFfscdvL",
-            "https://open.spotify.com/embed/album/5IRxm1lo35PttzU8YLslZy",
-            "https://open.spotify.com/embed/album/7t2SteAH5OnLLC1ghTAmka",
-            "https://open.spotify.com/embed/album/6DKfjDIB1BSYRGAi2YJYm3",
-            "https://open.spotify.com/embed/album/71kiy6INV3LzsCddpTZoHf",
-            "https://open.spotify.com/embed/album/3pXJh2A9gYzNt22rEIE5q7",
-            "https://open.spotify.com/embed/album/0F9ebKwTd5RNZZOu49lWuF",
-            "https://open.spotify.com/embed/album/1Fg15cBLFliy6Kr60QqRan",
-            "https://open.spotify.com/embed/album/4oH2GUWlSSsSgVkxyPVHX1",
-            "https://open.spotify.com/embed/album/3fotka2Hbq0N7V9KKWIDdw",
-            "https://open.spotify.com/embed/album/5W6dRiaeSVE7zUBYHbepak",
-            "https://open.spotify.com/embed/album/6DWykdlgf60Mq02hPAGYVD",
-            "https://open.spotify.com/embed/album/2qcA1EqAoUsqxXqIivY6Zc",
-            "https://open.spotify.com/embed/album/7cBoiWgh1bTMZmCwJE0eMu",
-            "https://open.spotify.com/embed/album/26M4ktHp3isOX6XJazAxPn",
-            "https://open.spotify.com/embed/album/0biXUv1uGUaVsPcw8nAZCY",
-            "https://open.spotify.com/embed/album/5GPTZKrD7eaCp9p6VOBuIN",
-            "https://open.spotify.com/embed/album/0tmMvsGyWRzVckCYgkvve3",
-            "https://open.spotify.com/embed/album/62z7yW4RKhhuAp0RklmNvc",
-            "https://open.spotify.com/embed/album/6qj4LD0zotutkIgEg9OvDj",
-            "https://open.spotify.com/embed/album/7Hjk98j1FSrHV5IHWmeeFh",
-            "https://open.spotify.com/embed/album/21pUsEhxssm6fvumGFmi35",
-            "https://open.spotify.com/embed/album/2erJcBofKBO6GFMqDPppsU",
-            "https://open.spotify.com/embed/album/4mlQEwk6I0XuksZCYTtatz",
-            "https://open.spotify.com/embed/album/6EEN6onzbHIOxnwUkGfKhv",
-            "https://open.spotify.com/embed/album/2GQjkF0ceIse6jVZkUuAQc",
-            "https://open.spotify.com/embed/album/1K8kXLhNnHSdPvtUwf74DE",
-            "https://open.spotify.com/embed/album/69VLqtWA1bpguYRCFRAxQl",
-            "https://open.spotify.com/embed/album/2IqfdlQamN3vCWN3CKLEVI",
-            "https://open.spotify.com/embed/album/6RDPGc2budsdTw1lj8f2O5",
-            "https://open.spotify.com/embed/album/3CMN8Y4kjoG4sFwlOEpfsV",
-            "https://open.spotify.com/embed/album/6t7Y1H4dUM0d4JycenVskN",
-            "https://open.spotify.com/embed/album/1rDYlXZy6vN4wqqQ6buqOr",
-            "https://open.spotify.com/embed/album/4izXuApLzBWtWHrFqgcrxL",
-            "https://open.spotify.com/embed/album/2s5u6hCaMpTIvZtBRvQzha",
-            "https://open.spotify.com/embed/album/7iysTnwaaFrPPWAuUyyi0c",
-            "https://open.spotify.com/embed/album/3yofHdHiOLtVZlxWCZ4XBB",
-            "https://open.spotify.com/embed/album/3bhsXwKIDwVK5LTkDCICp0",
-            "https://open.spotify.com/embed/album/2eeodcwD9HXpcA2rvoFkIq",
-            "https://open.spotify.com/embed/album/4uF9MjchYgq5jjPi5x5YZy",
-            "https://open.spotify.com/embed/album/1KpWkUQaj5ECJsrb8SrPl4",
-            "https://open.spotify.com/embed/album/3CZCwdMpj2jnjI43ZlnY5T",
-            "https://open.spotify.com/embed/album/3TcIn19pVz5LXE8UleuLuX",
-            "https://open.spotify.com/embed/album/2dlgtHB8z7ZhSl1fsSb0Ic",
-            "https://open.spotify.com/embed/album/0Jh7gzQaOscoFndb3raq2l",
-            "https://open.spotify.com/embed/album/7yMRFgR8FRyWwiLHzQQa2B",
-            "https://open.spotify.com/embed/album/7a9rwqPkVdU4FC2cWFudVO",
-            "https://open.spotify.com/embed/album/3UHj03eU7OnDuMVCTLbmcj",
-            "https://open.spotify.com/embed/album/4KEZWleMTT8lDaQDLgozFc",
-            "https://open.spotify.com/embed/album/5ub4r9Q0YVMrWuOEesu6dR",
-            "https://open.spotify.com/embed/album/2bfJa4PRKVb7as86HZv8Df",
-            "https://open.spotify.com/embed/album/4C4o7tHpT20QrdsvmI70uI",
-            "https://open.spotify.com/embed/album/3haGZZ8x7PyaGxiqcLmLf9",
-            "https://open.spotify.com/embed/album/6zwBnyiy9Hy9TAser0DOuL",
-            "https://open.spotify.com/embed/album/1DZAe0qMw8Pq9EPoX6gETA",
-            "https://open.spotify.com/embed/album/3NYWEuwAPt4PIJ4OeNxmzO",
-            "https://open.spotify.com/embed/album/4ADdmpObDUmBdvyJ9oNz5o",
-            "https://open.spotify.com/embed/album/6joRNVLN69v3eSnxM86BSM",
-            "https://open.spotify.com/embed/album/6Mi4Smq7Fn8qNOg6Xnf0In",
-            "https://open.spotify.com/embed/album/4eX1wH67TDcYPZ1ZsjtPb6",
-            "https://open.spotify.com/embed/album/3kBby5GJMI4U97XljKcPFD",
-            "https://open.spotify.com/embed/album/3v4W4AFaI8uO7J88ojaSkS",
-            "https://open.spotify.com/embed/album/4RZllDAKF3DeDz6jZJFXTa",
-            "https://open.spotify.com/embed/album/1OBHPhBUih26oQTqxLvJTQ",
-            "https://open.spotify.com/embed/album/7b9OiVsktCZyldiAnjkVDx",
-            "https://open.spotify.com/embed/album/0WBhXS0uAYuL1sYb6vjYeS",
-            "https://open.spotify.com/embed/album/3bFvjy9IyWd7GrzN2dr0Hi",
-            "https://open.spotify.com/embed/album/5L2KCw21QT3JKg1KKuqSeF",
-            "https://open.spotify.com/embed/album/5Hafee7JOUqNVqtsrCtrTZ",
-            "https://open.spotify.com/embed/album/3piMnopGsrEAKd1EZxsU3i",
-            "https://open.spotify.com/embed/album/3rxr4SLE2EG0EAlpSeI99o",
-            "https://open.spotify.com/embed/album/1GKXpMQRKEyZI8pL62VUIP",
-            "https://open.spotify.com/embed/album/7rPDg8NlFJ1a2HMTQvVaB2",
-            "https://open.spotify.com/embed/album/6fVTJQKJBku1yaOmZOnfwg",
-            "https://open.spotify.com/embed/album/6d21lwV9Imn3ObWUyV1UN2",
-            "https://open.spotify.com/embed/album/68NWcgqeCQMZ3QcPJXBhzH",
-            "https://open.spotify.com/embed/album/3HgetGSMzg6bGM6b67YZcj",
-            "https://open.spotify.com/embed/album/0LoesJ9VnJPrlvIDz4u4Xt",
-            "https://open.spotify.com/embed/album/0sIRyuExi7jBQmOpHyyY78",
-            "https://open.spotify.com/embed/album/0AnyLaLPx339iGaxjqVfob",
-            "https://open.spotify.com/embed/album/0mp5HVWlYinEYa7Y4Q2vau",
-            "https://open.spotify.com/embed/album/3XXYXmCEe185oHxigCRo97",
-            "https://open.spotify.com/embed/album/1lD4RdnibVS7QhtZqCal9E",
-            "https://open.spotify.com/embed/album/5l5CFSjzSdhbflqmplcTFX",
-            "https://open.spotify.com/embed/album/4eorcDi9eRfsi7X0A91Z7u",
-            "https://open.spotify.com/embed/album/23wcElHGWpunC23ggr4PcW",
-            "https://open.spotify.com/embed/album/1juMQy6yZVmk9Za6HeiicB",
-            "https://open.spotify.com/embed/album/1Cta130Rwp5vH1ddfAChbU",
-            "https://open.spotify.com/embed/album/0TmWLedytkxVuP9b5Hqeqq",
-            "https://open.spotify.com/embed/album/5HiWGQmaCRaxdaon49Iw9S",
-            "https://open.spotify.com/embed/album/3m7fR2wOkytZHq9m4QeBkB",
-            "https://open.spotify.com/embed/album/79enDMGQWH7LQ5weNB96g7",
-            "https://open.spotify.com/embed/album/6RJf8I60kNhnYxlnw7eTGv",
-            "https://open.spotify.com/embed/album/3HxAtK23R2gFkW000mdaFT",
-            "https://open.spotify.com/embed/album/6gxj68DOHRSVlEM4xzwtRy",
-            "https://open.spotify.com/embed/album/71moidSHTwJsc2N70axEce",
-            "https://open.spotify.com/embed/album/4Y7Pxv7pzLmKVJowmBwOkd",
-            "https://open.spotify.com/embed/album/2RxTF6MhAVOtudVNOyHTQz",
-            "https://open.spotify.com/embed/album/6TjzBTmeDakBgh5NOGj1BC",
-            "https://open.spotify.com/embed/album/3D9Jf4mdOBoeyrKpffYBvy",
-            "https://open.spotify.com/embed/album/35aU9bfmxPGdjiRA4JMuFd",
-            "https://open.spotify.com/embed/album/2uOsf31oenHRd4DVxCSjn9",
-            "https://open.spotify.com/embed/album/7K7dfMc3VwHOKtENI1BWTD",
-            "https://open.spotify.com/embed/album/6cPgVsZ6TPyVIP9BHP5ty5",
-            "https://open.spotify.com/embed/album/3u0OSCwiOblOhm4dKjwLN5",
-            "https://open.spotify.com/embed/album/5iNeANVy4supl8HowB9V2h",
-            "https://open.spotify.com/embed/album/7nxSEeJiQwI34VwnWT83C9",
-            "https://open.spotify.com/embed/album/3uggg8gNlh1kpBxLeOfFTV",
-            "https://open.spotify.com/embed/album/623V90QowsF4WSqV3cHGKf",
-            "https://open.spotify.com/embed/album/78wUIvkGT2CdWW0ngeEy8V",
-            "https://open.spotify.com/embed/album/0pdXEEgKjfh4H0aZg4IOTS",
-            "https://open.spotify.com/embed/album/3uFt95otJjaxH8o40tPtIS",
-            "https://open.spotify.com/embed/album/4rCAnDrNJ96srnBEoA0ISj",
-            "https://open.spotify.com/embed/album/2F6VxgWbGCUpTU9ux6Dtbi",
-            "https://open.spotify.com/embed/album/1GEzdjI5N25iuGjvypRscs",
-            "https://open.spotify.com/embed/album/7beppYTqtHAEPKoXyodssF",
-            "https://open.spotify.com/embed/album/4fv0pPN7ZjbUiejSTxTPZh",
-            "https://open.spotify.com/embed/album/3An657Q0wkVp4nIDg2zpcB",
-            "https://open.spotify.com/embed/album/4izJKxYT4fTwIZjoXNgkX7",
-            "https://open.spotify.com/embed/album/427kScPIeUSfoNKCNercMC",
-            "https://open.spotify.com/embed/album/7kskBahbrQWCOiaXKuoPjE",
-            "https://open.spotify.com/embed/album/77aawQqgLQZxPb9kwSg0JR",
-            "https://open.spotify.com/embed/album/5PEHeYcUhz1Aq02ZB1pUgJ",
-            "https://open.spotify.com/embed/album/62CKj2RCiWDDUtBWTn4KxQ",
-            "https://open.spotify.com/embed/album/6YbaUGc6ZeR1YnDFGQJV8F",
-            "https://open.spotify.com/embed/album/6Anfub4AoVHg9bhJ7js0L0",
-            "https://open.spotify.com/embed/album/2ALDCHCHdawewN1sduWVQQ",
-            "https://open.spotify.com/embed/album/5RoL0jdWMoJ8KRFVOeFYtX",
-            "https://open.spotify.com/embed/album/4uggmrJ3Xpm1e2tcz6laze",
-            "https://open.spotify.com/embed/album/4qbxSVpr3NxRjdIVC411ue",
-            "https://open.spotify.com/embed/album/0w6Khy7kpqTXrEDITf0rZ0",
-            "https://open.spotify.com/embed/album/3w5glP0mzKfTanzXpAjN27",
-            "https://open.spotify.com/embed/album/4IZ7Lsm5le7HJPtaGLCrjO",
-            "https://open.spotify.com/embed/album/6tioH9PNiZbmUT54MsiX5k",
-            "https://open.spotify.com/embed/album/18xyskqkEGnVfVFhznkFIK",
-            "https://open.spotify.com/embed/album/4zCPToY7AoTqvOKf4HRqAN",
-            "https://open.spotify.com/embed/album/1qhlRmclvYWkrYkLnFxFZN",
-            "https://open.spotify.com/embed/album/5B7w9vkfh979tEyzwkLk9k",
-            "https://open.spotify.com/embed/album/7eHh5PAxQBt5KBWzd3a10G",
-            "https://open.spotify.com/embed/album/5kevid18ttcAPK1vk0kLtc",
-            "https://open.spotify.com/embed/album/6uj8JeIgluMibSu8Divkbh",
-            "https://open.spotify.com/embed/album/22soWryC08ctyMNb6NrMGD",
-            "https://open.spotify.com/embed/album/02MXdFaVMz0qQJjmivjI8g",
-            "https://open.spotify.com/embed/album/100ZHoBX994GlckxjoGpma",
-            "https://open.spotify.com/embed/album/2ICtKWqLqMBTzi7UeByhKd",
-            "https://open.spotify.com/embed/album/1qag2AiFcxXU1UaIgrDFff",
-            "https://open.spotify.com/embed/album/4m6VlVOWfrUVhWWrueMo7p",
-            "https://open.spotify.com/embed/album/2oKngJQA5TdxF5QcP3uZEf",
-            "https://open.spotify.com/embed/album/3pbXIzVk7CA5VM2ltxu9TN",
-            "https://open.spotify.com/embed/album/39a7bHWZyWPxwukCHPrTly",
-            "https://open.spotify.com/embed/album/0GRoTtX1wI16M7GSnnN96R",
-            "https://open.spotify.com/embed/album/4piiNuehCc4VjN8NBIcnRt",
-            "https://open.spotify.com/embed/album/7bTKP2hU0LRks1bXN1R7ko",
-            "https://open.spotify.com/embed/album/09Ckx1JLgPsQHHGuSIt2j3",
-            "https://open.spotify.com/embed/album/4FxNfDSXqAg8N1D8NBtvZ5",
-            "https://open.spotify.com/embed/album/4Exxckn0GwbhnGl6N4um2N",
-            "https://open.spotify.com/embed/album/79Drf49yNdGLBzzHMGGmBz",
-            "https://open.spotify.com/embed/album/1yMMjH3tDN9GyXiADzTkL9",
-            "https://open.spotify.com/embed/album/2Sw9FBHOoT6fBhYxHsRFxq",
-            "https://open.spotify.com/embed/album/7khAMIQlYBmW7mI9cphDhJ",
-            "https://open.spotify.com/embed/album/6BxvBG51szGmlg5x3F1rHj",
-            "https://open.spotify.com/embed/album/6WgRUQY49NRG6JT6dJ4xEq",
-            "https://open.spotify.com/embed/album/0q4FbI22wSMrzgWh5vgHi9",
-            "https://open.spotify.com/embed/album/3ieWqOL150wJOcft7iZHKZ",
-            "https://open.spotify.com/embed/album/7pZotNNAYOkeHNvJRKzYRk",
-            "https://open.spotify.com/embed/album/2zHMeFNQQxKOmUgmppOjIM",
-            "https://open.spotify.com/embed/album/4BZfSV9maCil4l4yftT74F",
-            "https://open.spotify.com/embed/album/1cJ3fNx6K47p4eDFqhnvsA",
-            "https://open.spotify.com/embed/album/76pYNMMVZTiuNy3IoXcavU",
-            "https://open.spotify.com/embed/album/2BkEUZY7Da7bqlUjmMA2Cq",
-            "https://open.spotify.com/embed/album/1WlRnNunbHpnRTTVkxMRnd",
-            "https://open.spotify.com/embed/album/2WwOKZLpFWrvw3O9CISod1",
-            "https://open.spotify.com/embed/album/6ewdyVIW2LurJhYGU0UBAa",
-            "https://open.spotify.com/embed/album/01i4iyB40EU7Qgd6EgKoZt",
-            "https://open.spotify.com/embed/album/1KpVSqapKAUAtAepWWxPWs",
-            "https://open.spotify.com/embed/album/3o2Gwvg8lqLNRnlV1v1s5K",
-            "https://open.spotify.com/embed/album/451jKBwuSNrNgLlqEAZfra",
-            "https://open.spotify.com/embed/album/7JhdaReI98XYFrzb3jJPFa",
-            "https://open.spotify.com/embed/album/0FuC7q4bJG41g1naKBx4ot",
-            "https://open.spotify.com/embed/album/3Sv5tE8PcAlGY6Ys2ISQXF",
-            "https://open.spotify.com/embed/album/2CMXywsh8wVXXCmr2bLTZ6",
-            "https://open.spotify.com/embed/album/6sNAlohza1ZTWVMGhFTGJW",
-            "https://open.spotify.com/embed/album/6SMOmIWODrO1gND2YPpjHf",
-            "https://open.spotify.com/embed/album/154I9rUwPuFHj6snU4amYg",
-            "https://open.spotify.com/embed/album/6isiJbL3hh7e60KigIgKuY",
-            "https://open.spotify.com/embed/album/1Qnn3AAN3Nquv7GlNk41YQ",
-            "https://open.spotify.com/embed/album/0qZ0R61AqoD2i8GnzUk91C",
-            "https://open.spotify.com/embed/album/4sQsFeHojdbFPB07vSg3Rd",
-            "https://open.spotify.com/embed/album/031exGT0P6IWBYY6faqoLV",
-            "https://open.spotify.com/embed/album/09pBOlMa7AxGh1JbdXmrgc",
-            "https://open.spotify.com/embed/album/5yCEzMfmMnSG97SXDFGjR8",
-            "https://open.spotify.com/embed/album/1IkEurD7s47M9ukevi0bWA",
-            "https://open.spotify.com/embed/album/7pkVk9UgZBBcc2D2ySHaRM",
-            "https://open.spotify.com/embed/album/00Pxqrupz6xjkI0vd4Otxb",
-            "https://open.spotify.com/embed/album/2mh0BDhRAJFa7clABwut3L", // 239
+            { url: "https://open.spotify.com/embed/album/4N9tvSjWfZXx3eHKblYEWQ", min: 53 },
+            { url: "https://open.spotify.com/embed/album/0xldqK4Ocdt8dwQSxUzt6x", min: 46 },
+            { url: "https://open.spotify.com/embed/album/61OtrnMm1lqoMgMRb1aw7g", min: 46 },
+            { url: "https://open.spotify.com/embed/album/2w902iYtkf0ipmTImyLlsL", min: 45 },
+            { url: "https://open.spotify.com/embed/album/5YWM39RnabpxekZuHriTam", min: 49 },
+            { url: "https://open.spotify.com/embed/album/54eP8BYMR270sTqklv83V0", min: 47 },
+            { url: "https://open.spotify.com/embed/album/3nGyW4ETDrDpInYEAQCyYS", min: 45 },
+            { url: "https://open.spotify.com/embed/album/6MRsf5IcfqJIogaNqtESnh", min: 53 },
+            { url: "https://open.spotify.com/embed/album/0aNqdp5ayuUNsOdUwu8x0b", min: 47 },
+            { url: "https://open.spotify.com/embed/album/4h75QQIxW1etThTuw6vWzg", min: 51 },
+            { url: "https://open.spotify.com/embed/album/07EhJ6uxWcQQWKeXJ1e8Lb", min: 48 },
+            { url: "https://open.spotify.com/embed/album/0bSrvyOjOzFoFJfx3uaFgk", min: 46 },
+            { url: "https://open.spotify.com/embed/album/2AZ7zFBophWEIuBPjAG60I", min: 44 },
+            { url: "https://open.spotify.com/embed/album/3O5STjjugoL5cNKfeRuBiU", min: 43 },
+            { url: "https://open.spotify.com/embed/album/2dQYcaTRh5qEYk2oH7WoBC", min: 40 },
+            { url: "https://open.spotify.com/embed/album/16dOhg07DVqoSxlS7ToLM5", min: 43 },
+            { url: "https://open.spotify.com/embed/album/0CMsNalUakIcv6znyVLALr", min: 42 },
+            { url: "https://open.spotify.com/embed/album/1yqICFWBL4l7fJkrFWvfWL", min: 43 },
+            { url: "https://open.spotify.com/embed/album/3JqJ2zIt3UzKug7onmbmAo", min: 45 },
+            { url: "https://open.spotify.com/embed/album/5ilbdbGu5eQRUIsbslyiLe", min: 47 },
+            { url: "https://open.spotify.com/embed/album/2koZEkq7vQnHjMP73gVXCo", min: 42 },
+            { url: "https://open.spotify.com/embed/album/7i50aK2wKvszWNnay4DtxP", min: 44 },
+            { url: "https://open.spotify.com/embed/album/67qFOAxbhNRHEIeOjQ9Zkp", min: 43 },
+            { url: "https://open.spotify.com/embed/album/211IEWHi59nUsHx8li8G9r", min: 42 },
+            { url: "https://open.spotify.com/embed/album/6RXr8BmKNSK9Zk11k0I7Dl", min: 46 },
+            { url: "https://open.spotify.com/embed/album/2NSreywe8UbWo7BJVY3Spk", min: 44 },
+            { url: "https://open.spotify.com/embed/album/2AisAUu4deLpNi6g6qlTLC", min: 52 },
+            { url: "https://open.spotify.com/embed/album/7Dbd2rya9glmBLVxclcU4d", min: 48 },
+            { url: "https://open.spotify.com/embed/album/0zV9pnaXLuogDr6prsvb4M", min: 42 },
+            { url: "https://open.spotify.com/embed/album/0tPetsUWuZIC0E85x6eVN5", min: 50 },
+            { url: "https://open.spotify.com/embed/album/7K3VEzD1rm0dgUGBi1i5PW", min: 44 },
+            { url: "https://open.spotify.com/embed/album/1imKVIfJIM0vKNymevqKjP", min: 44 },
+            { url: "https://open.spotify.com/embed/album/2L18qTB1EfS4FuBk2M6QwV", min: 44 },
+            { url: "https://open.spotify.com/embed/album/2REEfC6tVMiYv1eKMlGiOX", min: 55 },
+            { url: "https://open.spotify.com/embed/album/4R24oyyqxGkczNpqWGCXBZ", min: 48 },
+            { url: "https://open.spotify.com/embed/album/6R4gnRHXKgw2cxneWgTiEL", min: 55 },
+            { url: "https://open.spotify.com/embed/album/6d3Pavm0enVICdOvBEqxYA", min: 43 },
+            { url: "https://open.spotify.com/embed/album/0AKPkUh4ElyZNipc0lZoiR", min: 48 },
+            { url: "https://open.spotify.com/embed/album/2IIw1KESZrJQBFdZQAWcKY", min: 47 },
+            { url: "https://open.spotify.com/embed/album/5KUXX8H2LNsuik46M5XLx0", min: 54 },
+            { url: "https://open.spotify.com/embed/album/24bba3w45LGGm7ps3qonkc", min: 48 },
+            { url: "https://open.spotify.com/embed/album/48QVzskevXtA0KpJjXzvb1", min: 51 },
+            { url: "https://open.spotify.com/embed/album/6JNNLdq9ELeKENK3RmxLWQ", min: 50 },
+            { url: "https://open.spotify.com/embed/album/39mWWzaUZp0AXyN9Vnp4od", min: 47 },
+            { url: "https://open.spotify.com/embed/album/6YX4i7aMCYmn20zvAFM3lG", min: 48 },
+            { url: "https://open.spotify.com/embed/album/3iWNsrEs9D0FFlKFfscdvL", min: 47 },
+            { url: "https://open.spotify.com/embed/album/5IRxm1lo35PttzU8YLslZy", min: 48 },
+            { url: "https://open.spotify.com/embed/album/7t2SteAH5OnLLC1ghTAmka", min: 45 },
+            { url: "https://open.spotify.com/embed/album/6DKfjDIB1BSYRGAi2YJYm3", min: 57 },
+            { url: "https://open.spotify.com/embed/album/71kiy6INV3LzsCddpTZoHf", min: 55 },
+            { url: "https://open.spotify.com/embed/album/3pXJh2A9gYzNt22rEIE5q7", min: 54 },
+            { url: "https://open.spotify.com/embed/album/0F9ebKwTd5RNZZOu49lWuF", min: 53 },
+            { url: "https://open.spotify.com/embed/album/1Fg15cBLFliy6Kr60QqRan", min: 51 },
+            { url: "https://open.spotify.com/embed/album/4oH2GUWlSSsSgVkxyPVHX1", min: 51 },
+            { url: "https://open.spotify.com/embed/album/3fotka2Hbq0N7V9KKWIDdw", min: 49 },
+            { url: "https://open.spotify.com/embed/album/5W6dRiaeSVE7zUBYHbepak", min: 43 },
+            { url: "https://open.spotify.com/embed/album/6DWykdlgf60Mq02hPAGYVD", min: 45 },
+            { url: "https://open.spotify.com/embed/album/2qcA1EqAoUsqxXqIivY6Zc", min: 44 },
+            { url: "https://open.spotify.com/embed/album/7cBoiWgh1bTMZmCwJE0eMu", min: 47 },
+            { url: "https://open.spotify.com/embed/album/26M4ktHp3isOX6XJazAxPn", min: 59 },
+            { url: "https://open.spotify.com/embed/album/0biXUv1uGUaVsPcw8nAZCY", min: 59 },
+            { url: "https://open.spotify.com/embed/album/5GPTZKrD7eaCp9p6VOBuIN", min: 67 },
+            { url: "https://open.spotify.com/embed/album/0tmMvsGyWRzVckCYgkvve3", min: 66 },
+            { url: "https://open.spotify.com/embed/album/62z7yW4RKhhuAp0RklmNvc", min: 60 },
+            { url: "https://open.spotify.com/embed/album/6qj4LD0zotutkIgEg9OvDj", min: 59 },
+            { url: "https://open.spotify.com/embed/album/7Hjk98j1FSrHV5IHWmeeFh", min: 63 },
+            { url: "https://open.spotify.com/embed/album/21pUsEhxssm6fvumGFmi35", min: 60 },
+            { url: "https://open.spotify.com/embed/album/2erJcBofKBO6GFMqDPppsU", min: 66 },
+            { url: "https://open.spotify.com/embed/album/4mlQEwk6I0XuksZCYTtatz", min: 63 },
+            { url: "https://open.spotify.com/embed/album/6EEN6onzbHIOxnwUkGfKhv", min: 67 },
+            { url: "https://open.spotify.com/embed/album/2GQjkF0ceIse6jVZkUuAQc", min: 58 },
+            { url: "https://open.spotify.com/embed/album/1K8kXLhNnHSdPvtUwf74DE", min: 67 },
+            { url: "https://open.spotify.com/embed/album/69VLqtWA1bpguYRCFRAxQl", min: 74 },
+            { url: "https://open.spotify.com/embed/album/2IqfdlQamN3vCWN3CKLEVI", min: 56 },
+            { url: "https://open.spotify.com/embed/album/6RDPGc2budsdTw1lj8f2O5", min: 70 },
+            { url: "https://open.spotify.com/embed/album/3CMN8Y4kjoG4sFwlOEpfsV", min: 59 },
+            { url: "https://open.spotify.com/embed/album/6t7Y1H4dUM0d4JycenVskN", min: 57 },
+            { url: "https://open.spotify.com/embed/album/1rDYlXZy6vN4wqqQ6buqOr", min: 77 },
+            { url: "https://open.spotify.com/embed/album/4izXuApLzBWtWHrFqgcrxL", min: 59 },
+            { url: "https://open.spotify.com/embed/album/2s5u6hCaMpTIvZtBRvQzha", min: 50 },
+            { url: "https://open.spotify.com/embed/album/7iysTnwaaFrPPWAuUyyi0c", min: 70 },
+            { url: "https://open.spotify.com/embed/album/3yofHdHiOLtVZlxWCZ4XBB", min: 59 },
+            { url: "https://open.spotify.com/embed/album/3bhsXwKIDwVK5LTkDCICp0", min: 60 },
+            { url: "https://open.spotify.com/embed/album/2eeodcwD9HXpcA2rvoFkIq", min: 59 },
+            { url: "https://open.spotify.com/embed/album/4uF9MjchYgq5jjPi5x5YZy", min: 58 },
+            { url: "https://open.spotify.com/embed/album/1KpWkUQaj5ECJsrb8SrPl4", min: 55 },
+            { url: "https://open.spotify.com/embed/album/3CZCwdMpj2jnjI43ZlnY5T", min: 75 },
+            { url: "https://open.spotify.com/embed/album/3TcIn19pVz5LXE8UleuLuX", min: 60 },
+            { url: "https://open.spotify.com/embed/album/2dlgtHB8z7ZhSl1fsSb0Ic", min: 59 },
+            { url: "https://open.spotify.com/embed/album/0Jh7gzQaOscoFndb3raq2l", min: 60 },
+            { url: "https://open.spotify.com/embed/album/7yMRFgR8FRyWwiLHzQQa2B", min: 59 },
+            { url: "https://open.spotify.com/embed/album/7a9rwqPkVdU4FC2cWFudVO", min: 60 },
+            { url: "https://open.spotify.com/embed/album/3UHj03eU7OnDuMVCTLbmcj", min: 54 },
+            { url: "https://open.spotify.com/embed/album/4KEZWleMTT8lDaQDLgozFc", min: 60 },
+            { url: "https://open.spotify.com/embed/album/5ub4r9Q0YVMrWuOEesu6dR", min: 53 },
+            { url: "https://open.spotify.com/embed/album/2bfJa4PRKVb7as86HZv8Df", min: 68 },
+            { url: "https://open.spotify.com/embed/album/4C4o7tHpT20QrdsvmI70uI", min: 63 },
+            { url: "https://open.spotify.com/embed/album/3haGZZ8x7PyaGxiqcLmLf9", min: 76 },
+            { url: "https://open.spotify.com/embed/album/6zwBnyiy9Hy9TAser0DOuL", min: 138, approx: true },
+            { url: "https://open.spotify.com/embed/album/1DZAe0qMw8Pq9EPoX6gETA", min: 72 },
+            { url: "https://open.spotify.com/embed/album/3NYWEuwAPt4PIJ4OeNxmzO", min: 59 },
+            { url: "https://open.spotify.com/embed/album/4ADdmpObDUmBdvyJ9oNz5o", min: 64 },
+            { url: "https://open.spotify.com/embed/album/6joRNVLN69v3eSnxM86BSM", min: 69 },
+            { url: "https://open.spotify.com/embed/album/6Mi4Smq7Fn8qNOg6Xnf0In", min: 76 },
+            { url: "https://open.spotify.com/embed/album/4eX1wH67TDcYPZ1ZsjtPb6", min: 71 },
+            { url: "https://open.spotify.com/embed/album/3kBby5GJMI4U97XljKcPFD", min: 64 },
+            { url: "https://open.spotify.com/embed/album/3v4W4AFaI8uO7J88ojaSkS", min: 67 },
+            { url: "https://open.spotify.com/embed/album/4RZllDAKF3DeDz6jZJFXTa", min: 67 },
+            { url: "https://open.spotify.com/embed/album/1OBHPhBUih26oQTqxLvJTQ", min: 55 },
+            { url: "https://open.spotify.com/embed/album/7b9OiVsktCZyldiAnjkVDx", min: 65 },
+            { url: "https://open.spotify.com/embed/album/0WBhXS0uAYuL1sYb6vjYeS", min: 59 },
+            { url: "https://open.spotify.com/embed/album/3bFvjy9IyWd7GrzN2dr0Hi", min: 60 },
+            { url: "https://open.spotify.com/embed/album/5L2KCw21QT3JKg1KKuqSeF", min: 69 },
+            { url: "https://open.spotify.com/embed/album/5Hafee7JOUqNVqtsrCtrTZ", min: 70 },
+            { url: "https://open.spotify.com/embed/album/3piMnopGsrEAKd1EZxsU3i", min: 62 },
+            { url: "https://open.spotify.com/embed/album/3rxr4SLE2EG0EAlpSeI99o", min: 61 },
+            { url: "https://open.spotify.com/embed/album/1GKXpMQRKEyZI8pL62VUIP", min: 67 },
+            { url: "https://open.spotify.com/embed/album/7rPDg8NlFJ1a2HMTQvVaB2", min: 68 },
+            { url: "https://open.spotify.com/embed/album/6fVTJQKJBku1yaOmZOnfwg", min: 59 },
+            { url: "https://open.spotify.com/embed/album/6d21lwV9Imn3ObWUyV1UN2", min: 63 },
+            { url: "https://open.spotify.com/embed/album/68NWcgqeCQMZ3QcPJXBhzH", min: 58 },
+            { url: "https://open.spotify.com/embed/album/3HgetGSMzg6bGM6b67YZcj", min: 61 },
+            { url: "https://open.spotify.com/embed/album/0LoesJ9VnJPrlvIDz4u4Xt", min: 67 },
+            { url: "https://open.spotify.com/embed/album/0sIRyuExi7jBQmOpHyyY78", min: 174, approx: true },
+            { url: "https://open.spotify.com/embed/album/0AnyLaLPx339iGaxjqVfob", min: 67 },
+            { url: "https://open.spotify.com/embed/album/0mp5HVWlYinEYa7Y4Q2vau", min: 73 },
+            { url: "https://open.spotify.com/embed/album/3XXYXmCEe185oHxigCRo97", min: 74 },
+            { url: "https://open.spotify.com/embed/album/1lD4RdnibVS7QhtZqCal9E", min: 79 },
+            { url: "https://open.spotify.com/embed/album/5l5CFSjzSdhbflqmplcTFX", min: 69 },
+            { url: "https://open.spotify.com/embed/album/4eorcDi9eRfsi7X0A91Z7u", min: 71 },
+            { url: "https://open.spotify.com/embed/album/23wcElHGWpunC23ggr4PcW", min: 63 },
+            { url: "https://open.spotify.com/embed/album/1juMQy6yZVmk9Za6HeiicB", min: 58 },
+            { url: "https://open.spotify.com/embed/album/1Cta130Rwp5vH1ddfAChbU", min: 67 },
+            { url: "https://open.spotify.com/embed/album/0TmWLedytkxVuP9b5Hqeqq", min: 71 },
+            { url: "https://open.spotify.com/embed/album/5HiWGQmaCRaxdaon49Iw9S", min: 69 },
+            { url: "https://open.spotify.com/embed/album/3m7fR2wOkytZHq9m4QeBkB", min: 78 },
+            { url: "https://open.spotify.com/embed/album/79enDMGQWH7LQ5weNB96g7", min: 67 },
+            { url: "https://open.spotify.com/embed/album/6RJf8I60kNhnYxlnw7eTGv", min: 65 },
+            { url: "https://open.spotify.com/embed/album/3HxAtK23R2gFkW000mdaFT", min: 78 },
+            { url: "https://open.spotify.com/embed/album/6gxj68DOHRSVlEM4xzwtRy", min: 60 },
+            { url: "https://open.spotify.com/embed/album/71moidSHTwJsc2N70axEce", min: 58 },
+            { url: "https://open.spotify.com/embed/album/4Y7Pxv7pzLmKVJowmBwOkd", min: 61 },
+            { url: "https://open.spotify.com/embed/album/2RxTF6MhAVOtudVNOyHTQz", min: 71 },
+            { url: "https://open.spotify.com/embed/album/6TjzBTmeDakBgh5NOGj1BC", min: 62 },
+            { url: "https://open.spotify.com/embed/album/3D9Jf4mdOBoeyrKpffYBvy", min: 57 },
+            { url: "https://open.spotify.com/embed/album/35aU9bfmxPGdjiRA4JMuFd", min: 63 },
+            { url: "https://open.spotify.com/embed/album/2uOsf31oenHRd4DVxCSjn9", min: 67 },
+            { url: "https://open.spotify.com/embed/album/7K7dfMc3VwHOKtENI1BWTD", min: 62 },
+            { url: "https://open.spotify.com/embed/album/6cPgVsZ6TPyVIP9BHP5ty5", min: 168, approx: true },
+            { url: "https://open.spotify.com/embed/album/3u0OSCwiOblOhm4dKjwLN5", min: 66 },
+            { url: "https://open.spotify.com/embed/album/5iNeANVy4supl8HowB9V2h", min: 57 },
+            { url: "https://open.spotify.com/embed/album/7nxSEeJiQwI34VwnWT83C9", min: 54 },
+            { url: "https://open.spotify.com/embed/album/3uggg8gNlh1kpBxLeOfFTV", min: 71 },
+            { url: "https://open.spotify.com/embed/album/623V90QowsF4WSqV3cHGKf", min: 68 },
+            { url: "https://open.spotify.com/embed/album/78wUIvkGT2CdWW0ngeEy8V", min: 73 },
+            { url: "https://open.spotify.com/embed/album/0pdXEEgKjfh4H0aZg4IOTS", min: 74 },
+            { url: "https://open.spotify.com/embed/album/3uFt95otJjaxH8o40tPtIS", min: 57 },
+            { url: "https://open.spotify.com/embed/album/4rCAnDrNJ96srnBEoA0ISj", min: 66 },
+            { url: "https://open.spotify.com/embed/album/2F6VxgWbGCUpTU9ux6Dtbi", min: 64 },
+            { url: "https://open.spotify.com/embed/album/1GEzdjI5N25iuGjvypRscs", min: 71 },
+            { url: "https://open.spotify.com/embed/album/7beppYTqtHAEPKoXyodssF", min: 73 },
+            { url: "https://open.spotify.com/embed/album/4fv0pPN7ZjbUiejSTxTPZh", min: 75 },
+            { url: "https://open.spotify.com/embed/album/3An657Q0wkVp4nIDg2zpcB", min: 69 },
+            { url: "https://open.spotify.com/embed/album/4izJKxYT4fTwIZjoXNgkX7", min: 70 },
+            { url: "https://open.spotify.com/embed/album/427kScPIeUSfoNKCNercMC", min: 68 },
+            { url: "https://open.spotify.com/embed/album/7kskBahbrQWCOiaXKuoPjE", min: 72 },
+            { url: "https://open.spotify.com/embed/album/77aawQqgLQZxPb9kwSg0JR", min: 78 },
+            { url: "https://open.spotify.com/embed/album/5PEHeYcUhz1Aq02ZB1pUgJ", min: 82 },
+            { url: "https://open.spotify.com/embed/album/62CKj2RCiWDDUtBWTn4KxQ", min: 80 },
+            { url: "https://open.spotify.com/embed/album/6YbaUGc6ZeR1YnDFGQJV8F", min: 68 },
+            { url: "https://open.spotify.com/embed/album/6Anfub4AoVHg9bhJ7js0L0", min: 73 },
+            { url: "https://open.spotify.com/embed/album/2ALDCHCHdawewN1sduWVQQ", min: 70 },
+            { url: "https://open.spotify.com/embed/album/5RoL0jdWMoJ8KRFVOeFYtX", min: 64 },
+            { url: "https://open.spotify.com/embed/album/4uggmrJ3Xpm1e2tcz6laze", min: 153, approx: true },
+            { url: "https://open.spotify.com/embed/album/4qbxSVpr3NxRjdIVC411ue", min: 68 },
+            { url: "https://open.spotify.com/embed/album/0w6Khy7kpqTXrEDITf0rZ0", min: 69 },
+            { url: "https://open.spotify.com/embed/album/3w5glP0mzKfTanzXpAjN27", min: 66 },
+            { url: "https://open.spotify.com/embed/album/4IZ7Lsm5le7HJPtaGLCrjO", min: 72 },
+            { url: "https://open.spotify.com/embed/album/6tioH9PNiZbmUT54MsiX5k", min: 78 },
+            { url: "https://open.spotify.com/embed/album/18xyskqkEGnVfVFhznkFIK", min: 74 },
+            { url: "https://open.spotify.com/embed/album/4zCPToY7AoTqvOKf4HRqAN", min: 76 },
+            { url: "https://open.spotify.com/embed/album/1qhlRmclvYWkrYkLnFxFZN", min: 76 },
+            { url: "https://open.spotify.com/embed/album/5B7w9vkfh979tEyzwkLk9k", min: 70 },
+            { url: "https://open.spotify.com/embed/album/7eHh5PAxQBt5KBWzd3a10G", min: 61 },
+            { url: "https://open.spotify.com/embed/album/5kevid18ttcAPK1vk0kLtc", min: 73 },
+            { url: "https://open.spotify.com/embed/album/6uj8JeIgluMibSu8Divkbh", min: 67 },
+            { url: "https://open.spotify.com/embed/album/22soWryC08ctyMNb6NrMGD", min: 80 },
+            { url: "https://open.spotify.com/embed/album/02MXdFaVMz0qQJjmivjI8g", min: 65 },
+            { url: "https://open.spotify.com/embed/album/100ZHoBX994GlckxjoGpma", min: 64 },
+            { url: "https://open.spotify.com/embed/album/2ICtKWqLqMBTzi7UeByhKd", min: 71 },
+            { url: "https://open.spotify.com/embed/album/1qag2AiFcxXU1UaIgrDFff", min: 68 },
+            { url: "https://open.spotify.com/embed/album/4m6VlVOWfrUVhWWrueMo7p", min: 70 },
+            { url: "https://open.spotify.com/embed/album/2oKngJQA5TdxF5QcP3uZEf", min: 77 },
+            { url: "https://open.spotify.com/embed/album/3pbXIzVk7CA5VM2ltxu9TN", min: 75 },
+            { url: "https://open.spotify.com/embed/album/39a7bHWZyWPxwukCHPrTly", min: 79 },
+            { url: "https://open.spotify.com/embed/album/0GRoTtX1wI16M7GSnnN96R", min: 70 },
+            { url: "https://open.spotify.com/embed/album/4piiNuehCc4VjN8NBIcnRt", min: 69 },
+            { url: "https://open.spotify.com/embed/album/7bTKP2hU0LRks1bXN1R7ko", min: 77 },
+            { url: "https://open.spotify.com/embed/album/09Ckx1JLgPsQHHGuSIt2j3", min: 179, approx: true },
+            { url: "https://open.spotify.com/embed/album/4FxNfDSXqAg8N1D8NBtvZ5", min: 81 },
+            { url: "https://open.spotify.com/embed/album/4Exxckn0GwbhnGl6N4um2N", min: 79 },
+            { url: "https://open.spotify.com/embed/album/79Drf49yNdGLBzzHMGGmBz", min: 79 },
+            { url: "https://open.spotify.com/embed/album/1yMMjH3tDN9GyXiADzTkL9", min: 71 },
+            { url: "https://open.spotify.com/embed/album/2Sw9FBHOoT6fBhYxHsRFxq", min: 74 },
+            { url: "https://open.spotify.com/embed/album/7khAMIQlYBmW7mI9cphDhJ", min: 65 },
+            { url: "https://open.spotify.com/embed/album/6BxvBG51szGmlg5x3F1rHj", min: 64 },
+            { url: "https://open.spotify.com/embed/album/6WgRUQY49NRG6JT6dJ4xEq", min: 73 },
+            { url: "https://open.spotify.com/embed/album/0q4FbI22wSMrzgWh5vgHi9", min: 62 },
+            { url: "https://open.spotify.com/embed/album/3ieWqOL150wJOcft7iZHKZ", min: 63 },
+            { url: "https://open.spotify.com/embed/album/7pZotNNAYOkeHNvJRKzYRk", min: 74 },
+            { url: "https://open.spotify.com/embed/album/2zHMeFNQQxKOmUgmppOjIM", min: 75 },
+            { url: "https://open.spotify.com/embed/album/4BZfSV9maCil4l4yftT74F", min: 75 },
+            { url: "https://open.spotify.com/embed/album/1cJ3fNx6K47p4eDFqhnvsA", min: 68 },
+            { url: "https://open.spotify.com/embed/album/76pYNMMVZTiuNy3IoXcavU", min: 68 },
+            { url: "https://open.spotify.com/embed/album/2BkEUZY7Da7bqlUjmMA2Cq", min: 67 },
+            { url: "https://open.spotify.com/embed/album/1WlRnNunbHpnRTTVkxMRnd", min: 78 },
+            { url: "https://open.spotify.com/embed/album/2WwOKZLpFWrvw3O9CISod1", min: 75 },
+            { url: "https://open.spotify.com/embed/album/6ewdyVIW2LurJhYGU0UBAa", min: 72 },
+            { url: "https://open.spotify.com/embed/album/01i4iyB40EU7Qgd6EgKoZt", min: 76 },
+            { url: "https://open.spotify.com/embed/album/1KpVSqapKAUAtAepWWxPWs", min: 68 },
+            { url: "https://open.spotify.com/embed/album/3o2Gwvg8lqLNRnlV1v1s5K", min: 79 },
+            { url: "https://open.spotify.com/embed/album/451jKBwuSNrNgLlqEAZfra", min: 83 },
+            { url: "https://open.spotify.com/embed/album/7JhdaReI98XYFrzb3jJPFa", min: 75 },
+            { url: "https://open.spotify.com/embed/album/0FuC7q4bJG41g1naKBx4ot", min: 181 },
+            { url: "https://open.spotify.com/embed/album/3Sv5tE8PcAlGY6Ys2ISQXF", min: 85 },
+            { url: "https://open.spotify.com/embed/album/2CMXywsh8wVXXCmr2bLTZ6", min: 66 },
+            { url: "https://open.spotify.com/embed/album/6sNAlohza1ZTWVMGhFTGJW", min: 81 },
+            { url: "https://open.spotify.com/embed/album/6SMOmIWODrO1gND2YPpjHf", min: 81 },
+            { url: "https://open.spotify.com/embed/album/154I9rUwPuFHj6snU4amYg", min: 72 },
+            { url: "https://open.spotify.com/embed/album/6isiJbL3hh7e60KigIgKuY", min: 79 },
+            { url: "https://open.spotify.com/embed/album/1Qnn3AAN3Nquv7GlNk41YQ", min: 78 },
+            { url: "https://open.spotify.com/embed/album/0qZ0R61AqoD2i8GnzUk91C", min: 71 },
+            { url: "https://open.spotify.com/embed/album/4sQsFeHojdbFPB07vSg3Rd", min: 84 },
+            { url: "https://open.spotify.com/embed/album/031exGT0P6IWBYY6faqoLV", min: 84 },
+            { url: "https://open.spotify.com/embed/album/5yCEzMfmMnSG97SXDFGjR8", min: 82 },
+            { url: "https://open.spotify.com/embed/album/1IkEurD7s47M9ukevi0bWA", min: 81 },
+            { url: "https://open.spotify.com/embed/album/00Pxqrupz6xjkI0vd4Otxb", min: 82 },
+            { url: "https://open.spotify.com/embed/album/2mh0BDhRAJFa7clABwut3L", min: 81 }, // 239
+
+            // Sonderveröffentlichungen (Kurzgeschichten, Adventskalender, Live-Mitschnitte,
+            // Neufassungen, Top Secret Editions, Midi-Bände, Graphic-Novel-Hörspiele, ...)
+            { url: "https://open.spotify.com/embed/album/4uJPgDMOIRfoAumwwmpRbR", min: 135 }, // Master of Chess (Live)
+            { url: "https://open.spotify.com/embed/album/4KXnXnpFRnQsjeZHpNC7X9", min: 116 }, // und der Super-Papagei 2004
+            { url: "https://open.spotify.com/embed/album/1nL3AddBvZ845zMyXRowgs", min: 151, approx: true }, // und die Geisterlampe (Kurzgeschichten)
+            { url: "https://open.spotify.com/embed/album/2AEzTekSWfyfzJH56jmhET", min: 147, approx: true }, // Das Rätsel der Sieben (Kurzgeschichten)
+            { url: "https://open.spotify.com/embed/album/4lLOJQU6QBH5cxmERE77La", min: 137 }, // und der Zeitgeist (Kurzgeschichten)
+            { url: "https://open.spotify.com/embed/album/7ehMwTyKuIM4zdiltMxE4X", min: 167, approx: true }, // und der schwarze Tag (Kurzgeschichten)
+            { url: "https://open.spotify.com/embed/album/2qFuUJMx8w4VEO0Zdf8jFJ", min: 145, approx: true }, // Adventskalender: und der 5. Advent
+            { url: "https://open.spotify.com/embed/album/5iobM2gNVymvP8XqnRnHVR", min: 138, approx: true }, // Adventskalender: Stille Nacht, düstere Nacht
+            { url: "https://open.spotify.com/embed/album/7ynXpeQRwzqKiv8WVh7c7B", min: 149, approx: true }, // Adventskalender: O du finstere
+            { url: "https://open.spotify.com/embed/album/5u2wd0lYukcINw8dUFCREq", min: 155 }, // Adventskalender: Eine schreckliche Bescherung
+            { url: "https://open.spotify.com/embed/album/0oZaQfEwMWY2TfviD4fEdV", min: 206 }, // Adventskalender: Böser die Glocken nie klingen
+            { url: "https://open.spotify.com/embed/album/0PLjPVDHMsLP0tF1Zt6uvx", min: 184 }, // Adventskalender: Gruselige Weihnacht überall
+            { url: "https://open.spotify.com/embed/album/3JJeehFIJTxhrltC6e44VT", min: 181, approx: true }, // und der dreiTag
+            { url: "https://open.spotify.com/embed/album/3egVVb6Zt0LdS6agBMGsiJ", min: 84 }, // und das kalte Auge (Midi-Band)
+            { url: "https://open.spotify.com/embed/album/7mH8vdj0TkiPO6fMHBCvYj", min: 72 }, // und der Tornadojäger (Midi-Band)
+            { url: "https://open.spotify.com/embed/album/7osWCNCcvGfqP31G7281iL", min: 90 }, // Das Grab der Inka-Mumie (Midi-Band)
+            { url: "https://open.spotify.com/embed/album/76M62o1rdKEqTN1JIbGdGV", min: 98 }, // und der dreiäugige Totenkopf (Graphic Novel Hörspiel)
+            { url: "https://open.spotify.com/embed/album/09pBOlMa7AxGh1JbdXmrgc", min: 91 }, // Das Dorf der Teufel (Graphic Novel Hörspiel)
+            { url: "https://open.spotify.com/embed/album/6GzVkk2Z68W4nhu4W9is7e", min: 18 }, // Rocky Beach Radio Show
+            { url: "https://open.spotify.com/embed/album/5RBu5WK95Q6BtWfA4o3Vgs", min: 61 }, // Top Secret Edition 1: Brainwash - Gefangene Gedanken
+            { url: "https://open.spotify.com/embed/album/249qkyRcqMAoKJhXwrTYtE", min: 117 }, // Top Secret Edition 1: House of Horrors - Haus der Angst
+            { url: "https://open.spotify.com/embed/album/2Bxdn8Gn8vEy4UiTOc8cBK", min: 53 }, // Top Secret Edition 1: High Strung - Unter Hochspannung
+            { url: "https://open.spotify.com/embed/album/6UN8m07SmIzyDe63H0oljL", min: 105 }, // Top Secret Edition 2: und das versunkene Schiff
+            { url: "https://open.spotify.com/embed/album/4vj4Dq2q7fyvwY7UCj2vin", min: 115 }, // und das Grab der Maya
+            { url: "https://open.spotify.com/embed/album/39K0Sczt1mIbW33lB5RNer", min: 89 }, // und die schwarze Katze (Neufassung 2019)
+            { url: "https://open.spotify.com/embed/album/7pkVk9UgZBBcc2D2ySHaRM", min: 92 }, // und die singende Schlange (Neufassung)
         ];
 
         const resultDiv = document.getElementById('result');
@@ -345,14 +437,22 @@
             <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.494 17.278a.75.75 0 0 1-1.032.25c-2.824-1.726-6.376-2.116-10.564-1.16a.75.75 0 1 1-.334-1.462c4.582-1.047 8.512-.597 11.68 1.34a.75.75 0 0 1 .25 1.032zm1.466-3.26a.938.938 0 0 1-1.29.308c-3.23-1.985-8.154-2.56-11.974-1.402a.937.937 0 1 1-.544-1.794c4.368-1.325 9.8-.683 13.5 1.598a.937.937 0 0 1 .308 1.29zm.126-3.395c-3.873-2.3-10.262-2.511-13.953-1.39a1.124 1.124 0 1 1-.652-2.151c4.243-1.287 11.297-1.038 15.752 1.608a1.124 1.124 0 0 1-1.147 1.933z"/>
         </svg>`;
 
+        function formatDuration(min, approx) {
+            const h = Math.floor(min / 60);
+            const m = min % 60;
+            const text = h > 0 ? `${h} Std. ${m} Min.` : `${m} Min.`;
+            return (approx ? '≈ ' : '') + text;
+        }
+
         function showRandomAlbum() {
             // Zufälligen Index wählen
             const randomIndex = Math.floor(Math.random() * albumLinks.length);
-            const selectedLink = albumLinks[randomIndex];
+            const selectedAlbum = albumLinks[randomIndex];
 
             // Embed-URL → Album-ID → direkter Spotify-Link
-            const albumId = selectedLink.split('/album/')[1];
+            const albumId = selectedAlbum.url.split('/album/')[1];
             const spotifyUrl = `https://open.spotify.com/album/${albumId}`;
+            const durationText = formatDuration(selectedAlbum.min, selectedAlbum.approx);
 
             // Albumtitel und Coverbild über oEmbed laden
             fetch(`https://open.spotify.com/oembed?url=${spotifyUrl}`)
@@ -360,7 +460,8 @@
                 .then(data => {
                     resultDiv.innerHTML = `
                         <img src="${data.thumbnail_url}" alt="${data.title}" style="width:220px;height:220px;border-radius:10px;object-fit:cover;margin-bottom:14px;box-shadow:0 4px 20px rgba(0,0,0,0.5);">
-                        <p style="margin:0 0 14px;font-size:1rem;font-weight:bold;">${data.title}</p>
+                        <p style="margin:0 0 4px;font-size:1rem;font-weight:bold;">${data.title}</p>
+                        <p style="margin:0 0 14px;font-size:0.85rem;opacity:0.7;">${durationText}</p>
                         <a class="spotify-link" href="${spotifyUrl}" target="_blank" rel="noopener">
                             ${spotifyLogoSvg}
                             In Spotify öffnen
@@ -370,6 +471,7 @@
                 .catch(() => {
                     // Fallback ohne Bild/Titel
                     resultDiv.innerHTML = `
+                        <p style="margin:0 0 14px;font-size:0.85rem;opacity:0.7;">${durationText}</p>
                         <a class="spotify-link" href="${spotifyUrl}" target="_blank" rel="noopener">
                             ${spotifyLogoSvg}
                             In Spotify öffnen
