@@ -1987,11 +1987,15 @@
         CATEGORY_ORDER.forEach(function (cat) {
             countInputs[cat].addEventListener("input", handleControlChange);
         });
+        // "input" hält Label/Live-Schätzung während des Ziehens aktuell;
+        // "change" (Loslassen bzw. abgeschlossene Eingabe) würfelt danach das
+        // Training neu, statt bei jedem Zwischenwert des Sliders neu zu würfeln.
         intensityRange.addEventListener("input", handleControlChange);
+        intensityRange.addEventListener("change", generateWorkout);
         toggleAufwaermen.addEventListener("change", handleControlChange);
         toggleCooldown.addEventListener("change", handleControlChange);
         document.querySelectorAll(".equipment-checkbox").forEach(function (cb) {
-            cb.addEventListener("change", handleControlChange);
+            cb.addEventListener("change", generateWorkout);
         });
 
         volumeRange.addEventListener("input", function () {
