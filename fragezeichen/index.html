@@ -88,6 +88,22 @@
             font-size: 0.75rem;
             opacity: 0.5;
         }
+
+        .duration-note {
+            margin: 0 0 14px;
+            font-size: 0.85rem;
+            opacity: 0.7;
+        }
+
+        .duration-note.duration-highlight {
+            display: inline-block;
+            font-weight: bold;
+            opacity: 1;
+            color: var(--theme-accent-strong);
+            background-color: color-mix(in srgb, var(--theme-accent) 15%, transparent);
+            padding: 3px 10px;
+            border-radius: 20px;
+        }
     </style>
 </head>
 
@@ -453,6 +469,8 @@
             const albumId = selectedAlbum.url.split('/album/')[1];
             const spotifyUrl = `https://open.spotify.com/album/${albumId}`;
             const durationText = formatDuration(selectedAlbum.min, selectedAlbum.approx);
+            const isUnusualLength = selectedAlbum.min > 90 || selectedAlbum.min < 20;
+            const durationClass = isUnusualLength ? 'duration-note duration-highlight' : 'duration-note';
 
             // Albumtitel und Coverbild über oEmbed laden
             fetch(`https://open.spotify.com/oembed?url=${spotifyUrl}`)
@@ -461,7 +479,7 @@
                     resultDiv.innerHTML = `
                         <img src="${data.thumbnail_url}" alt="${data.title}" style="width:220px;height:220px;border-radius:10px;object-fit:cover;margin-bottom:14px;box-shadow:0 4px 20px rgba(0,0,0,0.5);">
                         <p style="margin:0 0 4px;font-size:1rem;font-weight:bold;">${data.title}</p>
-                        <p style="margin:0 0 14px;font-size:0.85rem;opacity:0.7;">${durationText}</p>
+                        <p class="${durationClass}">${durationText}</p>
                         <a class="spotify-link" href="${spotifyUrl}" target="_blank" rel="noopener">
                             ${spotifyLogoSvg}
                             In Spotify öffnen
@@ -471,7 +489,7 @@
                 .catch(() => {
                     // Fallback ohne Bild/Titel
                     resultDiv.innerHTML = `
-                        <p style="margin:0 0 14px;font-size:0.85rem;opacity:0.7;">${durationText}</p>
+                        <p class="${durationClass}">${durationText}</p>
                         <a class="spotify-link" href="${spotifyUrl}" target="_blank" rel="noopener">
                             ${spotifyLogoSvg}
                             In Spotify öffnen
