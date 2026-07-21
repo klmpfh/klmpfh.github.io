@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Erstellt ein zufälliges Ganzkörper-Bodyweight-Training basierend auf Trainingszeit und Intensität – ganz ohne Geräte.">
+    <title>Sport – Trainingsgenerator</title>
+    <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="../assets/css/reset.css">
+    <link rel="stylesheet" href="../assets/css/theme.css">
+    <style>
+        body {
+            min-height: 100vh;
+            padding: calc(var(--theme-nav-height) + 24px) 20px 60px;
+        }
+
+        header {
+            text-align: center;
+            max-width: 760px;
+            margin: 0 auto 28px;
+        }
+
+        header h1 {
+            font-size: 1.8rem;
+            letter-spacing: 0.5px;
+        }
+
+        header .subtitle {
+            margin-top: 6px;
+            color: var(--theme-text-muted);
+            font-size: 0.9rem;
+        }
+
+        .container {
+            max-width: 760px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        /* --- Steuerung (Schieberegler + Button) --- */
+        .controls {
+            background: var(--theme-surface);
+            border: 1px solid var(--theme-border);
+            border-top: 3px solid var(--theme-accent);
+            border-radius: var(--theme-radius-lg);
+            padding: 22px 24px;
+            box-shadow: var(--theme-shadow);
+            margin-bottom: 28px;
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 16px;
+        }
+
+        .control-row label {
+            flex: 0 0 108px;
+            font-weight: 600;
+            font-size: 0.88rem;
+        }
+
+        .control-row input[type="range"] {
+            flex: 1;
+            accent-color: var(--theme-accent);
+        }
+
+        .control-value {
+            flex: 0 0 96px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            font-weight: 700;
+            color: var(--theme-accent-strong);
+            font-size: 0.85rem;
+        }
+
+        .controls .hint {
+            font-size: 0.75rem;
+            color: var(--theme-text-muted);
+            margin-bottom: 16px;
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            background-color: var(--theme-accent);
+            color: #fff;
+            font-size: 1rem;
+            font-weight: bold;
+            border: none;
+            padding: 14px 0;
+            border-radius: var(--theme-radius-sm);
+            cursor: pointer;
+            letter-spacing: 1px;
+            transition: background-color 0.15s;
+        }
+
+        .btn:hover {
+            background-color: var(--theme-accent-strong);
+        }
+
+        .btn:active {
+            background-color: var(--theme-red-700);
+        }
+
+        .btn-outline {
+            background: none;
+            color: var(--theme-accent-strong);
+            border: 2px solid var(--theme-accent);
+            margin-top: 4px;
+        }
+
+        .btn-outline:hover {
+            background: var(--theme-accent-soft);
+        }
+
+        /* --- Ausgabe --- */
+        .output[hidden] {
+            display: none;
+        }
+
+        .summary {
+            text-align: center;
+            color: var(--theme-text-muted);
+            font-size: 0.85rem;
+            margin-bottom: 22px;
+            line-height: 1.5;
+        }
+
+        .summary strong {
+            color: var(--theme-text-strong);
+        }
+
+        .phase {
+            margin-bottom: 26px;
+        }
+
+        .phase h2 {
+            font-size: 1.05rem;
+            color: var(--theme-text-strong);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+        }
+
+        .phase-time {
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: var(--theme-text-muted);
+        }
+
+        .warmup ul {
+            list-style: none;
+            background: var(--theme-surface-muted);
+            border: 1px solid var(--theme-border);
+            border-radius: var(--theme-radius);
+            padding: 12px 16px;
+        }
+
+        .warmup li {
+            font-size: 0.88rem;
+            padding: 6px 0;
+        }
+
+        .warmup-desc {
+            font-size: 0.78rem;
+            color: var(--theme-text-muted);
+            margin-top: 2px;
+        }
+
+        .cooldown p {
+            font-size: 0.88rem;
+            line-height: 1.6;
+            background: var(--theme-surface-muted);
+            border: 1px solid var(--theme-border);
+            border-radius: var(--theme-radius);
+            padding: 14px 16px;
+        }
+
+        /* --- Übungskarten --- */
+        .exercise-list {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .exercise-card {
+            background: var(--theme-surface);
+            border: 1px solid var(--theme-border);
+            border-left: 5px solid var(--cat-color, var(--theme-accent));
+            border-radius: var(--theme-radius);
+            padding: 16px 18px;
+            box-shadow: var(--theme-shadow-sm);
+        }
+
+        .exercise-card-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .exercise-name {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--theme-text-strong);
+        }
+
+        .badge-category {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            padding: 4px 10px;
+            border-radius: 999px;
+            color: #fff;
+            background: var(--cat-color, var(--theme-accent));
+            white-space: nowrap;
+        }
+
+        .exercise-sets {
+            font-weight: 700;
+            color: var(--theme-accent-strong);
+            font-size: 0.92rem;
+            margin: 10px 0 6px;
+        }
+
+        .exercise-rest {
+            font-size: 0.75rem;
+            color: var(--theme-text-muted);
+            margin-bottom: 8px;
+        }
+
+        .exercise-desc {
+            font-size: 0.87rem;
+            line-height: 1.55;
+            margin-bottom: 8px;
+        }
+
+        .exercise-muscles {
+            font-size: 0.78rem;
+            color: var(--theme-text-muted);
+        }
+
+        .reroll-btn {
+            margin-top: 12px;
+            background: none;
+            border: 1px solid var(--theme-border);
+            border-radius: var(--theme-radius-sm);
+            padding: 7px 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            color: var(--theme-text-muted);
+            transition: border-color 0.15s, color 0.15s;
+        }
+
+        .reroll-btn:hover {
+            border-color: var(--cat-color, var(--theme-accent));
+            color: var(--cat-color, var(--theme-accent));
+        }
+
+        @media (max-width: 480px) {
+            .control-row {
+                flex-wrap: wrap;
+            }
+
+            .control-row label {
+                flex: 1 0 100%;
+            }
+
+            .control-row input[type="range"] {
+                flex: 1 1 auto;
+            }
+        }
+
+        /* --- Sport-Modus (Vollbild-Übungstimer) --- */
+        .sport-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            background: var(--theme-surface);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sport-overlay[hidden] {
+            display: none;
+        }
+
+        .sport-topbar {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 16px 18px;
+            flex: 0 0 auto;
+        }
+
+        .sport-progress-track {
+            flex: 1;
+            height: 6px;
+            background: var(--theme-border);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .sport-progress-fill {
+            height: 100%;
+            background: var(--theme-accent);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .sport-step-counter {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--theme-text-muted);
+            white-space: nowrap;
+        }
+
+        .sport-exit {
+            flex: 0 0 auto;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            border: 1px solid var(--theme-border);
+            background: var(--theme-surface-muted);
+            cursor: pointer;
+            font-size: 1.1rem;
+            line-height: 1;
+            color: var(--theme-text-muted);
+        }
+
+        .sport-exit:hover {
+            border-color: var(--theme-danger);
+            color: var(--theme-danger);
+        }
+
+        .sport-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 20px 24px 40px;
+            overflow-y: auto;
+        }
+
+        .sport-kicker {
+            font-size: 0.85rem;
+            font-weight: 700;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        .sport-exercise-name {
+            font-size: clamp(1.5rem, 5vw, 2.2rem);
+            font-weight: 800;
+            color: var(--theme-text-strong);
+            max-width: 600px;
+        }
+
+        .sport-set-info {
+            margin-top: 10px;
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--theme-accent-strong);
+        }
+
+        .sport-sub-info {
+            font-size: 0.8rem;
+            color: var(--theme-text-muted);
+            margin-top: 2px;
+        }
+
+        .sport-timer {
+            font-variant-numeric: tabular-nums;
+            font-size: clamp(3.5rem, 18vw, 6rem);
+            font-weight: 800;
+            color: var(--theme-accent-strong);
+            margin: 22px 0;
+            line-height: 1;
+        }
+
+        .sport-reps-target {
+            font-size: clamp(2rem, 9vw, 3rem);
+            font-weight: 800;
+            color: var(--theme-accent-strong);
+            margin: 22px 0;
+        }
+
+        .sport-desc {
+            font-size: 0.95rem;
+            line-height: 1.6;
+            max-width: 480px;
+            margin-bottom: 10px;
+        }
+
+        .sport-muscles {
+            font-size: 0.8rem;
+            color: var(--theme-text-muted);
+            margin-bottom: 18px;
+        }
+
+        .sport-hint {
+            font-size: 0.75rem;
+            color: var(--theme-text-muted);
+            margin-top: 14px;
+        }
+
+        .sport-controls {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-top: 6px;
+        }
+
+        .sport-btn {
+            border: none;
+            border-radius: var(--theme-radius-sm);
+            padding: 16px 28px;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .sport-btn-primary {
+            background: var(--theme-accent);
+            color: #fff;
+        }
+
+        .sport-btn-primary:hover {
+            background: var(--theme-accent-strong);
+        }
+
+        .sport-btn-secondary {
+            background: none;
+            border: 1px solid var(--theme-border);
+            color: var(--theme-text-muted);
+        }
+
+        .sport-btn-secondary:hover {
+            border-color: var(--theme-accent);
+            color: var(--theme-accent);
+        }
+
+        @media (max-width: 480px) {
+            .sport-btn {
+                padding: 14px 20px;
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <script src="../assets/js/nav.js"></script>
+
+    <header>
+        <h1>Sport</h1>
+        <p class="subtitle">Zufälliger Ganzkörper-Trainingsgenerator – nur mit dem eigenen Körpergewicht, ohne Geräte.</p>
+    </header>
+
+    <div class="container">
+        <div class="controls">
+            <div class="control-row">
+                <label for="timeRange">Trainingszeit</label>
+                <input type="range" id="timeRange" min="15" max="60" step="5" value="30">
+                <span class="control-value" id="timeValue">30 Min.</span>
+            </div>
+            <div class="control-row">
+                <label for="intensityRange">Intensität</label>
+                <input type="range" id="intensityRange" min="1" max="5" step="1" value="3">
+                <span class="control-value" id="intensityValue">3 – mittel</span>
+            </div>
+            <p class="hint">Die Einstellungen landen live in der Adresszeile – so lässt sich diese Vorlage als Lesezeichen speichern.</p>
+            <button class="btn" id="generateBtn" type="button">Training generieren</button>
+        </div>
+
+        <div class="output" id="output" hidden aria-live="polite">
+            <p class="summary" id="summary"></p>
+            <button type="button" class="btn btn-outline" id="sportModeBtn">Sport-Modus starten</button>
+
+            <section class="phase warmup">
+                <h2>Aufwärmen <span class="phase-time">ca. 5 Min.</span></h2>
+                <ul id="warmupList"></ul>
+            </section>
+
+            <section class="phase main">
+                <h2>Training</h2>
+                <div class="exercise-list" id="exerciseList"></div>
+            </section>
+
+            <section class="phase cooldown">
+                <h2>Cool-down &amp; Dehnen <span class="phase-time">ca. 5 Min.</span></h2>
+                <p>Zum Abschluss die beanspruchten Muskelgruppen 20–30 Sekunden pro Seite sanft dehnen und dabei ruhig weiteratmen. Nicht wippen, nur bis zum leichten Ziehen dehnen.</p>
+            </section>
+        </div>
+    </div>
+
+    <!-- Sport-Modus: Vollbild-Overlay mit Schritt-für-Schritt-Timer für das
+         aktuell generierte Training. Wird per JS befüllt/gesteuert. -->
+    <div class="sport-overlay" id="sportOverlay" hidden>
+        <div class="sport-topbar">
+            <span class="sport-step-counter" id="sportStepCounter"></span>
+            <div class="sport-progress-track">
+                <div class="sport-progress-fill" id="sportProgressFill"></div>
+            </div>
+            <button type="button" class="sport-exit" id="sportExitBtn" aria-label="Sport-Modus beenden">×</button>
+        </div>
+        <div class="sport-body" id="sportBody"></div>
+    </div>
+
+    <script>
+        'use strict';
+
+        /* =====================================================================
+         * ÜBUNGSDATENBANK
+         * ---------------------------------------------------------------------
+         * Neue Übung hinzufügen: einfach ein weiteres Objekt in das passende
+         * Array-Segment einfügen. Felder:
+         *   name        - Anzeigename
+         *   category    - 'beine' | 'ruecken' | 'push' | 'core' | 'cardio'
+         *   type        - 'reps' (Sätze x Wiederholungen) oder 'time' (Sätze x Haltezeit)
+         *   difficulty  - 'leicht' | 'mittel' | 'schwer' (steuert, ab welcher
+         *                 Intensitätsstufe die Übung ins Training darf)
+         *   muscles     - kurze Auflistung der trainierten Muskelgruppen
+         *   description - kurze Ausführungsanleitung
+         * Alle Übungen sind bewusst reine Körpergewichtsübungen ohne Geräte.
+         * ===================================================================== */
+        var EXERCISES = [
+            // --- Beine & Gesäß --------------------------------------------------
+            { name: "Kniebeugen", category: "beine", type: "reps", difficulty: "leicht", muscles: "Quadrizeps, Gesäß", description: "Füße schulterbreit aufstellen, Rücken gerade halten, Hüfte nach hinten schieben und in die Knie gehen, bis die Oberschenkel etwa parallel zum Boden sind. Kraftvoll wieder aufstehen." },
+            { name: "Ausfallschritte", category: "beine", type: "reps", difficulty: "mittel", muscles: "Quadrizeps, Gesäß, Waden", description: "Großen Schritt nach vorne machen, das hintere Knie Richtung Boden senken, bis beide Knie etwa 90° gebeugt sind, dann zurück in den Stand drücken. Seite wechseln." },
+            { name: "Wandsitz", category: "beine", type: "time", difficulty: "mittel", muscles: "Quadrizeps, Gesäß", description: "Mit geradem Rücken an einer Wand entlang in die Hocke gehen, bis die Oberschenkel parallel zum Boden sind, und die Position wie auf einem unsichtbaren Stuhl halten." },
+            { name: "Sumo-Kniebeugen", category: "beine", type: "reps", difficulty: "leicht", muscles: "Innere Oberschenkel, Gesäß", description: "Füße breiter als schulterbreit aufstellen, Zehen leicht nach außen drehen, in die Hocke gehen und dabei die Knie in Zehenrichtung führen, dann aufstehen." },
+            { name: "Kniebeugen-Sprünge", category: "beine", type: "reps", difficulty: "schwer", muscles: "Quadrizeps, Gesäß, Waden", description: "Aus der Kniebeuge explosiv nach oben abspringen, weich in den Knien landen und direkt in die nächste Wiederholung übergehen." },
+            { name: "Bulgarian Split Squats", category: "beine", type: "reps", difficulty: "schwer", muscles: "Quadrizeps, Gesäß", description: "Den hinteren Fuß erhöht ablegen (z. B. auf einem Stuhl), das vordere Bein tief beugen, bis das hintere Knie fast den Boden berührt, dann hochdrücken. Seite wechseln." },
+            { name: "Hüftheben (Glute Bridge)", category: "beine", type: "reps", difficulty: "leicht", muscles: "Gesäß, hintere Oberschenkel", description: "Rückenlage, Füße aufgestellt. Die Hüfte nach oben drücken, bis Schultern, Hüfte und Knie eine Linie bilden, kurz halten, kontrolliert absenken." },
+            { name: "Einbeinige Hüftheben", category: "beine", type: "reps", difficulty: "mittel", muscles: "Gesäß, hintere Oberschenkel", description: "Wie Hüftheben, aber ein Bein gestreckt in der Luft halten und die Hüfte nur mit dem Standbein anheben. Seite wechseln." },
+            { name: "Step-Ups", category: "beine", type: "reps", difficulty: "mittel", muscles: "Quadrizeps, Gesäß", description: "Auf eine stabile Erhöhung (Stufe, Bank) steigen, oben durchstrecken, dann kontrolliert wieder herabsteigen. Seite wechseln." },
+            { name: "Wadenheben", category: "beine", type: "reps", difficulty: "leicht", muscles: "Waden", description: "Im Stehen langsam auf die Zehenspitzen erheben, oben kurz halten, dann kontrolliert absenken." },
+            { name: "Curtsy Lunges", category: "beine", type: "reps", difficulty: "mittel", muscles: "Gesäß, Quadrizeps, Adduktoren", description: "Ein Bein diagonal hinter das Standbein kreuzen und in die Knie gehen wie bei einem Knicks, dann zurück in den Stand. Seite wechseln." },
+            { name: "Pistol Squats (assistiert)", category: "beine", type: "reps", difficulty: "schwer", muscles: "Quadrizeps, Gesäß, Balance", description: "Auf einem Bein in die tiefe Hocke gehen, das andere Bein nach vorne strecken. Bei Bedarf leicht an einer Wand oder einem Möbelstück abstützen." },
+
+            // --- Rücken (Pull) ---------------------------------------------------
+            { name: "Superman Hold", category: "ruecken", type: "time", difficulty: "leicht", muscles: "unterer Rücken, Gesäß", description: "Bauchlage, Arme nach vorne gestreckt. Arme, Oberkörper und Beine gleichzeitig leicht vom Boden abheben und die Position halten." },
+            { name: "Superman Pulses", category: "ruecken", type: "reps", difficulty: "mittel", muscles: "unterer Rücken, Gesäß, Schultern", description: "Wie Superman Hold, aber Arme und Beine im gehobenen Zustand rhythmisch in kleinen Pulsen auf- und ab bewegen." },
+            { name: "Reverse Snow Angels", category: "ruecken", type: "reps", difficulty: "leicht", muscles: "oberer Rücken, Schultern", description: "Bauchlage, Arme seitlich am Körper. Arme über die Seiten Richtung Kopf führen wie beim Schneeengel und wieder zurück." },
+            { name: "Rückenstrecker", category: "ruecken", type: "reps", difficulty: "mittel", muscles: "unterer Rücken", description: "Bauchlage, Hände locker an den Schläfen. Oberkörper langsam vom Boden abheben, kurz halten, dann kontrolliert absenken." },
+            { name: "Bird Dog", category: "ruecken", type: "reps", difficulty: "leicht", muscles: "unterer Rücken, Core, Gesäß", description: "Vierfüßlerstand, gegenüberliegenden Arm und Bein gleichzeitig gerade ausstrecken, kurz halten, dann die Seite wechseln." },
+            { name: "Y-T-W Raises", category: "ruecken", type: "reps", difficulty: "mittel", muscles: "oberer Rücken, Schultern", description: "Bauchlage, Arme nacheinander in Y-, T- und W-Position vom Boden abheben und dabei die Schulterblätter zusammenziehen." },
+            { name: "Good Mornings (Bodyweight)", category: "ruecken", type: "reps", difficulty: "mittel", muscles: "unterer Rücken, hintere Oberschenkel, Gesäß", description: "Hände hinter dem Kopf, Oberkörper mit geradem Rücken aus der Hüfte nach vorne beugen, dann wieder aufrichten." },
+            { name: "Locust Pulses", category: "ruecken", type: "reps", difficulty: "schwer", muscles: "unterer Rücken, Gesäß, Schultern", description: "Bauchlage, Arme seitlich neben dem Körper. Brust und Beine anheben und in kleinen, schnellen Pulsen weiter nach oben drücken." },
+            { name: "Schwimmer (Swimmers)", category: "ruecken", type: "reps", difficulty: "mittel", muscles: "unterer Rücken, Gesäß, Schultern", description: "Bauchlage, Arme und Beine gestreckt. Abwechselnd gegenüberliegenden Arm und Bein heben, in einer flüssigen Schwimmbewegung." },
+            { name: "Cobra Stretch Hold", category: "ruecken", type: "time", difficulty: "leicht", muscles: "unterer Rücken, Bauch (Dehnung)", description: "Bauchlage, Hände unter den Schultern aufstellen, Oberkörper aufrichten, Becken bleibt am Boden. Position ruhig atmend halten." },
+
+            // --- Brust/Schulter/Arme (Push) --------------------------------------
+            { name: "Liegestütze", category: "push", type: "reps", difficulty: "mittel", muscles: "Brust, Schultern, Trizeps", description: "Hände etwas breiter als schulterbreit aufsetzen, Körper bildet eine gerade Linie. Brust kontrolliert Richtung Boden senken und wieder hochdrücken." },
+            { name: "Knie-Liegestütze", category: "push", type: "reps", difficulty: "leicht", muscles: "Brust, Schultern, Trizeps", description: "Wie Liegestütze, aber auf den Knien statt auf den Zehenspitzen abgestützt, um die Belastung zu reduzieren." },
+            { name: "Diamant-Liegestütze", category: "push", type: "reps", difficulty: "schwer", muscles: "Trizeps, Brust", description: "Hände unter der Brust so zusammenstellen, dass Daumen und Zeigefinger eine Raute bilden, dann Liegestütze ausführen." },
+            { name: "Breite Liegestütze", category: "push", type: "reps", difficulty: "mittel", muscles: "Brust, Schultern", description: "Hände deutlich breiter als schulterbreit aufsetzen und Liegestütze ausführen, um verstärkt die Brust anzusprechen." },
+            { name: "Pike Push-ups", category: "push", type: "reps", difficulty: "schwer", muscles: "Schultern, Trizeps", description: "Po nach oben strecken, sodass der Körper ein umgekehrtes V bildet. Kopf Richtung Boden senken und wieder hochdrücken – wie ein Schulterdrücken." },
+            { name: "Trizeps-Dips (Stuhl)", category: "push", type: "reps", difficulty: "mittel", muscles: "Trizeps, Schultern", description: "Hände auf die Kante eines stabilen Stuhls oder einer Bank stützen, Beine nach vorne strecken, Körper absenken und wieder hochdrücken." },
+            { name: "Archer Push-ups", category: "push", type: "reps", difficulty: "schwer", muscles: "Brust, Trizeps, Schultern", description: "Breite Liegestütz-Position, beim Absenken das Gewicht auf eine Seite verlagern, während der andere Arm gestreckt bleibt. Seite wechseln." },
+            { name: "Schräge Liegestütze (erhöht)", category: "push", type: "reps", difficulty: "leicht", muscles: "Brust, Schultern", description: "Hände auf einer erhöhten Fläche (z. B. Couch, Treppenstufe) aufstellen und Liegestütze ausführen – leichter als am Boden." },
+            { name: "Liegestütze mit erhöhten Füßen", category: "push", type: "reps", difficulty: "schwer", muscles: "obere Brust, Schultern", description: "Füße auf einer Erhöhung ablegen, Hände schulterbreit am Boden aufstellen und Liegestütze ausführen." },
+            { name: "Plank-Ups", category: "push", type: "reps", difficulty: "mittel", muscles: "Brust, Trizeps, Core", description: "Aus dem Unterarmstütz abwechselnd Hand für Hand in den hohen Liegestütz drücken und wieder zurück auf die Unterarme." },
+            { name: "Wand-Liegestütze", category: "push", type: "reps", difficulty: "leicht", muscles: "Brust, Schultern, Trizeps", description: "Im Stehen mit ausgestreckten Armen gegen eine Wand stützen, den Oberkörper zur Wand absenken und wieder wegdrücken." },
+
+            // --- Core / Rumpf -----------------------------------------------------
+            { name: "Unterarmstütz (Plank)", category: "core", type: "time", difficulty: "leicht", muscles: "gesamter Rumpf", description: "Auf Unterarmen und Zehenspitzen abstützen, der Körper bildet eine gerade Linie von Kopf bis Ferse. Position halten, Bauch anspannen." },
+            { name: "Seitplank", category: "core", type: "time", difficulty: "mittel", muscles: "seitliche Bauchmuskeln, Rumpf", description: "Seitlich auf einem Unterarm abstützen, der Körper bildet eine gerade Linie, die Hüfte nicht absinken lassen. Seite wechseln." },
+            { name: "Crunches", category: "core", type: "reps", difficulty: "leicht", muscles: "gerade Bauchmuskeln", description: "Rückenlage, Knie angewinkelt. Oberkörper kontrolliert Richtung Knie einrollen, dabei den unteren Rücken am Boden lassen." },
+            { name: "Fahrrad-Crunches", category: "core", type: "reps", difficulty: "mittel", muscles: "gerade und schräge Bauchmuskeln", description: "Rückenlage, Hände hinter dem Kopf. Abwechselnd den Ellbogen zum gegenüberliegenden Knie führen, wie beim Fahrradfahren." },
+            { name: "Beinheben", category: "core", type: "reps", difficulty: "mittel", muscles: "unterer Bauch, Hüftbeuger", description: "Rückenlage, Beine gestreckt. Beine gemeinsam kontrolliert bis 90° anheben, dann langsam wieder absenken, ohne den Boden zu berühren." },
+            { name: "Mountain Climbers", category: "core", type: "reps", difficulty: "mittel", muscles: "Rumpf, Hüftbeuger, Cardio", description: "Hoher Liegestütz, Knie abwechselnd zügig Richtung Brust ziehen, den Rumpf dabei stabil halten." },
+            { name: "Russian Twists", category: "core", type: "reps", difficulty: "mittel", muscles: "schräge Bauchmuskeln", description: "Sitzend, Oberkörper leicht zurückgelehnt, Füße leicht abgehoben. Oberkörper mit gefalteten Händen abwechselnd nach links und rechts drehen." },
+            { name: "Hollow Body Hold", category: "core", type: "time", difficulty: "schwer", muscles: "gesamter Rumpf", description: "Rückenlage, unteren Rücken fest auf den Boden drücken, Arme und Beine gestreckt leicht anheben und die Spannung halten." },
+            { name: "Plank Shoulder Taps", category: "core", type: "reps", difficulty: "mittel", muscles: "Rumpf, Schultern", description: "Hoher Liegestütz, abwechselnd mit einer Hand die gegenüberliegende Schulter berühren, die Hüfte dabei möglichst ruhig halten." },
+            { name: "V-Ups", category: "core", type: "reps", difficulty: "schwer", muscles: "gesamter Bauch, Hüftbeuger", description: "Rückenlage, Arme und Beine gestreckt. Gleichzeitig Oberkörper und Beine anheben, um mit den Händen die Füße zu berühren." },
+            { name: "Dead Bug", category: "core", type: "reps", difficulty: "leicht", muscles: "tiefe Bauchmuskulatur, Rumpf", description: "Rückenlage, Arme zur Decke, Knie 90° angewinkelt. Gegenüberliegenden Arm und Bein langsam absenken, ohne den Rücken durchzudrücken, dann wechseln." },
+            { name: "Flutter Kicks", category: "core", type: "reps", difficulty: "mittel", muscles: "unterer Bauch, Hüftbeuger", description: "Rückenlage, Beine leicht angehoben und gestreckt. Beine im Wechsel in kleinen, schnellen Bewegungen auf und ab bewegen." },
+
+            // --- Cardio / Mobility (Aufwärmen & Finisher) -------------------------
+            { name: "Hampelmänner", category: "cardio", type: "reps", difficulty: "leicht", muscles: "Ganzkörper, Herz-Kreislauf", description: "Im Stand gleichzeitig mit einem Sprung die Beine seitlich öffnen und die Arme über dem Kopf zusammenführen, dann zurückspringen." },
+            { name: "Hohe Knie", category: "cardio", type: "reps", difficulty: "mittel", muscles: "Hüftbeuger, Beine, Herz-Kreislauf", description: "Auf der Stelle laufen und die Knie abwechselnd so hoch wie möglich Richtung Brust ziehen." },
+            { name: "Armkreisen", category: "cardio", type: "time", difficulty: "leicht", muscles: "Schultern", description: "Arme seitlich ausstrecken und in kontrollierten, gleichmäßigen Kreisen erst vorwärts, dann rückwärts kreisen lassen." },
+            { name: "Hüftkreisen", category: "cardio", type: "time", difficulty: "leicht", muscles: "Hüfte, unterer Rücken", description: "Hände in die Hüften stützen und das Becken in großen, weichen Kreisen bewegen, beide Richtungen." },
+            { name: "Butt Kicks", category: "cardio", type: "reps", difficulty: "mittel", muscles: "hintere Oberschenkel, Herz-Kreislauf", description: "Auf der Stelle laufen und dabei die Fersen abwechselnd zügig Richtung Gesäß führen." },
+            { name: "Ausfallschritte mit Rotation", category: "cardio", type: "reps", difficulty: "mittel", muscles: "Beine, Rumpf, Mobilität", description: "In einen Ausfallschritt gehen und den Oberkörper zur Seite des vorderen Beins rotieren, dann zurück und Seite wechseln." },
+            { name: "World's Greatest Stretch", category: "cardio", type: "reps", difficulty: "mittel", muscles: "Hüfte, Rumpf, Beine (Mobilität)", description: "Aus einem tiefen Ausfallschritt die Innenseite mit dem Ellbogen zum Boden führen und den Oberkörper zur Decke rotieren. Seite wechseln." },
+            { name: "Seilspringen (ohne Seil)", category: "cardio", type: "time", difficulty: "mittel", muscles: "Waden, Herz-Kreislauf", description: "Auf der Stelle in kleinen, schnellen Sprüngen hüpfen, so als würde ein Springseil geschwungen." },
+            { name: "Inchworms", category: "cardio", type: "reps", difficulty: "mittel", muscles: "Rumpf, hintere Oberschenkel, Schultern", description: "Aus dem Stand mit den Händen am Boden nach vorne laufen bis zum hohen Liegestütz, kurz halten, dann zu den Füßen zurücklaufen." },
+            { name: "Katze-Kuh", category: "cardio", type: "reps", difficulty: "leicht", muscles: "Wirbelsäule, Rumpf (Mobilität)", description: "Vierfüßlerstand, abwechselnd den Rücken rund zur Decke drücken (Katze) und ins Hohlkreuz Richtung Boden senken (Kuh)." },
+            { name: "Skater Jumps", category: "cardio", type: "reps", difficulty: "schwer", muscles: "Beine, Gesäß, Balance", description: "Seitlich von einem Bein zum anderen springen wie ein Schlittschuhläufer, weich landen und kurz die Balance halten." },
+            { name: "Kniebeugen mit Armkreisen", category: "cardio", type: "reps", difficulty: "leicht", muscles: "Ganzkörper (Aufwärmen)", description: "Langsame Kniebeugen ausführen und dabei gleichzeitig die Arme locker nach vorne kreisen, um Gelenke und Kreislauf aufzuwärmen." }
+        ];
+
+        /* Anzeige-Metadaten je Kategorie: Label und Badge-Farbe. */
+        var CATEGORY_META = {
+            beine:   { label: "Beine &amp; Gesäß",                    color: "#2f9e44" },
+            ruecken: { label: "Rücken (Pull)",                        color: "#1971c2" },
+            push:    { label: "Brust/Schulter/Arme (Push)",           color: "#e8590c" },
+            core:    { label: "Core / Rumpf",                         color: "#9c36b5" },
+            cardio:  { label: "Cardio/Mobility",                      color: "#0c8599" }
+        };
+
+        /* Je Intensitätsstufe (1-5): Satzanzahl, Wiederholungs-/Haltezeit-Basis,
+         * Pausenzeit sowie erlaubter Schwierigkeitspool für die Übungsauswahl. */
+        var INTENSITY_CONFIG = {
+            1: { sets: 2, repsMin: 8,  repsMax: 10, holdSec: 15, restSec: 45, pool: ["leicht"] },
+            2: { sets: 2, repsMin: 10, repsMax: 12, holdSec: 20, restSec: 40, pool: ["leicht", "mittel"] },
+            3: { sets: 3, repsMin: 12, repsMax: 15, holdSec: 30, restSec: 30, pool: ["leicht", "mittel"] },
+            4: { sets: 3, repsMin: 15, repsMax: 18, holdSec: 40, restSec: 25, pool: ["mittel", "schwer"] },
+            5: { sets: 4, repsMin: 15, repsMax: 20, holdSec: 45, restSec: 20, pool: ["mittel", "schwer"] }
+        };
+        var INTENSITY_LABELS = { 1: "sehr leicht", 2: "leicht", 3: "mittel", 4: "anspruchsvoll", 5: "sehr intensiv" };
+
+        var WARMUP_MIN = 5;
+        var COOLDOWN_MIN = 5;
+
+        /* =====================================================================
+         * DOM-Referenzen & State
+         * ===================================================================== */
+        var timeRange = document.getElementById("timeRange");
+        var intensityRange = document.getElementById("intensityRange");
+        var timeValue = document.getElementById("timeValue");
+        var intensityValue = document.getElementById("intensityValue");
+        var generateBtn = document.getElementById("generateBtn");
+        var outputEl = document.getElementById("output");
+        var summaryEl = document.getElementById("summary");
+        var warmupListEl = document.getElementById("warmupList");
+        var exerciseListEl = document.getElementById("exerciseList");
+        var sportModeBtn = document.getElementById("sportModeBtn");
+        var sportOverlayEl = document.getElementById("sportOverlay");
+        var sportBodyEl = document.getElementById("sportBody");
+        var sportProgressFillEl = document.getElementById("sportProgressFill");
+        var sportStepCounterEl = document.getElementById("sportStepCounter");
+        var sportExitBtn = document.getElementById("sportExitBtn");
+
+        var currentWorkout = null; // { timeMin, intensity, cfg, exercises: [...], warmup: [...] }
+        var lastSignature = "";    // Namen der zuletzt generierten Übungen, um Duplikate zu vermeiden
+
+        /* =====================================================================
+         * Hilfsfunktionen
+         * ===================================================================== */
+
+        // Rundet einen Wert auf den nächsten gültigen Schrittwert innerhalb [min, max].
+        function clampToStep(value, min, max, step) {
+            var snapped = Math.round((value - min) / step) * step + min;
+            return Math.min(max, Math.max(min, snapped));
+        }
+
+        // Anzahl der Hauptübungen (6-8) abhängig von der gewählten Trainingszeit.
+        function computeExerciseCount(timeMin) {
+            var raw = 6 + Math.round((timeMin - 15) / 45 * 2);
+            return Math.min(8, Math.max(6, raw));
+        }
+
+        // Sätze steigen bei längerer Trainingszeit leicht über die Intensitätsstufe hinaus.
+        function effectiveSets(cfg, timeMin) {
+            var bonus = timeMin >= 45 ? 1 : 0;
+            return Math.min(5, cfg.sets + bonus);
+        }
+
+        // Pausenzeit wird bei knapper Zeit etwas verkürzt, bei viel Zeit etwas großzügiger.
+        function effectiveRest(cfg, timeMin) {
+            var rest = cfg.restSec;
+            if (timeMin <= 20) rest -= 10;
+            else if (timeMin >= 45) rest += 10;
+            return Math.max(10, rest);
+        }
+
+        // Baut die Kategorie-Reihenfolge für die Hauptübungen: alle 4 Kernbereiche
+        // werden mindestens einmal abgedeckt, ab 7 Übungen schließt ein
+        // Cardio/Mobility-Finisher das Training ab.
+        function buildCategoryPlan(count) {
+            var core = ["beine", "ruecken", "push", "core"];
+            var plan = [];
+            var i = 0;
+            while (plan.length < count) {
+                plan.push(core[i % core.length]);
+                i++;
+            }
+            if (count >= 7) plan[plan.length - 1] = "cardio";
+            return plan;
+        }
+
+        // Wählt zufällig eine Übung einer Kategorie, bevorzugt aus dem zur
+        // Intensität passenden Schwierigkeitspool und ohne bereits verwendete
+        // Namen. Fällt kontrolliert zurück, falls der Pool zu klein ist.
+        function pickExercise(category, pool, usedNames) {
+            var candidates = EXERCISES.filter(function (e) {
+                return e.category === category && pool.indexOf(e.difficulty) !== -1 && !usedNames.has(e.name);
+            });
+            if (candidates.length === 0) {
+                candidates = EXERCISES.filter(function (e) {
+                    return e.category === category && pool.indexOf(e.difficulty) !== -1;
+                });
+            }
+            if (candidates.length === 0) {
+                candidates = EXERCISES.filter(function (e) { return e.category === category; });
+            }
+            return candidates[Math.floor(Math.random() * candidates.length)];
+        }
+
+        // Wählt 3 unterschiedliche Cardio/Mobility-Übungen fürs Aufwärmen aus.
+        function pickWarmup() {
+            var pool = EXERCISES.filter(function (e) { return e.category === "cardio"; }).slice();
+            var picked = [];
+            for (var n = 0; n < 3 && pool.length > 0; n++) {
+                var idx = Math.floor(Math.random() * pool.length);
+                picked.push(pool[idx]);
+                pool.splice(idx, 1);
+            }
+            return picked;
+        }
+
+        function formatSets(ex, cfg, timeMin) {
+            var sets = effectiveSets(cfg, timeMin);
+            if (ex.type === "time") {
+                return sets + " × " + cfg.holdSec + " Sek. Halten";
+            }
+            return sets + " × " + cfg.repsMin + "–" + cfg.repsMax + " Wdh.";
+        }
+
+        // Grobe Schätzung der Gesamtdauer in Minuten, inkl. Auf- und Abwärmen.
+        function estimateDurationMinutes(workout) {
+            var cfg = workout.cfg;
+            var timeMin = workout.timeMin;
+            var sets = effectiveSets(cfg, timeMin);
+            var rest = effectiveRest(cfg, timeMin);
+            var transitionSec = 15; // Wechselzeit zwischen zwei Übungen
+            var totalSec = 0;
+
+            workout.exercises.forEach(function (ex) {
+                var workSec = ex.type === "time" ? cfg.holdSec : ((cfg.repsMin + cfg.repsMax) / 2) * 3; // ~3 Sek. je Wdh.
+                totalSec += sets * workSec + (sets - 1) * rest + transitionSec;
+            });
+
+            totalSec += (WARMUP_MIN + COOLDOWN_MIN) * 60;
+            return Math.round(totalSec / 60);
+        }
+
+        /* =====================================================================
+         * URL-Parameter (zeit, intensitaet) für Lesezeichen mit Vorlage
+         * ===================================================================== */
+        function readParamsIntoSliders() {
+            var params = new URLSearchParams(location.search);
+            var zeit = parseInt(params.get("zeit"), 10);
+            var intensitaet = parseInt(params.get("intensitaet"), 10);
+
+            if (!isNaN(zeit)) {
+                timeRange.value = clampToStep(zeit, 15, 60, 5);
+            }
+            if (!isNaN(intensitaet)) {
+                intensityRange.value = clampToStep(intensitaet, 1, 5, 1);
+            }
+        }
+
+        function syncUrl() {
+            var params = new URLSearchParams(location.search);
+            params.set("zeit", timeRange.value);
+            params.set("intensitaet", intensityRange.value);
+            var newUrl = location.pathname + "?" + params.toString();
+            history.replaceState(null, "", newUrl);
+        }
+
+        function updateLabels() {
+            timeValue.textContent = timeRange.value + " Min.";
+            intensityValue.textContent = intensityRange.value + " – " + INTENSITY_LABELS[intensityRange.value];
+        }
+
+        /* =====================================================================
+         * Training generieren & rendern
+         * ===================================================================== */
+        function generateWorkout() {
+            var timeMin = Number(timeRange.value);
+            var intensity = Number(intensityRange.value);
+            var cfg = INTENSITY_CONFIG[intensity];
+            var count = computeExerciseCount(timeMin);
+
+            var exercises, signature;
+            // Bis zu 6 Versuche, damit die neue Zusammenstellung nicht exakt
+            // der zuletzt angezeigten entspricht (falls die Übungsdatenbank
+            // das überhaupt zulässt).
+            for (var attempt = 0; attempt < 6; attempt++) {
+                var categoryPlan = buildCategoryPlan(count);
+                var usedNames = new Set();
+                exercises = categoryPlan.map(function (cat) {
+                    var ex = pickExercise(cat, cfg.pool, usedNames);
+                    usedNames.add(ex.name);
+                    return ex;
+                });
+                signature = exercises.map(function (e) { return e.name; }).join("|");
+                if (signature !== lastSignature) break;
+            }
+            lastSignature = signature;
+
+            currentWorkout = {
+                timeMin: timeMin,
+                intensity: intensity,
+                cfg: cfg,
+                exercises: exercises,
+                warmup: pickWarmup()
+            };
+
+            render();
+        }
+
+        // Würfelt eine einzelne Übung (per Klick auf "andere Übung") innerhalb
+        // derselben Kategorie neu, ohne den Rest des Trainings zu verändern.
+        function rerollExercise(idx) {
+            var cfg = currentWorkout.cfg;
+            var current = currentWorkout.exercises[idx];
+            var usedNames = new Set(currentWorkout.exercises.map(function (e) { return e.name; }));
+            var replacement = pickExercise(current.category, cfg.pool, usedNames);
+            currentWorkout.exercises[idx] = replacement;
+            render();
+        }
+        // Für die inline onclick-Handler im generierten HTML zugänglich machen.
+        window.rerollExercise = rerollExercise;
+
+        function render() {
+            var workout = currentWorkout;
+            var cfg = workout.cfg;
+
+            outputEl.hidden = false;
+
+            summaryEl.innerHTML = "<strong>" + workout.exercises.length + " Übungen</strong> · Intensität " +
+                workout.intensity + " (" + INTENSITY_LABELS[workout.intensity] + ") · geschätzte Gesamtdauer ≈ " +
+                estimateDurationMinutes(workout) + " Minuten (inkl. Auf- &amp; Cool-down)";
+
+            warmupListEl.innerHTML = workout.warmup.map(function (ex) {
+                return "<li><strong>" + ex.name + "</strong> – ca. 45 Sek. lockeres Tempo" +
+                    "<div class=\"warmup-desc\">" + ex.description + "</div></li>";
+            }).join("");
+
+            exerciseListEl.innerHTML = workout.exercises.map(function (ex, idx) {
+                var meta = CATEGORY_META[ex.category];
+                return "" +
+                    "<div class=\"exercise-card\" style=\"--cat-color:" + meta.color + "\">" +
+                    "  <div class=\"exercise-card-head\">" +
+                    "    <span class=\"exercise-name\">" + ex.name + "</span>" +
+                    "    <span class=\"badge-category\">" + meta.label + "</span>" +
+                    "  </div>" +
+                    "  <div class=\"exercise-sets\">" + formatSets(ex, cfg, workout.timeMin) + "</div>" +
+                    "  <div class=\"exercise-rest\">Pause zwischen den Sätzen: " + effectiveRest(cfg, workout.timeMin) + " Sek.</div>" +
+                    "  <p class=\"exercise-desc\">" + ex.description + "</p>" +
+                    "  <p class=\"exercise-muscles\">Muskeln: " + ex.muscles + " · Grundschwierigkeit: " + ex.difficulty + "</p>" +
+                    "  <button type=\"button\" class=\"reroll-btn\" onclick=\"rerollExercise(" + idx + ")\" aria-label=\"Andere Übung für " + meta.label.replace(/&amp;/g, "&") + " auswürfeln\">andere Übung</button>" +
+                    "</div>";
+            }).join("");
+        }
+
+        /* =====================================================================
+         * Sport-Modus: Vollbild-Schritt-für-Schritt-Timer
+         * ---------------------------------------------------------------------
+         * Zerlegt das aktuelle Training in eine flache Liste von "Schritten"
+         * (Aufwärmen, Satz mit Haltezeit, Satz mit Wiederholungen ohne Timer,
+         * Pause). Jeder Schritt mit fester Zeit hat einen eigenen Start/Pause-
+         * Timer, der manuell gestartet werden muss und beim Ablaufen
+         * automatisch zum nächsten Schritt weiterschaltet. Schritte ohne feste
+         * Zeit (Wiederholungen) haben keinen Timer – dort lässt sich nur die
+         * anschließende Pause starten.
+         * ===================================================================== */
+        var sportState = null;   // { steps, index, remaining, running, deadline, intervalId }
+        var wakeLockSentinel = null;
+
+        // Baut die flache Schrittliste für den Sport-Modus aus dem aktuellen Training.
+        function buildSportSteps(workout) {
+            var cfg = workout.cfg;
+            var sets = effectiveSets(cfg, workout.timeMin);
+            var rest = effectiveRest(cfg, workout.timeMin);
+            var steps = [];
+
+            workout.warmup.forEach(function (ex, i) {
+                steps.push({
+                    kind: "warmup",
+                    exercise: ex,
+                    duration: 45,
+                    stepLabel: "Aufwärmen " + (i + 1) + " / " + workout.warmup.length
+                });
+            });
+
+            workout.exercises.forEach(function (ex, exIndex) {
+                var isLastExercise = exIndex === workout.exercises.length - 1;
+                for (var s = 1; s <= sets; s++) {
+                    if (ex.type === "time") {
+                        steps.push({ kind: "work-time", exercise: ex, exIndex: exIndex, setIndex: s, totalSets: sets, duration: cfg.holdSec });
+                    } else {
+                        steps.push({ kind: "work-reps", exercise: ex, exIndex: exIndex, setIndex: s, totalSets: sets, repsMin: cfg.repsMin, repsMax: cfg.repsMax });
+                    }
+                    var isLastSet = s === sets;
+                    if (!(isLastSet && isLastExercise)) {
+                        steps.push({ kind: "rest", exercise: ex, exIndex: exIndex, setIndex: s, totalSets: sets, duration: rest });
+                    }
+                }
+            });
+
+            steps.push({ kind: "done" });
+            return steps;
+        }
+
+        function formatTime(sec) {
+            var m = Math.floor(sec / 60);
+            var s = sec % 60;
+            return m + ":" + (s < 10 ? "0" : "") + s;
+        }
+
+        // "Sätze werden heruntergezählt": zeigt zusätzlich zur Satzposition an,
+        // wie viele Sätze danach noch folgen.
+        function remainingSetsText(setIndex, totalSets) {
+            var remaining = totalSets - setIndex;
+            if (remaining <= 0) return "letzter Satz";
+            if (remaining === 1) return "noch 1 Satz danach";
+            return "noch " + remaining + " Sätze danach";
+        }
+
+        // Beschreibt, was als Nächstes kommt – wird auf dem Pause-Bildschirm
+        // angezeigt. Bei einer Wiederholungs-Übung (die selbst keinen Timer
+        // hat) wird hier zusätzlich die Ziel-Wiederholungszahl genannt, damit
+        // sie trotzdem sichtbar ist, bevor der Satz beginnt.
+        function nextStepPreview(next) {
+            if (!next) return "";
+            if (next.kind === "work-reps") {
+                return "Nächste: " + next.exercise.name + " – " + next.repsMin + "–" + next.repsMax +
+                    " Wiederholungen (Satz " + next.setIndex + "/" + next.totalSets + ")";
+            }
+            if (next.kind === "work-time") {
+                return "Nächste: " + next.exercise.name + " (Satz " + next.setIndex + "/" + next.totalSets + ")";
+            }
+            if (next.kind === "done") {
+                return "Letzter Schritt – gleich geschafft!";
+            }
+            return "";
+        }
+
+        function overallStepLabel(step) {
+            if (step.kind === "warmup") return "Aufwärmen";
+            if (step.kind === "done") return "Fertig";
+            return "Übung " + (step.exIndex + 1) + " / " + currentWorkout.exercises.length;
+        }
+
+        function sportTimedStepHtml(o) {
+            return "" +
+                "<div class=\"sport-kicker\" style=\"color:" + o.catColor + "\">" + o.kicker + "</div>" +
+                "<h2 class=\"sport-exercise-name\">" + o.name + "</h2>" +
+                (o.info ? "<div class=\"sport-set-info\">" + o.info + "</div>" : "") +
+                (o.subInfo ? "<div class=\"sport-sub-info\">" + o.subInfo + "</div>" : "") +
+                "<div class=\"sport-timer\" id=\"sportTimerDisplay\">" + formatTime(sportState.remaining) + "</div>" +
+                (o.desc ? "<p class=\"sport-desc\">" + o.desc + "</p>" : "") +
+                (o.muscles ? "<p class=\"sport-muscles\">Muskeln: " + o.muscles + "</p>" : "") +
+                "<div class=\"sport-controls\">" +
+                "  <button type=\"button\" class=\"sport-btn sport-btn-primary\" id=\"sportTimerBtn\" onclick=\"sportToggleTimer()\">Start</button>" +
+                "  <button type=\"button\" class=\"sport-btn sport-btn-secondary\" onclick=\"sportSkipStep()\">Überspringen</button>" +
+                "</div>";
+        }
+
+        function sportRepsStepHtml(o) {
+            return "" +
+                "<div class=\"sport-kicker\" style=\"color:" + o.catColor + "\">" + o.kicker + "</div>" +
+                "<h2 class=\"sport-exercise-name\">" + o.name + "</h2>" +
+                (o.info ? "<div class=\"sport-set-info\">" + o.info + "</div>" : "") +
+                (o.subInfo ? "<div class=\"sport-sub-info\">" + o.subInfo + "</div>" : "") +
+                "<div class=\"sport-reps-target\">" + o.reps + "</div>" +
+                (o.desc ? "<p class=\"sport-desc\">" + o.desc + "</p>" : "") +
+                (o.muscles ? "<p class=\"sport-muscles\">Muskeln: " + o.muscles + "</p>" : "") +
+                "<div class=\"sport-controls\">" +
+                "  <button type=\"button\" class=\"sport-btn sport-btn-primary\" onclick=\"sportSkipStep()\">" + o.buttonLabel + "</button>" +
+                "</div>" +
+                "<p class=\"sport-hint\">" + o.hint + "</p>";
+        }
+
+        function sportDoneHtml() {
+            return "" +
+                "<div class=\"sport-kicker\">Geschafft</div>" +
+                "<h2 class=\"sport-exercise-name\">Training abgeschlossen!</h2>" +
+                "<p class=\"sport-desc\">Stark durchgezogen. Nimm dir jetzt noch ca. 5 Minuten zum Dehnen – 20–30 Sekunden pro Muskelgruppe, ruhig weiteratmen.</p>" +
+                "<div class=\"sport-controls\">" +
+                "  <button type=\"button\" class=\"sport-btn sport-btn-primary\" onclick=\"exitSportMode()\">Sport-Modus verlassen</button>" +
+                "</div>";
+        }
+
+        function renderSportStep() {
+            var step = sportState.steps[sportState.index];
+            var next = sportState.steps[sportState.index + 1];
+            var html;
+
+            sportStepCounterEl.textContent = overallStepLabel(step);
+            var pct = sportState.steps.length > 1 ? (sportState.index / (sportState.steps.length - 1)) * 100 : 100;
+            sportProgressFillEl.style.width = pct + "%";
+
+            if (step.kind === "warmup") {
+                sportState.remaining = step.duration;
+                html = sportTimedStepHtml({
+                    kicker: "Aufwärmen",
+                    name: step.exercise.name,
+                    info: step.stepLabel,
+                    subInfo: "Lockeres Tempo",
+                    desc: step.exercise.description,
+                    muscles: step.exercise.muscles,
+                    catColor: CATEGORY_META.cardio.color
+                });
+            } else if (step.kind === "work-time") {
+                var metaT = CATEGORY_META[step.exercise.category];
+                sportState.remaining = step.duration;
+                html = sportTimedStepHtml({
+                    kicker: metaT.label,
+                    name: step.exercise.name,
+                    info: "Satz " + step.setIndex + " / " + step.totalSets,
+                    subInfo: remainingSetsText(step.setIndex, step.totalSets),
+                    desc: step.exercise.description,
+                    muscles: step.exercise.muscles,
+                    catColor: metaT.color
+                });
+            } else if (step.kind === "work-reps") {
+                var metaR = CATEGORY_META[step.exercise.category];
+                var goesToRest = next && next.kind === "rest";
+                html = sportRepsStepHtml({
+                    kicker: metaR.label,
+                    name: step.exercise.name,
+                    info: "Satz " + step.setIndex + " / " + step.totalSets,
+                    subInfo: remainingSetsText(step.setIndex, step.totalSets),
+                    reps: step.repsMin + "–" + step.repsMax + " Wiederholungen",
+                    desc: step.exercise.description,
+                    muscles: step.exercise.muscles,
+                    catColor: metaR.color,
+                    buttonLabel: goesToRest ? "Satz erledigt – weiter zur Pause" : "Satz erledigt – Training abschließen",
+                    hint: goesToRest ? "Kein Timer für diese Übung – nur die Pause danach lässt sich starten." : "Kein Timer für diese Übung."
+                });
+            } else if (step.kind === "rest") {
+                sportState.remaining = step.duration;
+                html = sportTimedStepHtml({
+                    kicker: "Pause",
+                    name: "Kurz durchatmen",
+                    info: nextStepPreview(next),
+                    catColor: "#71717a"
+                });
+            } else {
+                html = sportDoneHtml();
+            }
+
+            sportBodyEl.innerHTML = html;
+        }
+
+        function updateTimerDisplay() {
+            var el = document.getElementById("sportTimerDisplay");
+            if (el) el.textContent = formatTime(sportState.remaining);
+        }
+
+        function updateTimerButtonLabel() {
+            var btn = document.getElementById("sportTimerBtn");
+            if (btn) btn.textContent = sportState.running ? "Pause" : "Start";
+        }
+
+        function sportTick() {
+            var msLeft = sportState.deadline - Date.now();
+            var secLeft = Math.max(0, Math.ceil(msLeft / 1000));
+            if (secLeft !== sportState.remaining) {
+                sportState.remaining = secLeft;
+                updateTimerDisplay();
+            }
+            if (msLeft <= 0) {
+                clearInterval(sportState.intervalId);
+                sportState.intervalId = null;
+                sportState.running = false;
+                if (navigator.vibrate) {
+                    try { navigator.vibrate(200); } catch (e) { /* nicht unterstützt - ignorieren */ }
+                }
+                advanceSportStep();
+            }
+        }
+
+        function startSportTimer() {
+            if (!sportState || sportState.running) return;
+            sportState.running = true;
+            sportState.deadline = Date.now() + sportState.remaining * 1000;
+            updateTimerButtonLabel();
+            sportState.intervalId = setInterval(sportTick, 250);
+        }
+
+        function pauseSportTimer() {
+            if (!sportState || !sportState.running) return;
+            clearInterval(sportState.intervalId);
+            sportState.intervalId = null;
+            sportState.running = false;
+            sportState.remaining = Math.max(0, Math.ceil((sportState.deadline - Date.now()) / 1000));
+            updateTimerButtonLabel();
+        }
+
+        function sportToggleTimer() {
+            if (!sportState) return;
+            if (sportState.running) pauseSportTimer(); else startSportTimer();
+        }
+        window.sportToggleTimer = sportToggleTimer;
+
+        function advanceSportStep() {
+            if (sportState.index < sportState.steps.length - 1) {
+                sportState.index++;
+                renderSportStep();
+            }
+        }
+
+        // Manuelles Weiterschalten: sowohl für "Überspringen" als auch für
+        // "Satz erledigt" bei Wiederholungs-Übungen ohne eigenen Timer.
+        function sportSkipStep() {
+            if (!sportState) return;
+            if (sportState.intervalId) {
+                clearInterval(sportState.intervalId);
+                sportState.intervalId = null;
+            }
+            sportState.running = false;
+            advanceSportStep();
+        }
+        window.sportSkipStep = sportSkipStep;
+
+        // Erkennt Mobilgeräte (Touch-Geräte), damit der Vollbildmodus nur dort
+        // aktiviert wird und Desktop-Nutzer nicht ungefragt ins Vollbild
+        // wechseln. Kombiniert eine User-Agent-Prüfung mit einer Abfrage des
+        // primären Zeigegeräts (coarse pointer = i. d. R. Finger/Touch).
+        function isMobileDevice() {
+            var ua = navigator.userAgent || "";
+            var uaLooksMobile = /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua);
+            var pointerIsCoarse = typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
+            return uaLooksMobile || pointerIsCoarse;
+        }
+
+        // Versucht, echten Vollbildmodus zu aktivieren (mit Vendor-Prefixes
+        // für ältere Browser). Das Overlay deckt den Viewport per CSS aber
+        // auch dann vollständig ab, wenn die Fullscreen-API fehlschlägt oder
+        // gar nicht unterstützt wird (z. B. manche iOS-Versionen).
+        function requestFullscreenSafe(el) {
+            var req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+            if (!req) return;
+            try {
+                var result = req.call(el);
+                if (result && typeof result.catch === "function") {
+                    result.catch(function () { /* Vollbild verweigert/nicht möglich - ignorieren */ });
+                }
+            } catch (e) { /* ignorieren */ }
+        }
+
+        function exitFullscreenSafe() {
+            var isFs = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+            if (!isFs) return;
+            var exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+            if (!exit) return;
+            try {
+                var result = exit.call(document);
+                if (result && typeof result.catch === "function") result.catch(function () {});
+            } catch (e) { /* ignorieren */ }
+        }
+
+        // Verhindert die automatische Bildschirmsperre während des Trainings.
+        // Der Wake Lock wird vom Browser beim Verstecken des Tabs automatisch
+        // freigegeben, daher bei Rückkehr in den sichtbaren Zustand erneut anfordern.
+        function requestWakeLock() {
+            if (!("wakeLock" in navigator)) return;
+            navigator.wakeLock.request("screen").then(function (sentinel) {
+                wakeLockSentinel = sentinel;
+            }).catch(function () { /* z. B. Akkusparmodus aktiv - ignorieren */ });
+        }
+
+        function releaseWakeLock() {
+            if (wakeLockSentinel) {
+                wakeLockSentinel.release().catch(function () {});
+                wakeLockSentinel = null;
+            }
+        }
+
+        function handleVisibilityChange() {
+            if (document.visibilityState === "visible" && sportOverlayEl && !sportOverlayEl.hidden) {
+                requestWakeLock();
+            }
+        }
+
+        function handleSportKeydown(e) {
+            if (e.key === "Escape") {
+                exitSportMode();
+                return;
+            }
+            if (e.code === "Space" || e.key === " ") {
+                e.preventDefault();
+                var step = sportState.steps[sportState.index];
+                if (step.kind === "work-reps") sportSkipStep(); else sportToggleTimer();
+            }
+        }
+
+        function enterSportMode() {
+            if (!currentWorkout) return;
+            sportState = { steps: buildSportSteps(currentWorkout), index: 0, remaining: 0, running: false, deadline: 0, intervalId: null };
+            sportOverlayEl.hidden = false;
+            if (isMobileDevice()) requestFullscreenSafe(sportOverlayEl);
+            requestWakeLock();
+            document.addEventListener("visibilitychange", handleVisibilityChange);
+            document.addEventListener("keydown", handleSportKeydown);
+            renderSportStep();
+        }
+
+        function exitSportMode() {
+            if (sportState && sportState.intervalId) {
+                clearInterval(sportState.intervalId);
+            }
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+            document.removeEventListener("keydown", handleSportKeydown);
+            releaseWakeLock();
+            exitFullscreenSafe();
+            sportOverlayEl.hidden = true;
+            sportState = null;
+        }
+        window.exitSportMode = exitSportMode;
+
+        /* =====================================================================
+         * Event-Listener & Initialisierung
+         * ===================================================================== */
+        timeRange.addEventListener("input", function () {
+            updateLabels();
+            syncUrl();
+        });
+        intensityRange.addEventListener("input", function () {
+            updateLabels();
+            syncUrl();
+        });
+        generateBtn.addEventListener("click", generateWorkout);
+        sportModeBtn.addEventListener("click", enterSportMode);
+        sportExitBtn.addEventListener("click", exitSportMode);
+
+        readParamsIntoSliders();
+        updateLabels();
+        syncUrl();
+        generateWorkout();
+    </script>
+</body>
+
+</html>

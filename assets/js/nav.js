@@ -56,6 +56,7 @@
         { key: 'knallbum',      href: 'knallbum/',      label: 'Knall Bumm' },
         { key: 'laserfeelings', href: 'laserfeelings/', label: 'Laser & Feelings' },
         { key: 'mermaid',       href: 'mermaid/',       label: 'Mermaid Editor' },
+        { key: 'sport',         href: 'sport/',         label: 'Sport' },
         { key: 'zauberkloppen', href: 'zauberkloppen/', label: 'Zaubern & Kloppen' }
     ];
 
