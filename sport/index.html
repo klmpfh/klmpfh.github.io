@@ -776,7 +776,7 @@
 
             <div class="control-row">
                 <label for="volumeRange">Lautstärke</label>
-                <input type="range" id="volumeRange" min="0" max="200" step="5" value="100">
+                <input type="range" id="volumeRange" min="0" max="100" step="5" value="100">
                 <span class="control-value" id="volumeValue">100 %</span>
                 <button type="button" class="icon-btn" id="muteBtn" aria-label="Signaltöne stummschalten" aria-pressed="false"></button>
             </div>
@@ -1476,7 +1476,7 @@
             var gain = ctx.createGain();
             osc.type = "sine";
             osc.frequency.value = freq;
-            var peak = Math.max(0, Math.min(2, volume)) * (gainScale || 1) * 0.35;
+            var peak = Math.max(0, Math.min(1, volume)) * (gainScale || 1) * 0.35;
             gain.gain.setValueAtTime(0, now);
             gain.gain.linearRampToValueAtTime(peak, now + 0.015);
             gain.gain.exponentialRampToValueAtTime(0.0001, now + durationMs / 1000);
@@ -1489,7 +1489,7 @@
         // secondsLeft in [1,5]: je näher an 0, desto höher und lauter.
         function playCountdownBeep(secondsLeft) {
             var step = 6 - secondsLeft; // 1..5
-            playTone(500 + step * 90, 130, 0.6 + step * 0.08);
+            playTone(600 + step * (200/5), 200, 0.6 + step * 0.08);
         }
 
         function playCompletionBeep() {
