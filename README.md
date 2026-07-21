@@ -31,6 +31,8 @@ im Browser funktionieren.
   exportiert sie im gewünschten Zeitraum als .ics oder als maschinenlesbares CSV.
 - `/fileshare/` – Teilt Dateien direkt zwischen zwei Browsern per WebRTC (Peer-to-Peer),
   ohne Upload auf einen Server. Sitzungslink/QR-Code enthält eine zufällige 128-Bit-ID.
+- `/mermaid/` – Live-Editor für Mermaid-Diagramme: geteilter Bildschirm mit Syntax-Highlighting
+  links, gerenderter Vorschau rechts und Fehlerkonsole darunter.
 - `/knallbum/` – Berechnet aus Preisen an der Bar die beste Option (ml Alkohol/€).
 - `/laserfeelings/` – Szenario-Generator für Laser & Feelings.
 - `/zauberkloppen/` – Szenario-Generator für Fantasy-Rollenspiele.
