@@ -45,6 +45,7 @@
         }
 
         li {
+            position: relative;
             background: var(--theme-surface);
             border: 1px solid var(--theme-border);
             border-top: 3px solid var(--theme-accent);
@@ -66,6 +67,12 @@
             text-decoration: none;
             font-size: 1rem;
             font-weight: 700;
+        }
+
+        li a::before {
+            content: "";
+            position: absolute;
+            inset: 0;
         }
 
         li:hover a {
