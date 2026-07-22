@@ -1988,6 +1988,7 @@
          * ===================================================================== */
         CATEGORY_ORDER.forEach(function (cat) {
             countInputs[cat].addEventListener("input", handleControlChange);
+            countInputs[cat].addEventListener("change", generateWorkout);
         });
         // "input" hält Label/Live-Schätzung während des Ziehens aktuell;
         // "change" (Loslassen bzw. abgeschlossene Eingabe) würfelt danach das
@@ -1995,7 +1996,9 @@
         intensityRange.addEventListener("input", handleControlChange);
         intensityRange.addEventListener("change", generateWorkout);
         toggleAufwaermen.addEventListener("change", handleControlChange);
+        toggleAufwaermen.addEventListener("change", generateWorkout);
         toggleCooldown.addEventListener("change", handleControlChange);
+        toggleCooldown.addEventListener("change", generateWorkout);
         document.querySelectorAll(".equipment-checkbox").forEach(function (cb) {
             cb.addEventListener("change", generateWorkout);
         });
