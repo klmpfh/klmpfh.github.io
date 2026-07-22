@@ -353,6 +353,36 @@
             max-height: 80px;
         }
     }
+
+    /* CodeMirror lädt sein "neat"-Theme als fest verdrahtetes, helles CSS von
+       einem CDN – das passt sich nicht automatisch an. Überschreibt hier nur
+       die Editor-Oberfläche (nicht die Mermaid-Syntax-Highlight-Farben, die
+       auf hellem wie dunklem Grund gut lesbar bleiben). */
+    @media (prefers-color-scheme: dark) {
+        .editor-wrap .CodeMirror {
+            background: var(--theme-surface-muted);
+            color: var(--theme-text);
+        }
+
+        .editor-wrap .CodeMirror-gutters {
+            background: var(--theme-surface-muted);
+            border-right: 1px solid var(--border);
+        }
+
+        .editor-wrap .CodeMirror-linenumber {
+            color: var(--theme-text-muted);
+        }
+
+        .editor-wrap .CodeMirror-cursor {
+            border-left: 1px solid var(--theme-text);
+        }
+
+        .editor-wrap .CodeMirror-selected {
+            background: var(--theme-accent-soft);
+        }
+
+        .editor-wrap .cm-comment { color: var(--theme-text-muted); }
+    }
 </style>
 </head>
 <body>

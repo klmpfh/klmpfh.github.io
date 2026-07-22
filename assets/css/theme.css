@@ -64,6 +64,7 @@
     --theme-success-soft: #f0fdf4;
     --theme-warning:      #d97706;
     --theme-warning-soft: #fffbeb;
+    --theme-warning-text: #744210;
     --theme-danger:       var(--theme-red-600);
     --theme-danger-soft:  var(--theme-red-50);
 
@@ -87,6 +88,105 @@
        zufällig gesetzt (document.documentElement.style.setProperty). Der
        Wert hier ist nur der Fallback, falls JavaScript deaktiviert ist. */
     --theme-bg-angle: 135deg;
+
+    /* Rohwerte der dunklen Palette. Liegen als eigene "--dark-*"-Tokens vor
+       (statt direkt in den beiden Regeln unten), damit die Farbwerte nur an
+       einer Stelle gepflegt werden müssen – System-Auto-Modus (media query)
+       und manueller Umschalter (data-theme-Attribut, siehe nav.js) greifen
+       beide nur auf diese Tokens zu, statt eigene Werte zu duplizieren. */
+    --dark-gray-50:  #17171a;
+    --dark-gray-100: #202024;
+    --dark-gray-150: #26262b;
+
+    --dark-bg:            #131315;
+    --dark-surface:       #1c1c20;
+    --dark-surface-muted: #202024;
+    --dark-border:        #35353c;
+    --dark-text:          #e4e4e7;
+    --dark-text-muted:    #9a9aa5;
+    --dark-text-strong:   #fafafa;
+
+    --dark-accent-strong: hsl(var(--theme-accent-hue), 82%, 70%);
+    --dark-accent-soft:   hsl(var(--theme-accent-hue), 42%, 22%);
+    --dark-accent-border: hsl(var(--theme-accent-hue), 55%, 42%);
+
+    --dark-success:      #4ade80;
+    --dark-success-soft: #123322;
+    --dark-warning:      #fbbf24;
+    --dark-warning-soft: #3a2a0d;
+    --dark-warning-text: #fbbf24;
+    --dark-danger:       #f87171;
+    --dark-danger-soft:  #3a1414;
+
+    --dark-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.45);
+    --dark-shadow:    0 8px 24px rgba(0, 0, 0, 0.55);
+}
+
+/* Dunkles Design, Variante 1: greift automatisch, wenn das System/der
+   Browser Dark Mode eingestellt hat – außer der manuelle Umschalter im Menü
+   (nav.js) hat explizit "Hell" gewählt (dann steht data-theme="light" am
+   <html>-Element und :not() verhindert, dass die Systemeinstellung das
+   wieder überschreibt). */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --theme-gray-50:  var(--dark-gray-50);
+        --theme-gray-100: var(--dark-gray-100);
+        --theme-gray-150: var(--dark-gray-150);
+
+        --theme-bg:            var(--dark-bg);
+        --theme-surface:       var(--dark-surface);
+        --theme-surface-muted: var(--dark-surface-muted);
+        --theme-border:        var(--dark-border);
+        --theme-text:          var(--dark-text);
+        --theme-text-muted:    var(--dark-text-muted);
+        --theme-text-strong:   var(--dark-text-strong);
+
+        --theme-accent-strong: var(--dark-accent-strong);
+        --theme-accent-soft:   var(--dark-accent-soft);
+        --theme-accent-border: var(--dark-accent-border);
+
+        --theme-success:      var(--dark-success);
+        --theme-success-soft: var(--dark-success-soft);
+        --theme-warning:      var(--dark-warning);
+        --theme-warning-soft: var(--dark-warning-soft);
+        --theme-warning-text: var(--dark-warning-text);
+        --theme-danger:       var(--dark-danger);
+        --theme-danger-soft:  var(--dark-danger-soft);
+
+        --theme-shadow-sm: var(--dark-shadow-sm);
+        --theme-shadow:    var(--dark-shadow);
+    }
+}
+
+/* Dunkles Design, Variante 2: manuell über den Umschalter im Menü erzwungen
+   (data-theme="dark"), unabhängig von der Systemeinstellung. */
+:root[data-theme="dark"] {
+    --theme-gray-50:  var(--dark-gray-50);
+    --theme-gray-100: var(--dark-gray-100);
+    --theme-gray-150: var(--dark-gray-150);
+
+    --theme-bg:            var(--dark-bg);
+    --theme-surface:       var(--dark-surface);
+    --theme-surface-muted: var(--dark-surface-muted);
+    --theme-border:        var(--dark-border);
+    --theme-text:          var(--dark-text);
+    --theme-text-muted:    var(--dark-text-muted);
+    --theme-text-strong:   var(--dark-text-strong);
+
+    --theme-accent-strong: var(--dark-accent-strong);
+    --theme-accent-soft:   var(--dark-accent-soft);
+    --theme-accent-border: var(--dark-accent-border);
+
+    --theme-success:      var(--dark-success);
+    --theme-success-soft: var(--dark-success-soft);
+    --theme-warning:      var(--dark-warning);
+    --theme-warning-soft: var(--dark-warning-soft);
+    --theme-warning-text: var(--dark-warning-text);
+    --theme-danger:       var(--dark-danger);
+    --theme-danger-soft:  var(--dark-danger-soft);
+
+    --theme-shadow-sm: var(--dark-shadow-sm);
+    --theme-shadow:    var(--dark-shadow);
 }
 
 html {

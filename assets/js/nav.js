@@ -11,12 +11,49 @@
  * Akzent-Farbton (siehe assets/css/theme.css, das dafür bereits eingebunden
  * sein muss) und färbt darüber auch das <link rel="icon">-Favicon passend ein.
  *
+ * Enthält außerdem den Hell/Dunkel-Umschalter im Menü: ohne manuelle Wahl
+ * folgt das Design der Systemeinstellung (prefers-color-scheme, siehe
+ * theme.css); die Wahl wird in localStorage gemerkt und gilt seitenübergreifend.
+ *
  * Menüinhalt, Styling und Verhalten liegen ausschließlich hier – wer eine
  * Unterseite hinzufügt, entfernt oder umbenennt, ändert nur die Liste
  * `tools` unten, keine einzelne Seite.
  */
 (function () {
     'use strict';
+
+    var THEME_KEY = 'klmpfh-theme';
+    var THEME_MODES = ['system', 'light', 'dark'];
+    var THEME_LABELS = {
+        system: '🖥️ Design: System',
+        light:  '☀️ Design: Hell',
+        dark:   '🌙 Design: Dunkel'
+    };
+
+    function getStoredThemeMode() {
+        try {
+            var stored = localStorage.getItem(THEME_KEY);
+            return THEME_MODES.indexOf(stored) !== -1 ? stored : 'system';
+        } catch (e) {
+            return 'system';
+        }
+    }
+
+    /** Setzt/entfernt data-theme am <html>-Element – theme.css greift dafür sowohl
+     *  per prefers-color-scheme (mode "system") als auch per [data-theme] (mode
+     *  "light"/"dark") auf dieselben Farbwerte zu, siehe dortige Kommentare. */
+    function applyThemeMode(mode) {
+        if (mode === 'light' || mode === 'dark') {
+            document.documentElement.setAttribute('data-theme', mode);
+        } else {
+            document.documentElement.removeAttribute('data-theme');
+        }
+    }
+
+    // So früh wie möglich anwenden (noch vor dem Rest des Scripts), damit die
+    // gespeicherte Wahl nicht erst kurz als Systemeinstellung aufblitzt.
+    var currentThemeMode = getStoredThemeMode();
+    applyThemeMode(currentThemeMode);
 
     var scriptEl = document.currentScript;
     var src = scriptEl.getAttribute('src') || '';
@@ -75,22 +112,27 @@
     style.textContent =
         '.site-nav{position:fixed;top:0;left:0;right:0;height:56px;box-sizing:border-box;' +
         'display:flex;align-items:center;justify-content:space-between;padding:0 20px;' +
-        'background:#ffffff;border-bottom:1px solid #e4e4e7;z-index:9999;' +
+        'background:var(--theme-surface);border-bottom:1px solid var(--theme-border);z-index:9999;' +
         'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}' +
         '.site-nav a{text-decoration:none;}' +
-        '.site-nav-brand{font-weight:700;font-size:15px;letter-spacing:0.3px;color:#27272a;}' +
+        '.site-nav-brand{font-weight:700;font-size:15px;letter-spacing:0.3px;color:var(--theme-text-strong);}' +
         '.site-nav-toggle{display:flex;align-items:center;gap:7px;background:none;cursor:pointer;' +
-        'border:1px solid #e4e4e7;border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600;' +
-        'color:#52525b;font-family:inherit;transition:border-color .15s,color .15s;}' +
+        'border:1px solid var(--theme-border);border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600;' +
+        'color:var(--theme-text-muted);font-family:inherit;transition:border-color .15s,color .15s;}' +
         '.site-nav-toggle:hover,.site-nav-toggle[aria-expanded="true"]{border-color:var(--theme-accent);color:var(--theme-accent);}' +
         '.site-nav-menu{position:fixed;top:66px;right:20px;min-width:220px;max-width:calc(100vw - 40px);' +
-        'max-height:calc(100vh - 86px);overflow-y:auto;background:#ffffff;border:1px solid #e4e4e7;' +
-        'border-radius:10px;box-shadow:0 12px 30px rgba(24,24,27,0.14);padding:6px;z-index:9999;' +
+        'max-height:calc(100vh - 86px);overflow-y:auto;background:var(--theme-surface);border:1px solid var(--theme-border);' +
+        'border-radius:10px;box-shadow:var(--theme-shadow);padding:6px;z-index:9999;' +
         'display:flex;flex-direction:column;gap:1px;}' +
         '.site-nav-menu[hidden]{display:none;}' +
-        '.site-nav-menu a{display:block;padding:9px 12px;border-radius:7px;font-size:13.5px;color:#3f3f46;}' +
+        '.site-nav-menu a{display:block;padding:9px 12px;border-radius:7px;font-size:13.5px;color:var(--theme-text);}' +
         '.site-nav-menu a:hover{background:var(--theme-accent-soft);color:var(--theme-accent);}' +
         '.site-nav-menu a.active{color:var(--theme-accent-strong);font-weight:700;background:var(--theme-accent-soft);}' +
+        '.site-nav-theme-toggle{display:block;width:100%;text-align:left;background:none;cursor:pointer;' +
+        'border:none;border-radius:7px;padding:9px 12px;font-size:13.5px;font-weight:600;' +
+        'color:var(--theme-text-muted);font-family:inherit;}' +
+        '.site-nav-theme-toggle:hover{background:var(--theme-accent-soft);color:var(--theme-accent);}' +
+        '.site-nav-divider{height:1px;background:var(--theme-border);margin:5px 4px;}' +
         '@media (max-width:520px){.site-nav{padding:0 14px;}.site-nav-toggle-label{display:none;}' +
         '.site-nav-toggle{padding:7px 10px;}.site-nav-menu{right:14px;}}';
     document.head.appendChild(style);
@@ -114,6 +156,24 @@
     menu.className = 'site-nav-menu';
     menu.id = 'site-nav-menu';
     menu.hidden = true;
+
+    var themeToggle = document.createElement('button');
+    themeToggle.type = 'button';
+    themeToggle.className = 'site-nav-theme-toggle';
+    themeToggle.textContent = THEME_LABELS[currentThemeMode];
+    themeToggle.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var idx = THEME_MODES.indexOf(currentThemeMode);
+        currentThemeMode = THEME_MODES[(idx + 1) % THEME_MODES.length];
+        try { localStorage.setItem(THEME_KEY, currentThemeMode); } catch (err) { /* localStorage evtl. nicht verfügbar (privater Modus) */ }
+        applyThemeMode(currentThemeMode);
+        themeToggle.textContent = THEME_LABELS[currentThemeMode];
+    });
+    menu.appendChild(themeToggle);
+
+    var themeDivider = document.createElement('div');
+    themeDivider.className = 'site-nav-divider';
+    menu.appendChild(themeDivider);
 
     tools.forEach(function (tool) {
         var a = document.createElement('a');
