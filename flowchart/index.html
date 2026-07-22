@@ -98,6 +98,10 @@
         cursor: text;
     }
 
+    .title-input {
+        width: 160px;
+    }
+
     select:hover, button:hover:not(:disabled) {
         border-color: var(--accent);
         color: var(--theme-text-strong);
@@ -708,6 +712,20 @@ function unquote(text) {
     return t.replace(/&quot;/g, '"');
 }
 
+// YAML-Escaping/-Unescaping fuer den Frontmatter-Titel (eigenes Format ggue.
+// unquote(), da dort Mermaids Node-Label-Konvention "&quot;" gilt).
+function escapeYamlString(text) {
+    return String(text == null ? '' : text).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function unquoteYaml(text) {
+    let t = (text == null ? '' : text).trim();
+    if (t.length >= 2 && t.charAt(0) === '"' && t.charAt(t.length - 1) === '"') {
+        t = t.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+    }
+    return t;
+}
+
 function escapeRegex(str) {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -750,13 +768,20 @@ function buildEdgeLine(e) {
     return `${e.source}${token}${e.target}`;
 }
 
-function buildThemeFrontmatter(theme) {
-    if (!theme) return '';
-    return ['---', 'config:', `  theme: ${theme}`, '---', ''].join('\n');
+function buildFrontmatter(theme, title) {
+    if (!theme && !title) return '';
+    const lines = ['---'];
+    if (title) lines.push(`title: "${escapeYamlString(title)}"`);
+    if (theme) {
+        lines.push('config:');
+        lines.push(`  theme: ${theme}`);
+    }
+    lines.push('---', '');
+    return lines.join('\n');
 }
 
-function generateMermaidCode(nodes, edges, direction, theme) {
-    const frontmatter = buildThemeFrontmatter(theme);
+function generateMermaidCode(nodes, edges, direction, theme, title) {
+    const frontmatter = buildFrontmatter(theme, title);
     if (nodes.length === 0) {
         return frontmatter + `flowchart ${direction}`;
     }
@@ -798,6 +823,7 @@ function generateMermaidCode(nodes, edges, direction, theme) {
 // gleich interpretiert, nicht nur fuer Flowcharts.
 function stripFrontmatter(rawLines) {
     let theme = '';
+    let title = '';
     let startIdx = 0;
     if (rawLines[0] === '---') {
         let end = -1;
@@ -806,13 +832,15 @@ function stripFrontmatter(rawLines) {
         }
         if (end !== -1) {
             for (let i = 1; i < end; i++) {
-                const m = rawLines[i].match(/^theme:\s*(\S+)/);
-                if (m) theme = m[1];
+                const themeMatch = rawLines[i].match(/^theme:\s*(\S+)/);
+                if (themeMatch) theme = themeMatch[1];
+                const titleMatch = rawLines[i].match(/^title:\s*(.+)$/);
+                if (titleMatch) title = unquoteYaml(titleMatch[1]);
             }
             startIdx = end + 1;
         }
     }
-    return { theme, startIdx };
+    return { theme, title, startIdx };
 }
 
 function parseMermaidToGraph(code) {
@@ -825,6 +853,7 @@ function parseMermaidToGraph(code) {
 
     const frontmatter = stripFrontmatter(rawLines);
     const theme = frontmatter.theme;
+    const title = frontmatter.title;
 
     let direction = 'TD';
     let startIdx = frontmatter.startIdx;
@@ -980,7 +1009,7 @@ function parseMermaidToGraph(code) {
         data: { label: e.label, lineStyle: e.lineStyle, arrowMode: e.arrowMode },
     }));
 
-    return { nodes, edges, direction, theme };
+    return { nodes, edges, direction, theme, title };
 }
 
 /* ==========================================================================
@@ -1418,6 +1447,7 @@ function FlowchartEditor() {
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [direction, setDirection] = useState('TD');
     const [theme, setTheme] = useState('');
+    const [title, setTitle] = useState('');
     const [selectedNodeId, setSelectedNodeId] = useState(null);
     const [selectedEdgeId, setSelectedEdgeId] = useState(null);
     const [dropTargetId, setDropTargetId] = useState(null);
@@ -1636,6 +1666,7 @@ function FlowchartEditor() {
         setEdges(importedEdges);
         setDirection(parsed.direction);
         setTheme(parsed.theme || '');
+        setTitle(parsed.title || '');
         idCounterRef.current = importedNodes.length;
         edgeCounterRef.current = importedEdges.length;
         nodeIdsRef.current = new Set(importedNodes.map((n) => n.id));
@@ -1644,7 +1675,7 @@ function FlowchartEditor() {
         setTimeout(() => { if (reactFlowInstance && reactFlowInstance.fitView) reactFlowInstance.fitView({ padding: 0.2 }); }, 50);
     }, [setNodes, setEdges, updateNodeLabel, updateEdgeLabel, consumeAutoEdit, resizeSubgraph, reactFlowInstance]);
 
-    const code = useMemo(() => generateMermaidCode(nodes, edges, direction, theme), [nodes, edges, direction, theme]);
+    const code = useMemo(() => generateMermaidCode(nodes, edges, direction, theme, title), [nodes, edges, direction, theme, title]);
 
     const selectedNode = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) : null;
     const selectedEdge = selectedEdgeId ? edges.find((e) => e.id === selectedEdgeId) : null;
@@ -1660,6 +1691,15 @@ function FlowchartEditor() {
             <header>
                 <div className="brand"><h1>Flowchart Editor</h1></div>
                 <div className="controls">
+                    <label>Titel
+                        <input
+                            type="text"
+                            className="title-input"
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            placeholder="Diagrammtitel"
+                        />
+                    </label>
                     <label>Richtung
                         <select value={direction} onChange={(e) => setDirection(e.target.value)}>
                             <option value="TD">Top-Down (TD)</option>
