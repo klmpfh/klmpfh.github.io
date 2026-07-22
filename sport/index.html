@@ -1215,8 +1215,13 @@
         }
 
         // Wählt unterschiedliche Cardio/Mobility-Übungen fürs Aufwärmen aus.
-        function pickWarmup(allowedEquipment, mainCount) {
-            var pool = EXERCISES.filter(function (e) { return e.category === "cardio" && equipmentAllowed(e, allowedEquipment); });
+        // usedNames enthält die Namen der bereits für die Hauptübungen
+        // gewürfelten Übungen (Kategorie "cardio" kann in beiden vorkommen),
+        // damit dieselbe Übung nicht in Aufwärmen UND Hauptteil auftaucht.
+        function pickWarmup(allowedEquipment, mainCount, usedNames) {
+            var pool = EXERCISES.filter(function (e) {
+                return e.category === "cardio" && equipmentAllowed(e, allowedEquipment) && !usedNames.has(e.name);
+            });
             var count = warmupExerciseCount(mainCount);
             var picked = [];
             for (var n = 0; n < count && pool.length > 0; n++) {
@@ -1367,7 +1372,7 @@
                 intensity: intensity,
                 cfg: cfg,
                 exercises: exercises,
-                warmup: aufwaermenEnabled ? pickWarmup(equipment, exercises.length) : [],
+                warmup: aufwaermenEnabled ? pickWarmup(equipment, exercises.length, usedNames) : [],
                 aufwaermenEnabled: aufwaermenEnabled,
                 cooldownEnabled: cooldownEnabled
             };
@@ -1382,6 +1387,7 @@
             var equipment = getEnabledEquipment();
             var current = currentWorkout.exercises[idx];
             var usedNames = new Set(currentWorkout.exercises.map(function (e) { return e.name; }));
+            currentWorkout.warmup.forEach(function (e) { usedNames.add(e.name); });
             var replacement = pickExercise(current.category, cfg.pool, usedNames, equipment);
             currentWorkout.exercises[idx] = replacement;
             render();
