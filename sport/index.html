@@ -891,7 +891,6 @@
             <div class="sport-progress-track">
                 <div class="sport-progress-fill" id="sportProgressFill"></div>
             </div>
-            <button type="button" class="icon-btn" id="sportFullscreenBtn" aria-label="Vollbildmodus wieder aktivieren" hidden>⛶</button>
             <button type="button" class="icon-btn" id="sportMuteBtn" aria-label="Signaltöne stummschalten" aria-pressed="false"></button>
             <button type="button" class="icon-btn danger-hover" id="sportExitBtn" aria-label="Sport-Modus beenden">×</button>
         </div>
@@ -1104,7 +1103,6 @@
         var volumeRange = document.getElementById("volumeRange");
         var volumeValueEl = document.getElementById("volumeValue");
         var muteBtn = document.getElementById("muteBtn");
-        var sportFullscreenBtn = document.getElementById("sportFullscreenBtn");
         var sportMuteBtn = document.getElementById("sportMuteBtn");
         var generateBtn = document.getElementById("generateBtn");
         var dbShowBtn = document.getElementById("dbShowBtn");
@@ -1905,58 +1903,6 @@
         }
         window.sportSkipStep = sportSkipStep;
 
-        // Erkennt Mobilgeräte (Touch-Geräte), damit der Vollbildmodus nur dort
-        // aktiviert wird und Desktop-Nutzer nicht ungefragt ins Vollbild
-        // wechseln. Kombiniert eine User-Agent-Prüfung mit einer Abfrage des
-        // primären Zeigegeräts (coarse pointer = i. d. R. Finger/Touch).
-        function isMobileDevice() {
-            var ua = navigator.userAgent || "";
-            var uaLooksMobile = /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua);
-            var pointerIsCoarse = typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
-            return uaLooksMobile || pointerIsCoarse;
-        }
-
-        // Versucht, echten Vollbildmodus zu aktivieren (mit Vendor-Prefixes
-        // für ältere Browser). Das Overlay deckt den Viewport per CSS aber
-        // auch dann vollständig ab, wenn die Fullscreen-API fehlschlägt oder
-        // gar nicht unterstützt wird (z. B. manche iOS-Versionen).
-        function requestFullscreenSafe(el) {
-            var req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
-            if (!req) return;
-            try {
-                var result = req.call(el);
-                if (result && typeof result.catch === "function") {
-                    result.catch(function () { /* Vollbild verweigert/nicht möglich - ignorieren */ });
-                }
-            } catch (e) { /* ignorieren */ }
-        }
-
-        function isFullscreenActive() {
-            return !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
-        }
-
-        function exitFullscreenSafe() {
-            if (!isFullscreenActive()) return;
-            var exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
-            if (!exit) return;
-            try {
-                var result = exit.call(document);
-                if (result && typeof result.catch === "function") result.catch(function () {});
-            } catch (e) { /* ignorieren */ }
-        }
-
-        // Zeigt einen Knopf zum erneuten Aktivieren des Vollbildmodus, falls
-        // dieser (z. B. durch eine System-/Browser-Geste) verlassen wurde,
-        // während der Sport-Modus noch läuft.
-        function updateFullscreenButtonVisibility() {
-            var sportModeActive = sportOverlayEl && !sportOverlayEl.hidden;
-            sportFullscreenBtn.hidden = !(sportModeActive && isMobileDevice() && !isFullscreenActive());
-        }
-
-        function handleFullscreenChange() {
-            updateFullscreenButtonVisibility();
-        }
-
         // Verhindert die automatische Bildschirmsperre während des Trainings.
         // Der Wake Lock wird vom Browser beim Verstecken des Tabs automatisch
         // freigegeben, daher bei Rückkehr in den sichtbaren Zustand erneut anfordern.
@@ -1999,14 +1945,9 @@
             sportElapsedTimerEl.hidden = true;
             sportElapsedTimerEl.textContent = "0:00";
             sportOverlayEl.hidden = false;
-            if (isMobileDevice()) requestFullscreenSafe(sportOverlayEl);
             requestWakeLock();
             document.addEventListener("visibilitychange", handleVisibilityChange);
             document.addEventListener("keydown", handleSportKeydown);
-            document.addEventListener("fullscreenchange", handleFullscreenChange);
-            document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
-            document.addEventListener("msfullscreenchange", handleFullscreenChange);
-            updateFullscreenButtonVisibility();
             renderSportStep();
         }
 
@@ -2019,13 +1960,8 @@
             }
             document.removeEventListener("visibilitychange", handleVisibilityChange);
             document.removeEventListener("keydown", handleSportKeydown);
-            document.removeEventListener("fullscreenchange", handleFullscreenChange);
-            document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
-            document.removeEventListener("msfullscreenchange", handleFullscreenChange);
             releaseWakeLock();
-            exitFullscreenSafe();
             sportOverlayEl.hidden = true;
-            sportFullscreenBtn.hidden = true;
             sportState = null;
         }
         window.exitSportMode = exitSportMode;
@@ -2067,9 +2003,6 @@
         });
         muteBtn.addEventListener("click", toggleMute);
         sportMuteBtn.addEventListener("click", toggleMute);
-        sportFullscreenBtn.addEventListener("click", function () {
-            requestFullscreenSafe(sportOverlayEl);
-        });
 
         generateBtn.addEventListener("click", generateWorkout);
         sportModeBtn.addEventListener("click", enterSportMode);
