@@ -165,16 +165,22 @@
         flex-shrink: 0;
     }
 
-    .code-pane-actions {
+    .code-pane-actions, .preview-pane-actions {
         display: flex;
+        align-items: center;
         gap: 6px;
         text-transform: none;
         letter-spacing: normal;
     }
 
-    .code-pane-actions button {
+    .code-pane-actions button, .preview-pane-actions button {
         font-size: 0.74rem;
         padding: 4px 8px;
+    }
+
+    .image-copy-error {
+        color: var(--theme-danger);
+        font-size: 0.7rem;
     }
 
     .preview-scroll {
@@ -328,6 +334,70 @@
     .shape-node:hover .react-flow__handle, .shape-node .react-flow__handle:hover {
         opacity: 1;
         transform: scale(1.3);
+    }
+
+    /* ---------- Subgraphs ---------- */
+    .subgraph-node {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        box-sizing: border-box;
+        border: 2px dashed var(--accent);
+        border-radius: 10px;
+        background: var(--theme-surface-muted);
+        opacity: 0.92;
+    }
+
+    .subgraph-node.is-selected {
+        border-color: var(--accent-dark);
+    }
+
+    .subgraph-title {
+        position: absolute;
+        top: 0;
+        left: 12px;
+        transform: translateY(-50%);
+        max-width: calc(100% - 24px);
+        padding: 1px 8px;
+        background: var(--panel-bg);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--theme-text-strong);
+        cursor: text;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .subgraph-title-input {
+        font: inherit;
+        font-size: 11.5px;
+        font-weight: 600;
+        width: 150px;
+        background: var(--theme-surface);
+        color: var(--theme-text);
+        border: 1px solid var(--accent);
+        border-radius: 3px;
+        padding: 1px 4px;
+    }
+
+    .react-flow__node.subgraph-drop-target .subgraph-node {
+        border-style: solid;
+        border-color: var(--accent-dark);
+        background: var(--theme-accent-soft);
+    }
+
+    .subgraph-resize-line {
+        border-color: var(--accent) !important;
+    }
+
+    .subgraph-resize-handle {
+        width: 9px !important;
+        height: 9px !important;
+        background: var(--theme-surface) !important;
+        border: 2px solid var(--accent) !important;
     }
 
     /* ---------- Kanten ---------- */
@@ -515,7 +585,7 @@ mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'defaul
 const {
     ReactFlow, ReactFlowProvider, Background, Controls, Panel, Handle, Position,
     MarkerType, ConnectionMode, addEdge, useNodesState, useEdgesState, useReactFlow,
-    EdgeLabelRenderer, getBezierPath, BaseEdge,
+    EdgeLabelRenderer, getBezierPath, BaseEdge, NodeResizer,
 } = window.ReactFlow;
 
 const { useState, useCallback, useRef, useEffect, useMemo } = React;
@@ -607,6 +677,23 @@ function idFromIndex(n) {
     return s;
 }
 
+// React Flow verlangt, dass ein Parent-Knoten (Subgraph-Container) im
+// nodes-Array *vor* seinen Kindern steht. Wird nach jeder Umgruppierung
+// (Drag in/aus einem Subgraph, Löschen eines Subgraphs) angewendet.
+function sortNodesByHierarchy(nodeList) {
+    const byId = new Map(nodeList.map((n) => [n.id, n]));
+    const result = [];
+    const visited = new Set();
+    function visit(n) {
+        if (visited.has(n.id)) return;
+        if (n.parentNode && byId.has(n.parentNode)) visit(byId.get(n.parentNode));
+        visited.add(n.id);
+        result.push(n);
+    }
+    nodeList.forEach(visit);
+    return result;
+}
+
 function escapeMermaidText(text) {
     return String(text == null ? '' : text).replace(/\r?\n/g, ' ').replace(/"/g, '&quot;').trim();
 }
@@ -661,31 +748,70 @@ function buildEdgeLine(e) {
     return `${e.source}${token}${e.target}`;
 }
 
-function generateMermaidCode(nodes, edges, direction) {
+function buildThemeFrontmatter(theme) {
+    if (!theme) return '';
+    return ['---', 'config:', `  theme: ${theme}`, '---', ''].join('\n');
+}
+
+function generateMermaidCode(nodes, edges, direction, theme) {
+    const frontmatter = buildThemeFrontmatter(theme);
     if (nodes.length === 0) {
-        return `flowchart ${direction}`;
+        return frontmatter + `flowchart ${direction}`;
     }
     const lines = [`flowchart ${direction}`];
-    nodes.forEach((n) => {
-        const shape = SHAPE_MAP[n.data.shape] || SHAPE_MAP.rectangle;
-        const text = escapeMermaidText(n.data.label) || n.id;
-        lines.push(`    ${n.id}${shape.open}"${text}"${shape.close}`);
-    });
+
+    function emitNode(n, indent) {
+        if (n.type === 'subgraphNode') {
+            const title = escapeMermaidText(n.data.label) || n.id;
+            lines.push(`${indent}subgraph ${n.id}["${title}"]`);
+            nodes.filter((c) => c.parentNode === n.id).forEach((c) => emitNode(c, indent + '    '));
+            lines.push(`${indent}end`);
+        } else {
+            const shape = SHAPE_MAP[n.data.shape] || SHAPE_MAP.rectangle;
+            const text = escapeMermaidText(n.data.label) || n.id;
+            lines.push(`${indent}${n.id}${shape.open}"${text}"${shape.close}`);
+        }
+    }
+
+    nodes.filter((n) => !n.parentNode).forEach((n) => emitNode(n, '    '));
+
     edges.forEach((e) => {
         lines.push('    ' + buildEdgeLine(e));
     });
     nodes.forEach((n) => {
-        if (n.data.color) {
+        if (n.type !== 'subgraphNode' && n.data.color) {
             lines.push(`    style ${n.id} fill:${n.data.color.fill},stroke:${n.data.color.stroke}`);
         }
     });
-    return lines.join('\n');
+    return frontmatter + lines.join('\n');
 }
 
 /* ==========================================================================
    Mermaid-Code -> Graph (bestmögliches, einfaches Import-Parsing:
    unterstützt Knoten- und Kantenzeilen im vom Editor selbst erzeugten Stil)
    ========================================================================== */
+
+// Liest einen fuehrenden YAML-Frontmatter-Block (--- ... ---) und extrahiert
+// darin ein optionales "theme: xyz". Wird von Mermaid fuer alle Diagrammtypen
+// gleich interpretiert, nicht nur fuer Flowcharts.
+function stripFrontmatter(rawLines) {
+    let theme = '';
+    let startIdx = 0;
+    if (rawLines[0] === '---') {
+        let end = -1;
+        for (let i = 1; i < rawLines.length; i++) {
+            if (rawLines[i] === '---') { end = i; break; }
+        }
+        if (end !== -1) {
+            for (let i = 1; i < end; i++) {
+                const m = rawLines[i].match(/^theme:\s*(\S+)/);
+                if (m) theme = m[1];
+            }
+            startIdx = end + 1;
+        }
+    }
+    return { theme, startIdx };
+}
 
 function parseMermaidToGraph(code) {
     const rawLines = code.split(/\r?\n/)
@@ -695,23 +821,33 @@ function parseMermaidToGraph(code) {
         throw new Error('Kein Code zum Importieren gefunden.');
     }
 
+    const frontmatter = stripFrontmatter(rawLines);
+    const theme = frontmatter.theme;
+
     let direction = 'TD';
-    let startIdx = 0;
-    const headMatch = rawLines[0].match(/^(?:flowchart|graph)\s+(TD|TB|BT|RL|LR)\b/i);
+    let startIdx = frontmatter.startIdx;
+    const headMatch = rawLines[startIdx] && rawLines[startIdx].match(/^(?:flowchart|graph)\s+(TD|TB|BT|RL|LR)\b/i);
     if (headMatch) {
         const d = headMatch[1].toUpperCase();
         direction = d === 'TB' ? 'TD' : d;
-        startIdx = 1;
+        startIdx += 1;
     }
 
     const nodeMap = new Map();
     const order = [];
     const edgeList = [];
+    const subgraphStack = [];
 
-    function ensureNode(id) {
+    function ensureNode(id, type) {
         if (!nodeMap.has(id)) {
-            nodeMap.set(id, { id, label: id, shape: 'rectangle', color: null });
+            nodeMap.set(id, {
+                id, label: id, shape: 'rectangle', color: null,
+                type: type || 'shapeNode',
+                parentNode: subgraphStack.length ? subgraphStack[subgraphStack.length - 1] : null,
+            });
             order.push(id);
+        } else if (type) {
+            nodeMap.get(id).type = type;
         }
         return nodeMap.get(id);
     }
@@ -719,6 +855,25 @@ function parseMermaidToGraph(code) {
     for (let i = startIdx; i < rawLines.length; i++) {
         const line = rawLines[i];
         if (/^(flowchart|graph)\b/i.test(line)) continue;
+        if (/^direction\s+(TD|TB|BT|LR|RL)\s*$/i.test(line)) continue;
+
+        if (/^end$/i.test(line)) {
+            if (subgraphStack.length === 0) {
+                throw new Error(`Unerwartetes "end" ohne offenen subgraph (Zeile ${i + 1}).`);
+            }
+            subgraphStack.pop();
+            continue;
+        }
+
+        const subgraphMatch = line.match(/^subgraph\s+(\S+?)(?:\s*\[\s*"?([^"\]]*)"?\s*\])?\s*$/i);
+        if (subgraphMatch) {
+            const id = subgraphMatch[1];
+            const title = subgraphMatch[2] != null ? unquote(subgraphMatch[2]) : id;
+            const node = ensureNode(id, 'subgraphNode');
+            node.label = title;
+            subgraphStack.push(id);
+            continue;
+        }
 
         const styleMatch = line.match(STYLE_LINE_RE);
         if (styleMatch) {
@@ -753,18 +908,65 @@ function parseMermaidToGraph(code) {
         throw new Error(`Zeile konnte nicht gelesen werden: "${line}"`);
     }
 
+    if (subgraphStack.length !== 0) {
+        throw new Error('Ein subgraph wurde nicht mit "end" geschlossen.');
+    }
+
     if (order.length === 0) {
         throw new Error('Es wurden keine Knoten gefunden.');
     }
 
-    const nodes = order.map((id, idx) => {
+    // Kinder je Subgraph, fuer eine kompakte Grid-Platzierung innerhalb der Box.
+    const childrenByParent = new Map();
+    order.forEach((id) => {
         const n = nodeMap.get(id);
-        return {
-            id: n.id,
-            type: 'shapeNode',
-            position: { x: 80 + (idx % 6) * 170, y: 60 + Math.floor(idx / 6) * 130 },
-            data: { label: n.label, shape: n.shape, color: n.color },
-        };
+        if (n.parentNode) {
+            if (!childrenByParent.has(n.parentNode)) childrenByParent.set(n.parentNode, []);
+            childrenByParent.get(n.parentNode).push(id);
+        }
+    });
+
+    function layoutPosition(idx) {
+        return { x: 80 + (idx % 6) * 170, y: 60 + Math.floor(idx / 6) * 130 };
+    }
+
+    const nodes = [];
+    let topIdx = 0;
+    order.forEach((id) => {
+        const n = nodeMap.get(id);
+        if (n.parentNode) return; // wird beim jeweiligen Subgraph-Eintrag mit erzeugt
+        if (n.type === 'subgraphNode') {
+            const kids = childrenByParent.get(id) || [];
+            const cols = Math.max(1, Math.min(4, kids.length || 1));
+            const rows = Math.ceil((kids.length || 1) / cols);
+            const width = Math.max(220, cols * 160 + 40);
+            const height = Math.max(140, rows * 110 + 70);
+            nodes.push({
+                id: n.id,
+                type: 'subgraphNode',
+                position: layoutPosition(topIdx),
+                style: { width, height },
+                data: { label: n.label },
+            });
+            kids.forEach((cid, kidx) => {
+                const cn = nodeMap.get(cid);
+                nodes.push({
+                    id: cn.id,
+                    type: 'shapeNode',
+                    position: { x: 30 + (kidx % cols) * 160, y: 55 + Math.floor(kidx / cols) * 110 },
+                    parentNode: n.id,
+                    data: { label: cn.label, shape: cn.shape, color: cn.color },
+                });
+            });
+        } else {
+            nodes.push({
+                id: n.id,
+                type: 'shapeNode',
+                position: layoutPosition(topIdx),
+                data: { label: n.label, shape: n.shape, color: n.color },
+            });
+        }
+        topIdx += 1;
     });
 
     const edges = edgeList.map((e, idx) => ({
@@ -776,7 +978,7 @@ function parseMermaidToGraph(code) {
         data: { label: e.label, lineStyle: e.lineStyle, arrowMode: e.arrowMode },
     }));
 
-    return { nodes, edges, direction };
+    return { nodes, edges, direction, theme };
 }
 
 /* ==========================================================================
@@ -849,6 +1051,13 @@ function ShapeNode({ id, data, selected }) {
             inputRef.current.select();
         }
     }, [editing]);
+    // Direkt nach dem Erzeugen soll der Label-Text sofort eingebbar sein.
+    useEffect(() => {
+        if (data.autoEdit) {
+            setEditing(true);
+            data.onAutoEditConsumed(id);
+        }
+    }, [data.autoEdit]);
 
     function commit() {
         setEditing(false);
@@ -873,6 +1082,67 @@ function ShapeNode({ id, data, selected }) {
                     <input
                         ref={inputRef}
                         className="shape-label-input nodrag"
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        onBlur={commit}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+                            if (e.key === 'Escape') { setDraft(data.label); setEditing(false); }
+                        }}
+                    />
+                ) : (
+                    <span>{data.label}</span>
+                )}
+            </div>
+        </div>
+    );
+}
+
+/* ==========================================================================
+   Subgraph-Knoten: Container zum Gruppieren von Knoten (Drag hinein/heraus
+   wird in FlowchartEditor via onNodeDrag/onNodeDragStop gehandhabt)
+   ========================================================================== */
+
+function SubgraphNode({ id, data, selected }) {
+    const [editing, setEditing] = useState(false);
+    const [draft, setDraft] = useState(data.label);
+    const inputRef = useRef(null);
+
+    useEffect(() => { if (!editing) setDraft(data.label); }, [data.label, editing]);
+    useEffect(() => {
+        if (editing && inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.select();
+        }
+    }, [editing]);
+    useEffect(() => {
+        if (data.autoEdit) {
+            setEditing(true);
+            data.onAutoEditConsumed(id);
+        }
+    }, [data.autoEdit]);
+
+    function commit() {
+        setEditing(false);
+        const value = draft.trim();
+        data.onLabelChange(id, value || data.label);
+    }
+
+    return (
+        <div className={'subgraph-node' + (selected ? ' is-selected' : '')}>
+            <NodeResizer
+                isVisible={selected}
+                minWidth={200}
+                minHeight={120}
+                lineClassName="subgraph-resize-line"
+                handleClassName="subgraph-resize-handle"
+                onResizeEnd={(event, params) => data.onResize(id, { width: params.width, height: params.height })}
+            />
+            <div className="subgraph-title" onDoubleClick={() => setEditing(true)}>
+                {editing ? (
+                    <input
+                        ref={inputRef}
+                        className="subgraph-title-input nodrag"
                         value={draft}
                         onChange={(e) => setDraft(e.target.value)}
                         onBlur={commit}
@@ -957,16 +1227,67 @@ function ShapeEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, tar
     );
 }
 
-const nodeTypes = { shapeNode: ShapeNode };
+const nodeTypes = { shapeNode: ShapeNode, subgraphNode: SubgraphNode };
 const edgeTypes = { shapeEdge: ShapeEdge };
 
 /* ==========================================================================
    Vorschau (Mermaid-Rendering) und Code-Panel
    ========================================================================== */
 
+function getSvgSize(svgEl) {
+    const vb = svgEl.viewBox && svgEl.viewBox.baseVal;
+    if (vb && vb.width && vb.height) return { width: vb.width, height: vb.height };
+    const w = parseFloat(svgEl.getAttribute('width'));
+    const h = parseFloat(svgEl.getAttribute('height'));
+    if (w && h) return { width: w, height: h };
+    const rect = svgEl.getBoundingClientRect();
+    return { width: rect.width, height: rect.height };
+}
+
+// Rendert das aktuelle Vorschau-SVG auf ein Canvas (mit weissem Hintergrund,
+// damit das Bild auch beim Einfuegen in dunkle Umgebungen lesbar bleibt) und
+// kopiert es als PNG in die Zwischenablage.
+async function copySvgAsPng(svgEl) {
+    if (!svgEl) throw new Error('Kein gerendertes Diagramm zum Kopieren vorhanden.');
+
+    let source = new XMLSerializer().serializeToString(svgEl);
+    if (!source.includes('xmlns="http://www.w3.org/2000/svg"')) {
+        source = source.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+    }
+
+    const { width, height } = getSvgSize(svgEl);
+    const scale = 2;
+    const padding = 16;
+    const svgDataUri = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(source)));
+
+    const img = await new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error('SVG konnte nicht geladen werden.'));
+        image.src = svgDataUri;
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round((width + padding * 2) * scale));
+    canvas.height = Math.max(1, Math.round((height + padding * 2) * scale));
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, padding * scale, padding * scale, width * scale, height * scale);
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) throw new Error('PNG konnte nicht erzeugt werden.');
+    if (!navigator.clipboard || !window.ClipboardItem) {
+        throw new Error('Bild-Kopieren wird von diesem Browser nicht unterstützt.');
+    }
+    await navigator.clipboard.write([new window.ClipboardItem({ 'image/png': blob })]);
+}
+
 function PreviewPane({ code, isEmpty }) {
     const containerRef = useRef(null);
     const [error, setError] = useState('');
+    const [imageCopyLabel, setImageCopyLabel] = useState('Bild kopieren');
+    const [imageCopyError, setImageCopyError] = useState('');
     const seqRef = useRef(0);
 
     useEffect(() => {
@@ -991,9 +1312,27 @@ function PreviewPane({ code, isEmpty }) {
         return () => { cancelled = true; clearTimeout(timer); };
     }, [code, isEmpty]);
 
+    async function handleCopyImage() {
+        setImageCopyError('');
+        try {
+            const svgEl = containerRef.current && containerRef.current.querySelector('svg');
+            await copySvgAsPng(svgEl);
+            setImageCopyLabel('Kopiert ✓');
+            setTimeout(() => setImageCopyLabel('Bild kopieren'), 1500);
+        } catch (err) {
+            setImageCopyError(err && err.message ? err.message : String(err));
+        }
+    }
+
     return (
         <div className="preview-pane">
-            <div className="preview-pane-header"><span>Vorschau</span></div>
+            <div className="preview-pane-header">
+                <span>Vorschau</span>
+                <div className="preview-pane-actions">
+                    {imageCopyError && <span className="image-copy-error">{imageCopyError}</span>}
+                    <button type="button" disabled={isEmpty || !!error} onClick={handleCopyImage}>{imageCopyLabel}</button>
+                </div>
+            </div>
             <div className="preview-scroll">
                 {isEmpty && <div className="preview-placeholder">Noch keine Knoten. Klicke auf die Fläche oder „+ Neuer Knoten“, um zu starten.</div>}
                 {!isEmpty && error && <div className="preview-error">{error}</div>}
@@ -1072,8 +1411,10 @@ function FlowchartEditor() {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [direction, setDirection] = useState('TD');
+    const [theme, setTheme] = useState('');
     const [selectedNodeId, setSelectedNodeId] = useState(null);
     const [selectedEdgeId, setSelectedEdgeId] = useState(null);
+    const [dropTargetId, setDropTargetId] = useState(null);
 
     const idCounterRef = useRef(0);
     const edgeCounterRef = useRef(0);
@@ -1091,6 +1432,17 @@ function FlowchartEditor() {
         setEdges((eds) => eds.map((e) => (e.id === id ? { ...e, data: { ...e.data, label } } : e)));
     }, [setEdges]);
 
+    // Wird von ShapeNode/SubgraphNode einmalig nach dem automatischen Öffnen
+    // des Label-Editors beim Erzeugen aufgerufen, damit der Editor nicht bei
+    // jedem weiteren Rerender erneut aufspringt.
+    const consumeAutoEdit = useCallback((id) => {
+        setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, autoEdit: false } } : n)));
+    }, [setNodes]);
+
+    const resizeSubgraph = useCallback((id, size) => {
+        setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, style: { ...n.style, ...size } } : n)));
+    }, [setNodes]);
+
     function nextNodeId() {
         let id;
         do { id = idFromIndex(idCounterRef.current++); } while (nodeIdsRef.current.has(id));
@@ -1103,23 +1455,97 @@ function FlowchartEditor() {
             id,
             type: 'shapeNode',
             position,
-            data: { label: id, shape: 'rectangle', color: null, onLabelChange: updateNodeLabel },
+            data: {
+                label: id, shape: 'rectangle', color: null, autoEdit: true,
+                onLabelChange: updateNodeLabel, onAutoEditConsumed: consumeAutoEdit,
+            },
         };
         setNodes((nds) => nds.concat(newNode));
         nodeIdsRef.current.add(id);
-    }, [setNodes, updateNodeLabel]);
+    }, [setNodes, updateNodeLabel, consumeAutoEdit]);
 
-    const onPaneClick = useCallback((event) => {
-        if (event.detail !== 1) return; // Doppelklick auf die Fläche soll keine 2 Knoten erzeugen
-        const pos = reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
-        createNode(pos);
-    }, [reactFlowInstance, createNode]);
+    const createSubgraph = useCallback((position) => {
+        const id = nextNodeId();
+        const newNode = {
+            id,
+            type: 'subgraphNode',
+            position,
+            style: { width: 260, height: 160 },
+            data: {
+                label: 'Subgraph', autoEdit: true,
+                onLabelChange: updateNodeLabel, onAutoEditConsumed: consumeAutoEdit, onResize: resizeSubgraph,
+            },
+        };
+        setNodes((nds) => nds.concat(newNode));
+        nodeIdsRef.current.add(id);
+    }, [setNodes, updateNodeLabel, consumeAutoEdit, resizeSubgraph]);
 
     function handleAddNodeButton() {
         const rect = wrapperRef.current ? wrapperRef.current.getBoundingClientRect() : { left: 200, top: 200, width: 400, height: 300 };
         const pos = reactFlowInstance.screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
         createNode(pos);
     }
+
+    function handleAddSubgraphButton() {
+        const rect = wrapperRef.current ? wrapperRef.current.getBoundingClientRect() : { left: 200, top: 200, width: 400, height: 300 };
+        const pos = reactFlowInstance.screenToFlowPosition({ x: rect.left + rect.width / 2 - 130, y: rect.top + rect.height / 2 - 80 });
+        createSubgraph(pos);
+    }
+
+    // Knoten während des Ziehens über einen Subgraph-Container hervorheben.
+    const onNodeDrag = useCallback((event, draggedNode) => {
+        if (draggedNode.type === 'subgraphNode') return;
+        const overlaps = reactFlowInstance.getIntersectingNodes(draggedNode).filter((n) => n.type === 'subgraphNode');
+        setDropTargetId(overlaps[0] ? overlaps[0].id : null);
+    }, [reactFlowInstance]);
+
+    // Beim Loslassen: Knoten, die über einem Subgraph-Container fallen gelassen
+    // werden, werden dessen Kind (parentNode); verlässt ein Knoten den Container,
+    // wird er wieder eigenständig (absolute Position).
+    const onNodeDragStop = useCallback((event, draggedNode) => {
+        setDropTargetId(null);
+        if (draggedNode.type === 'subgraphNode') return;
+
+        const overlaps = reactFlowInstance.getIntersectingNodes(draggedNode).filter((n) => n.type === 'subgraphNode');
+        const targetGroup = overlaps[0] || null;
+        const newParentId = targetGroup ? targetGroup.id : null;
+        const oldParentId = draggedNode.parentNode || null;
+        if (oldParentId === newParentId) return;
+
+        setNodes((nds) => {
+            const absX = draggedNode.positionAbsolute ? draggedNode.positionAbsolute.x : draggedNode.position.x;
+            const absY = draggedNode.positionAbsolute ? draggedNode.positionAbsolute.y : draggedNode.position.y;
+            let newPos = { x: absX, y: absY };
+            if (targetGroup) {
+                const groupX = targetGroup.positionAbsolute ? targetGroup.positionAbsolute.x : targetGroup.position.x;
+                const groupY = targetGroup.positionAbsolute ? targetGroup.positionAbsolute.y : targetGroup.position.y;
+                newPos = { x: absX - groupX, y: absY - groupY };
+            }
+            const updated = nds.map((n) => (n.id === draggedNode.id
+                ? { ...n, position: newPos, parentNode: newParentId || undefined }
+                : n));
+            return sortNodesByHierarchy(updated);
+        });
+    }, [reactFlowInstance, setNodes]);
+
+    // Wird ein Subgraph-Container gelöscht, sollen seine Kinder erhalten
+    // bleiben (nicht mit-gelöscht werden), statt verwaist auf ein
+    // nicht-existentes parentNode zu verweisen.
+    const onNodesDelete = useCallback((deleted) => {
+        const deletedIds = new Set(deleted.map((n) => n.id));
+        setNodes((nds) => nds
+            .filter((n) => !deletedIds.has(n.id))
+            .map((n) => {
+                if (n.parentNode && deletedIds.has(n.parentNode)) {
+                    const parent = deleted.find((d) => d.id === n.parentNode);
+                    const parentX = parent.positionAbsolute ? parent.positionAbsolute.x : parent.position.x;
+                    const parentY = parent.positionAbsolute ? parent.positionAbsolute.y : parent.position.y;
+                    return { ...n, parentNode: undefined, position: { x: n.position.x + parentX, y: n.position.y + parentY } };
+                }
+                return n;
+            }));
+        setSelectedNodeId(null);
+    }, [setNodes]);
 
     const onConnect = useCallback((params) => {
         const id = 'e' + (edgeCounterRef.current++);
@@ -1148,6 +1574,21 @@ function FlowchartEditor() {
     function deleteNode(id) {
         setNodes((nds) => nds.filter((n) => n.id !== id));
         setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id));
+        setSelectedNodeId(null);
+    }
+
+    // Löscht nur den Container - enthaltene Knoten bleiben erhalten und
+    // werden wieder eigenständig (absolute Position statt Kind-Position).
+    function deleteSubgraph(id) {
+        setNodes((nds) => {
+            const parent = nds.find((n) => n.id === id);
+            if (!parent) return nds;
+            return nds
+                .filter((n) => n.id !== id)
+                .map((n) => (n.parentNode === id
+                    ? { ...n, parentNode: undefined, position: { x: n.position.x + parent.position.x, y: n.position.y + parent.position.y } }
+                    : n));
+        });
         setSelectedNodeId(null);
     }
 
@@ -1181,23 +1622,32 @@ function FlowchartEditor() {
 
     const handleApplyImport = useCallback((codeText) => {
         const parsed = parseMermaidToGraph(codeText);
-        const importedNodes = parsed.nodes.map((n) => ({ ...n, data: { ...n.data, onLabelChange: updateNodeLabel } }));
+        const importedNodes = parsed.nodes.map((n) => ({
+            ...n, data: { ...n.data, onLabelChange: updateNodeLabel, onAutoEditConsumed: consumeAutoEdit, onResize: resizeSubgraph },
+        }));
         const importedEdges = parsed.edges.map((e) => ({ ...e, data: { ...e.data, onLabelChange: updateEdgeLabel } }));
         setNodes(importedNodes);
         setEdges(importedEdges);
         setDirection(parsed.direction);
+        setTheme(parsed.theme || '');
         idCounterRef.current = importedNodes.length;
         edgeCounterRef.current = importedEdges.length;
         nodeIdsRef.current = new Set(importedNodes.map((n) => n.id));
         setSelectedNodeId(null);
         setSelectedEdgeId(null);
         setTimeout(() => { if (reactFlowInstance && reactFlowInstance.fitView) reactFlowInstance.fitView({ padding: 0.2 }); }, 50);
-    }, [setNodes, setEdges, updateNodeLabel, updateEdgeLabel, reactFlowInstance]);
+    }, [setNodes, setEdges, updateNodeLabel, updateEdgeLabel, consumeAutoEdit, resizeSubgraph, reactFlowInstance]);
 
-    const code = useMemo(() => generateMermaidCode(nodes, edges, direction), [nodes, edges, direction]);
+    const code = useMemo(() => generateMermaidCode(nodes, edges, direction, theme), [nodes, edges, direction, theme]);
 
     const selectedNode = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) : null;
     const selectedEdge = selectedEdgeId ? edges.find((e) => e.id === selectedEdgeId) : null;
+
+    // Rein visuelle Hervorhebung des Ziel-Subgraphs während des Ziehens -
+    // ohne den nodes-State selbst pro Drag-Frame zu verändern.
+    const nodesForRender = useMemo(() => (
+        dropTargetId ? nodes.map((n) => (n.id === dropTargetId ? { ...n, className: 'subgraph-drop-target' } : n)) : nodes
+    ), [nodes, dropTargetId]);
 
     return (
         <React.Fragment>
@@ -1212,7 +1662,17 @@ function FlowchartEditor() {
                             <option value="RL">Rechts-Links (RL)</option>
                         </select>
                     </label>
+                    <label>Design
+                        <select value={theme} onChange={(e) => setTheme(e.target.value)}>
+                            <option value="">Standard</option>
+                            <option value="neutral">Neutral</option>
+                            <option value="dark">Dark</option>
+                            <option value="forest">Forest</option>
+                            <option value="base">Base</option>
+                        </select>
+                    </label>
                     <button type="button" onClick={handleAddNodeButton}>+ Neuer Knoten</button>
+                    <button type="button" onClick={handleAddSubgraphButton}>+ Neuer Subgraph</button>
                     <button type="button" onClick={clearAll}>Alles löschen</button>
                     <a href="https://mermaid.js.org/syntax/flowchart.html" target="_blank" rel="noopener">Mermaid-Syntax</a>
                 </div>
@@ -1221,25 +1681,26 @@ function FlowchartEditor() {
             <div className="main">
                 <div className="canvas-wrap" ref={wrapperRef}>
                     <ReactFlow
-                        nodes={nodes}
+                        nodes={nodesForRender}
                         edges={edges}
                         onNodesChange={onNodesChange}
                         onEdgesChange={onEdgesChange}
+                        onNodesDelete={onNodesDelete}
+                        onNodeDrag={onNodeDrag}
+                        onNodeDragStop={onNodeDragStop}
                         onConnect={onConnect}
                         nodeTypes={nodeTypes}
                         edgeTypes={edgeTypes}
                         connectionMode={ConnectionMode.Loose}
                         deleteKeyCode={['Delete', 'Backspace']}
-                        onPaneClick={onPaneClick}
                         onSelectionChange={onSelectionChange}
-                        zoomOnDoubleClick={false}
                         minZoom={0.2}
                         maxZoom={2.5}
                     >
                         <Background gap={18} size={1} />
                         <Controls showInteractive={false} />
 
-                        {selectedNode && (
+                        {selectedNode && selectedNode.type !== 'subgraphNode' && (
                             <Panel position="top-center" className="selection-toolbar">
                                 <label>Form
                                     <select value={selectedNode.data.shape} onChange={(e) => setNodeShape(selectedNode.id, e.target.value)}>
@@ -1260,6 +1721,13 @@ function FlowchartEditor() {
                                     ))}
                                 </div>
                                 <button type="button" className="danger" onClick={() => deleteNode(selectedNode.id)}>Löschen</button>
+                            </Panel>
+                        )}
+
+                        {selectedNode && selectedNode.type === 'subgraphNode' && (
+                            <Panel position="top-center" className="selection-toolbar">
+                                <span className="edge-label-hint">Doppelklick auf Titel = umbenennen · Ecke ziehen = Größe ändern</span>
+                                <button type="button" className="danger" onClick={() => deleteSubgraph(selectedNode.id)}>Subgraph löschen</button>
                             </Panel>
                         )}
 
@@ -1291,7 +1759,7 @@ function FlowchartEditor() {
                         )}
 
                         <Panel position="bottom-left" className="hint-panel">
-                            Klick auf die Fläche = neuer Knoten · Rand ziehen = Verbindung · Doppelklick = Text bearbeiten · Entf = löschen
+                            „+ Neuer Knoten“ / „+ Neuer Subgraph“ = erzeugen · Rand ziehen = Verbindung · Doppelklick = Text bearbeiten · Knoten auf Subgraph ziehen = gruppieren · Entf = löschen
                         </Panel>
                     </ReactFlow>
                 </div>
