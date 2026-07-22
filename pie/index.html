@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Formularbasierter Editor für Mermaid-Pie-Charts: Kuchenstücke als Kacheln eintragen, Code live generieren.">
+<title>Pie Chart Editor</title>
+<link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/css/reset.css">
+<link rel="stylesheet" href="../assets/css/theme.css">
+<style>
+    :root {
+        --accent: var(--theme-accent);
+        --accent-dark: var(--theme-accent-strong);
+        --panel-bg: var(--theme-surface);
+        --border: var(--theme-border);
+    }
+
+    body {
+        min-height: 100vh;
+        padding-top: var(--theme-nav-height);
+    }
+
+    header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 12px 18px;
+        background: var(--panel-bg);
+        border-bottom: 1px solid var(--border);
+    }
+
+    header h1 {
+        font-size: 1.1rem;
+        letter-spacing: 0.5px;
+    }
+
+    .controls {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .controls a {
+        color: var(--theme-text-muted);
+        text-decoration: none;
+        font-size: 0.85rem;
+    }
+
+    .controls a:hover {
+        color: var(--accent);
+    }
+
+    select, button, input[type="text"], input[type="number"] {
+        font-family: inherit;
+        font-size: 0.82rem;
+        background: var(--theme-surface-muted);
+        color: var(--theme-text);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 7px 10px;
+        cursor: pointer;
+    }
+
+    input[type="text"], input[type="number"] {
+        cursor: text;
+    }
+
+    select:hover, button:hover:not(:disabled) {
+        border-color: var(--accent);
+        color: var(--theme-text-strong);
+    }
+
+    input:focus, select:focus, textarea:focus {
+        outline: none;
+        border-color: var(--accent);
+    }
+
+    button:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+    }
+
+    button.danger:hover {
+        border-color: var(--theme-danger);
+        color: var(--theme-danger);
+    }
+
+    button.primary {
+        background: var(--accent-dark);
+        color: #fff;
+        font-weight: bold;
+        border-color: var(--accent-dark);
+    }
+
+    button.primary:hover:not(:disabled) {
+        background: var(--accent);
+        border-color: var(--accent);
+    }
+
+    .main {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 24px 18px 60px;
+        display: grid;
+        grid-template-columns: 1fr 380px;
+        gap: 22px;
+        align-items: start;
+    }
+
+    /* ---------- Linke Spalte ---------- */
+    .editor-column {
+        min-width: 0;
+    }
+
+    .settings-panel {
+        background: var(--panel-bg);
+        border: 1px solid var(--border);
+        border-radius: var(--theme-radius);
+        padding: 16px 18px;
+        margin-bottom: 18px;
+        box-shadow: var(--theme-shadow-sm);
+    }
+
+    .settings-panel h2 {
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: var(--theme-text-muted);
+        margin-bottom: 14px;
+    }
+
+    .settings-section {
+        margin-bottom: 16px;
+    }
+
+    .settings-section:last-of-type {
+        margin-bottom: 0;
+    }
+
+    .settings-section-title {
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--theme-text-muted);
+        margin: 0 0 8px;
+    }
+
+    .settings-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 12px 16px;
+    }
+
+    .settings-grid-followup {
+        margin-top: 10px;
+    }
+
+    .settings-field {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        font-size: 0.82rem;
+        color: var(--theme-text);
+    }
+
+    .settings-field select, .settings-field input {
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .settings-field input:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .settings-toggle-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 22px;
+    }
+
+    .settings-checkbox {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 0.82rem;
+        color: var(--theme-text);
+        cursor: pointer;
+    }
+
+    .settings-checkbox input {
+        cursor: pointer;
+        width: 15px;
+        height: 15px;
+    }
+
+    .settings-note {
+        margin-top: 14px;
+        font-size: 0.74rem;
+        color: var(--theme-text-muted);
+        line-height: 1.5;
+        border-top: 1px solid var(--border);
+        padding-top: 10px;
+    }
+
+    .add-slice-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+
+    .slice-summary {
+        font-size: 0.78rem;
+        color: var(--theme-text-muted);
+    }
+
+    .slice-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .slice-empty {
+        border: 1px dashed var(--border);
+        border-radius: var(--theme-radius);
+        padding: 28px 18px;
+        text-align: center;
+        color: var(--theme-text-muted);
+        font-size: 0.85rem;
+    }
+
+    .slice-tile {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: var(--panel-bg);
+        border: 1px solid var(--border);
+        border-radius: var(--theme-radius);
+        padding: 10px 12px;
+        box-shadow: var(--theme-shadow-sm);
+    }
+
+    .slice-tile.has-error {
+        border-color: var(--theme-danger);
+    }
+
+    .slice-tile.is-dragging {
+        opacity: 0.4;
+    }
+
+    .slice-tile.is-drop-target {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px var(--theme-accent-soft);
+    }
+
+    .slice-drag-handle {
+        flex-shrink: 0;
+        cursor: grab;
+        color: var(--theme-text-muted);
+        font-size: 1.1rem;
+        line-height: 1;
+        padding: 4px 2px;
+        user-select: none;
+    }
+
+    .slice-drag-handle:active {
+        cursor: grabbing;
+    }
+
+    .slice-body {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .slice-fields {
+        display: grid;
+        grid-template-columns: 1fr 110px 64px;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .slice-label-input {
+        min-width: 0;
+    }
+
+    .slice-percent {
+        font-size: 0.8rem;
+        color: var(--theme-text-muted);
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .slice-warning {
+        margin-top: 6px;
+        font-size: 0.74rem;
+        color: var(--theme-danger);
+    }
+
+    .slice-order-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        flex-shrink: 0;
+    }
+
+    .slice-order-buttons button {
+        padding: 2px 7px;
+        font-size: 0.7rem;
+        line-height: 1.4;
+    }
+
+    .slice-delete {
+        flex-shrink: 0;
+        font-size: 0.85rem;
+        padding: 7px 10px;
+    }
+
+    .slice-delete:hover {
+        border-color: var(--theme-danger);
+        color: var(--theme-danger);
+    }
+
+    /* ---------- Rechte Seitenleiste ---------- */
+    .sidebar {
+        position: sticky;
+        top: calc(var(--theme-nav-height) + 24px);
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        max-height: calc(100vh - var(--theme-nav-height) - 48px);
+    }
+
+    .preview-pane, .code-pane {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        background: var(--panel-bg);
+        border: 1px solid var(--border);
+        border-radius: var(--theme-radius);
+        box-shadow: var(--theme-shadow-sm);
+        overflow: hidden;
+    }
+
+    .preview-pane {
+        flex: 1 1 55%;
+    }
+
+    .code-pane {
+        flex: 1 1 40%;
+    }
+
+    .preview-pane-header, .code-pane-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 12px;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--theme-text-muted);
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+    }
+
+    .code-pane-header button {
+        font-size: 0.74rem;
+        padding: 4px 8px;
+    }
+
+    .preview-pane-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        text-transform: none;
+        letter-spacing: normal;
+    }
+
+    .preview-pane-actions button {
+        font-size: 0.74rem;
+        padding: 4px 8px;
+    }
+
+    .image-copy-error {
+        color: var(--theme-danger);
+        font-size: 0.7rem;
+    }
+
+    .preview-scroll {
+        flex: 1;
+        min-height: 160px;
+        overflow: auto;
+        padding: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .preview-diagram svg {
+        max-width: 100%;
+        height: auto;
+    }
+
+    .preview-error {
+        color: var(--theme-danger);
+        font-size: 0.78rem;
+        font-family: var(--theme-font-mono);
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    .preview-placeholder {
+        color: var(--theme-text-muted);
+        font-size: 0.85rem;
+        text-align: center;
+    }
+
+    .code-textarea {
+        flex: 1;
+        min-height: 140px;
+        border: none;
+        resize: none;
+        padding: 12px;
+        font-family: var(--theme-font-mono);
+        font-size: 0.8rem;
+        line-height: 1.5;
+        background: var(--theme-surface);
+        color: var(--theme-text);
+        cursor: text;
+    }
+
+    @media (max-width: 900px) {
+        .main {
+            grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+            position: static;
+            max-height: none;
+        }
+
+        .preview-scroll {
+            min-height: 220px;
+        }
+    }
+</style>
+</head>
+<body>
+<script src="../assets/js/nav.js"></script>
+
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/plain" id="app-source">
+'use strict';
+
+mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'default' });
+
+const { useState, useCallback, useRef, useEffect, useMemo } = React;
+
+/* ==========================================================================
+   Hilfsfunktionen: Validierung, Escaping, Code-Generierung
+   ========================================================================== */
+
+function parseValue(raw) {
+    if (raw == null) return NaN;
+    const s = String(raw).trim().replace(',', '.');
+    if (s === '') return NaN;
+    return Number(s);
+}
+
+function roundTo2(num) {
+    return Math.round(num * 100) / 100;
+}
+
+function validateSlice(slice) {
+    const errors = [];
+    if (!slice.label.trim()) errors.push('Label fehlt');
+    const num = parseValue(slice.value);
+    if (Number.isNaN(num)) errors.push('Wert fehlt');
+    else if (num <= 0) errors.push('Wert muss > 0 sein');
+    return errors;
+}
+
+function escapePieLabel(text) {
+    return String(text).trim().replace(/"/g, '&quot;').replace(/\r?\n/g, ' ');
+}
+
+function buildConfigBlock(settings) {
+    const pieConfig = {};
+    if (settings.donutEnabled) {
+        const hole = parseValue(settings.donutHole);
+        pieConfig.donutHole = roundTo2(Number.isNaN(hole) ? 0.5 : Math.min(0.9, Math.max(0, hole)));
+    }
+    if (settings.legendPosition) pieConfig.legendPosition = settings.legendPosition;
+    if (settings.highlightSlice) pieConfig.highlightSlice = settings.highlightSlice;
+
+    const hasPieConfig = Object.keys(pieConfig).length > 0;
+    const hasTheme = !!settings.theme;
+    if (!hasPieConfig && !hasTheme) return '';
+
+    const lines = ['---', 'config:'];
+    if (hasTheme) lines.push(`  theme: ${settings.theme}`);
+    if (hasPieConfig) {
+        lines.push('  pie:');
+        if (pieConfig.donutHole !== undefined) lines.push(`    donutHole: ${pieConfig.donutHole}`);
+        if (pieConfig.legendPosition) lines.push(`    legendPosition: ${pieConfig.legendPosition}`);
+        if (pieConfig.highlightSlice) lines.push(`    highlightSlice: ${JSON.stringify(pieConfig.highlightSlice)}`);
+    }
+    lines.push('---');
+    return lines.join('\n') + '\n';
+}
+
+function getValidSlices(slices) {
+    return slices.filter((s) => validateSlice(s).length === 0);
+}
+
+function generatePieCode(slices, settings) {
+    const validSlices = getValidSlices(slices);
+    const configBlock = buildConfigBlock(settings);
+
+    const lines = [];
+    let pieLine = 'pie';
+    if (settings.showData) pieLine += ' showData';
+    lines.push(pieLine);
+
+    if (settings.title.trim()) {
+        lines.push(`    title ${settings.title.trim()}`);
+    }
+
+    validSlices.forEach((s) => {
+        lines.push(`    "${escapePieLabel(s.label)}" : ${roundTo2(parseValue(s.value))}`);
+    });
+
+    return configBlock + lines.join('\n');
+}
+
+/* ==========================================================================
+   Kachel-Liste (Formular-Editor für die Kuchenstücke)
+   ========================================================================== */
+
+function SliceTile({ slice, index, total, percentLabel, errors, isDuplicate, dragState, onChange, onDelete, onMoveUp, onMoveDown, onDragStart, onDragOver, onDragEnd, onDrop }) {
+    const classNames = ['slice-tile'];
+    if (errors.length > 0) classNames.push('has-error');
+    if (dragState === 'dragging') classNames.push('is-dragging');
+    if (dragState === 'over') classNames.push('is-drop-target');
+
+    return (
+        <div
+            className={classNames.join(' ')}
+            draggable
+            onDragStart={onDragStart}
+            onDragOver={onDragOver}
+            onDragEnd={onDragEnd}
+            onDrop={onDrop}
+        >
+            <div className="slice-drag-handle" title="Ziehen zum Umsortieren">⠿</div>
+            <div className="slice-body">
+                <div className="slice-fields">
+                    <input
+                        type="text"
+                        className="slice-label-input"
+                        placeholder="Label (z. B. Dogs)"
+                        value={slice.label}
+                        onChange={(e) => onChange({ ...slice, label: e.target.value })}
+                    />
+                    <input
+                        type="number"
+                        className="slice-value-input"
+                        placeholder="Wert"
+                        min="0"
+                        step="0.01"
+                        value={slice.value}
+                        onChange={(e) => onChange({ ...slice, value: e.target.value })}
+                    />
+                    <span className="slice-percent">{percentLabel}</span>
+                </div>
+                {(errors.length > 0 || isDuplicate) && (
+                    <div className="slice-warning">
+                        {[...errors, isDuplicate ? 'Doppeltes Label' : null].filter(Boolean).join(' · ')}
+                    </div>
+                )}
+            </div>
+            <div className="slice-order-buttons">
+                <button type="button" disabled={index === 0} onClick={onMoveUp} title="Nach oben">↑</button>
+                <button type="button" disabled={index === total - 1} onClick={onMoveDown} title="Nach unten">↓</button>
+            </div>
+            <button type="button" className="slice-delete" onClick={onDelete} title="Stück löschen">✕</button>
+        </div>
+    );
+}
+
+function SliceList({ slices, onUpdateSlice, onDeleteSlice, onMoveSlice, onReorderSlice }) {
+    const [dragIndex, setDragIndex] = useState(null);
+    const [overIndex, setOverIndex] = useState(null);
+
+    const validValues = getValidSlices(slices).map((s) => parseValue(s.value));
+    const sum = validValues.reduce((a, b) => a + b, 0);
+
+    const labelCounts = {};
+    slices.forEach((s) => {
+        const key = s.label.trim();
+        if (!key) return;
+        labelCounts[key] = (labelCounts[key] || 0) + 1;
+    });
+
+    if (slices.length === 0) {
+        return <div className="slice-empty">Noch keine Stücke. Füge dein erstes Stück mit „+ Neues Stück hinzufügen“ hinzu.</div>;
+    }
+
+    return (
+        <div className="slice-list">
+            {slices.map((slice, index) => {
+                const errors = validateSlice(slice);
+                const isDuplicate = slice.label.trim() && labelCounts[slice.label.trim()] > 1;
+                const num = parseValue(slice.value);
+                const percentLabel = errors.length === 0 && sum > 0 ? ((num / sum) * 100).toFixed(1) + ' %' : '–';
+
+                let dragState = null;
+                if (dragIndex === index) dragState = 'dragging';
+                else if (overIndex === index) dragState = 'over';
+
+                return (
+                    <SliceTile
+                        key={slice.id}
+                        slice={slice}
+                        index={index}
+                        total={slices.length}
+                        percentLabel={percentLabel}
+                        errors={errors}
+                        isDuplicate={isDuplicate}
+                        dragState={dragState}
+                        onChange={(next) => onUpdateSlice(slice.id, next)}
+                        onDelete={() => onDeleteSlice(slice.id)}
+                        onMoveUp={() => onMoveSlice(index, index - 1)}
+                        onMoveDown={() => onMoveSlice(index, index + 1)}
+                        onDragStart={() => setDragIndex(index)}
+                        onDragOver={(e) => { e.preventDefault(); if (dragIndex !== null && dragIndex !== index) setOverIndex(index); }}
+                        onDragEnd={() => { setDragIndex(null); setOverIndex(null); }}
+                        onDrop={(e) => {
+                            e.preventDefault();
+                            if (dragIndex !== null && dragIndex !== index) onReorderSlice(dragIndex, index);
+                            setDragIndex(null);
+                            setOverIndex(null);
+                        }}
+                    />
+                );
+            })}
+        </div>
+    );
+}
+
+/* ==========================================================================
+   Diagrammweite Einstellungen
+   ========================================================================== */
+
+function SettingsPanel({ settings, onChange, sliceLabels }) {
+    function set(patch) { onChange({ ...settings, ...patch }); }
+
+    return (
+        <div className="settings-panel">
+            <h2>Diagrammweite Einstellungen</h2>
+
+            <div className="settings-section">
+                <h3 className="settings-section-title">Allgemein</h3>
+                <div className="settings-grid">
+                    <label className="settings-field">
+                        Titel
+                        <input
+                            type="text"
+                            value={settings.title}
+                            placeholder="z. B. Marktanteile 2026"
+                            onChange={(e) => set({ title: e.target.value })}
+                        />
+                    </label>
+
+                    <label className="settings-field">
+                        Theme
+                        <select value={settings.theme} onChange={(e) => set({ theme: e.target.value })}>
+                            <option value="">Standard</option>
+                            <option value="neutral">Neutral</option>
+                            <option value="dark">Dark</option>
+                            <option value="forest">Forest</option>
+                            <option value="base">Base</option>
+                        </select>
+                    </label>
+                </div>
+            </div>
+
+            <div className="settings-section">
+                <h3 className="settings-section-title">Legende &amp; Hervorhebung</h3>
+                <div className="settings-grid">
+                    <label className="settings-field">
+                        Legendenposition
+                        <select value={settings.legendPosition} onChange={(e) => set({ legendPosition: e.target.value })}>
+                            <option value="">Standard (rechts)</option>
+                            <option value="right">Rechts</option>
+                            <option value="bottom">Unten</option>
+                            <option value="left">Links</option>
+                            <option value="top">Oben</option>
+                            <option value="center">Mitte</option>
+                        </select>
+                    </label>
+
+                    <label className="settings-field">
+                        Stück hervorheben
+                        <select value={settings.highlightSlice} onChange={(e) => set({ highlightSlice: e.target.value })}>
+                            <option value="">Keins</option>
+                            <option value="hover">Bei Hover</option>
+                            {sliceLabels.map((l) => <option key={l} value={l}>{l}</option>)}
+                        </select>
+                    </label>
+                </div>
+            </div>
+
+            <div className="settings-section">
+                <h3 className="settings-section-title">Anzeigeoptionen</h3>
+                <div className="settings-toggle-row">
+                    <label className="settings-checkbox">
+                        <input type="checkbox" checked={settings.showData} onChange={(e) => set({ showData: e.target.checked })} />
+                        Werte anzeigen (showData)
+                    </label>
+                    <label className="settings-checkbox">
+                        <input type="checkbox" checked={settings.donutEnabled} onChange={(e) => set({ donutEnabled: e.target.checked })} />
+                        Donut-Diagramm
+                    </label>
+                </div>
+                <div className="settings-grid settings-grid-followup">
+                    <label className="settings-field">
+                        Loch-Radius (0–0.9)
+                        <input
+                            type="number"
+                            min="0"
+                            max="0.9"
+                            step="0.05"
+                            value={settings.donutHole}
+                            disabled={!settings.donutEnabled}
+                            onChange={(e) => set({ donutHole: e.target.value })}
+                        />
+                    </label>
+                </div>
+            </div>
+
+            <p className="settings-note">
+                Hinweis: Mermaid vergibt Farben pro Stück automatisch über das aktive Theme – individuelle Farben pro Kachel
+                sind in der Basis-Pie-Syntax nicht vorgesehen. Der Theme-Umschalter oben wirkt daher immer auf das gesamte
+                Diagramm, nicht auf einzelne Stücke.
+            </p>
+        </div>
+    );
+}
+
+/* ==========================================================================
+   Vorschau und Code-Panel
+   ========================================================================== */
+
+function getSvgSize(svgEl) {
+    const vb = svgEl.viewBox && svgEl.viewBox.baseVal;
+    if (vb && vb.width && vb.height) return { width: vb.width, height: vb.height };
+    const w = parseFloat(svgEl.getAttribute('width'));
+    const h = parseFloat(svgEl.getAttribute('height'));
+    if (w && h) return { width: w, height: h };
+    const rect = svgEl.getBoundingClientRect();
+    return { width: rect.width, height: rect.height };
+}
+
+// Rendert das aktuelle Vorschau-SVG auf ein Canvas (mit weissem Hintergrund,
+// damit das Bild auch beim Einfuegen in dunkle Umgebungen lesbar bleibt) und
+// kopiert es als PNG in die Zwischenablage.
+async function copySvgAsPng(svgEl) {
+    if (!svgEl) throw new Error('Kein gerendertes Diagramm zum Kopieren vorhanden.');
+
+    let source = new XMLSerializer().serializeToString(svgEl);
+    if (!source.includes('xmlns="http://www.w3.org/2000/svg"')) {
+        source = source.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+    }
+
+    const { width, height } = getSvgSize(svgEl);
+    const scale = 2;
+    const padding = 16;
+    const svgDataUri = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(source)));
+
+    const img = await new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error('SVG konnte nicht geladen werden.'));
+        image.src = svgDataUri;
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round((width + padding * 2) * scale));
+    canvas.height = Math.max(1, Math.round((height + padding * 2) * scale));
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, padding * scale, padding * scale, width * scale, height * scale);
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) throw new Error('PNG konnte nicht erzeugt werden.');
+    if (!navigator.clipboard || !window.ClipboardItem) {
+        throw new Error('Bild-Kopieren wird von diesem Browser nicht unterstützt.');
+    }
+    await navigator.clipboard.write([new window.ClipboardItem({ 'image/png': blob })]);
+}
+
+function PreviewPane({ code, isEmpty }) {
+    const containerRef = useRef(null);
+    const [error, setError] = useState('');
+    const [imageCopyLabel, setImageCopyLabel] = useState('Bild kopieren');
+    const [imageCopyError, setImageCopyError] = useState('');
+    const seqRef = useRef(0);
+
+    useEffect(() => {
+        if (isEmpty) { setError(''); return; }
+        let cancelled = false;
+        const seq = ++seqRef.current;
+        const timer = setTimeout(async () => {
+            const id = 'pie-preview-' + Date.now() + '-' + seq;
+            try {
+                const { svg } = await mermaid.render(id, code);
+                if (cancelled || seq !== seqRef.current) return;
+                if (containerRef.current) containerRef.current.innerHTML = svg;
+                setError('');
+            } catch (err) {
+                if (cancelled || seq !== seqRef.current) return;
+                setError(err && err.message ? err.message : String(err));
+            } finally {
+                const leaked = document.getElementById('d' + id);
+                if (leaked) leaked.remove();
+            }
+        }, 250);
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [code, isEmpty]);
+
+    async function handleCopyImage() {
+        setImageCopyError('');
+        try {
+            const svgEl = containerRef.current && containerRef.current.querySelector('svg');
+            await copySvgAsPng(svgEl);
+            setImageCopyLabel('Kopiert ✓');
+            setTimeout(() => setImageCopyLabel('Bild kopieren'), 1500);
+        } catch (err) {
+            setImageCopyError(err && err.message ? err.message : String(err));
+        }
+    }
+
+    return (
+        <div className="preview-pane">
+            <div className="preview-pane-header">
+                <span>Vorschau</span>
+                <div className="preview-pane-actions">
+                    {imageCopyError && <span className="image-copy-error">{imageCopyError}</span>}
+                    <button type="button" disabled={isEmpty || !!error} onClick={handleCopyImage}>{imageCopyLabel}</button>
+                </div>
+            </div>
+            <div className="preview-scroll">
+                {isEmpty && <div className="preview-placeholder">Noch keine gültigen Stücke. Trage mindestens ein Stück mit Label und Wert &gt; 0 ein.</div>}
+                {!isEmpty && error && <div className="preview-error">{error}</div>}
+                <div
+                    ref={containerRef}
+                    className="preview-diagram"
+                    style={{ display: (isEmpty || error) ? 'none' : 'block' }}
+                />
+            </div>
+        </div>
+    );
+}
+
+function CodePanel({ code }) {
+    const [copyLabel, setCopyLabel] = useState('Code kopieren');
+
+    async function handleCopy() {
+        try {
+            await navigator.clipboard.writeText(code);
+            setCopyLabel('Kopiert ✓');
+            setTimeout(() => setCopyLabel('Code kopieren'), 1500);
+        } catch (err) {
+            /* Zwischenablage evtl. nicht verfügbar (Berechtigung/Browser) */
+        }
+    }
+
+    return (
+        <div className="code-pane">
+            <div className="code-pane-header">
+                <span>Mermaid-Code</span>
+                <button type="button" onClick={handleCopy}>{copyLabel}</button>
+            </div>
+            <textarea className="code-textarea" readOnly spellCheck="false" value={code} />
+        </div>
+    );
+}
+
+/* ==========================================================================
+   Haupt-Editor
+   ========================================================================== */
+
+const DEFAULT_SETTINGS = {
+    title: '',
+    showData: false,
+    donutEnabled: false,
+    donutHole: 0.5,
+    legendPosition: '',
+    highlightSlice: '',
+    theme: '',
+};
+
+function PieEditor() {
+    const [slices, setSlices] = useState([]);
+    const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+    const idCounterRef = useRef(0);
+
+    function addSlice() {
+        const id = 'slice-' + (idCounterRef.current++);
+        setSlices((prev) => prev.concat({ id, label: '', value: '' }));
+    }
+
+    function updateSlice(id, next) {
+        setSlices((prev) => prev.map((s) => (s.id === id ? next : s)));
+    }
+
+    function deleteSlice(id) {
+        setSlices((prev) => prev.filter((s) => s.id !== id));
+    }
+
+    function moveSlice(from, to) {
+        if (to < 0 || to >= slices.length) return;
+        setSlices((prev) => {
+            const next = prev.slice();
+            const [moved] = next.splice(from, 1);
+            next.splice(to, 0, moved);
+            return next;
+        });
+    }
+
+    function reorderSlice(from, to) {
+        setSlices((prev) => {
+            const next = prev.slice();
+            const [moved] = next.splice(from, 1);
+            next.splice(to, 0, moved);
+            return next;
+        });
+    }
+
+    function clearAll() {
+        if (slices.length === 0) return;
+        if (!window.confirm('Wirklich das gesamte Diagramm löschen?')) return;
+        setSlices([]);
+        setSettings(DEFAULT_SETTINGS);
+        idCounterRef.current = 0;
+    }
+
+    const code = useMemo(() => generatePieCode(slices, settings), [slices, settings]);
+    const validCount = useMemo(() => getValidSlices(slices).length, [slices]);
+    const sum = useMemo(
+        () => getValidSlices(slices).reduce((acc, s) => acc + parseValue(s.value), 0),
+        [slices]
+    );
+    const sliceLabels = useMemo(
+        () => [...new Set(getValidSlices(slices).map((s) => s.label.trim()))],
+        [slices]
+    );
+
+    return (
+        <React.Fragment>
+            <header>
+                <div className="brand"><h1>Pie Chart Editor</h1></div>
+                <div className="controls">
+                    <button type="button" onClick={clearAll}>Alles löschen</button>
+                    <a href="https://mermaid.js.org/syntax/pie.html" target="_blank" rel="noopener">Mermaid-Syntax</a>
+                </div>
+            </header>
+
+            <div className="main">
+                <div className="editor-column">
+                    <SettingsPanel settings={settings} onChange={setSettings} sliceLabels={sliceLabels} />
+
+                    <div className="add-slice-row">
+                        <button type="button" className="primary" onClick={addSlice}>+ Neues Stück hinzufügen</button>
+                        <span className="slice-summary">
+                            {slices.length} Stück{slices.length === 1 ? '' : 'e'}
+                            {validCount > 0 ? ` · gültig: ${validCount} · Summe: ${roundTo2(sum)}` : ''}
+                        </span>
+                    </div>
+
+                    <SliceList
+                        slices={slices}
+                        onUpdateSlice={updateSlice}
+                        onDeleteSlice={deleteSlice}
+                        onMoveSlice={moveSlice}
+                        onReorderSlice={reorderSlice}
+                    />
+                </div>
+
+                <div className="sidebar">
+                    <PreviewPane code={code} isEmpty={validCount === 0} />
+                    <CodePanel code={code} />
+                </div>
+            </div>
+        </React.Fragment>
+    );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<PieEditor />);
+</script>
+<script>
+    // Babels automatischer "text/babel"-Scan verwendet standardmäßig das neue
+    // JSX-Runtime ("automatic"), das ein `import ... from "react/jsx-runtime"`
+    // in den Output einfügt - das schlägt in einem normalen, nicht-modularen
+    // <script> fehl. Daher hier die klassische Runtime (React.createElement)
+    // manuell erzwingen und das Ergebnis selbst ausführen, statt uns auf die
+    // data-presets-Attribut-Automatik zu verlassen.
+    (function () {
+        var source = document.getElementById('app-source').textContent;
+        var output = Babel.transform(source, {
+            presets: [['react', { runtime: 'classic' }]],
+            filename: 'pie-app.jsx',
+        }).code;
+        var script = document.createElement('script');
+        script.textContent = output;
+        document.body.appendChild(script);
+    })();
+</script>
+
+</body>
+</html>
