@@ -1,0 +1,1338 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Grafischer Editor für Mermaid-Flowcharts: Knoten und Kanten per Maus erstellen, live als Mermaid-Code und Diagramm-Vorschau.">
+<title>Flowchart Editor</title>
+<link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/css/reset.css">
+<link rel="stylesheet" href="../assets/css/theme.css">
+<link rel="stylesheet" href="https://unpkg.com/reactflow@11.11.4/dist/style.css">
+<style>
+    :root {
+        --accent: var(--theme-accent);
+        --accent-dark: var(--theme-accent-strong);
+        --panel-bg: var(--theme-surface);
+        --border: var(--theme-border);
+    }
+
+    html, body {
+        height: 100%;
+    }
+
+    body {
+        margin: 0;
+        padding-top: var(--theme-nav-height);
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    /* React rendert header+main in dieses (sonst leere) Element - es muss
+       selbst zum Flex-Column-Container werden, sonst wirkt "flex:1" an
+       .main ins Leere (der eigentliche Flex-Child von body waere sonst
+       #root mit ungenutzter Default-Groesse "auto"). */
+    #root {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 12px 18px;
+        background: var(--panel-bg);
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+    }
+
+    header h1 {
+        font-size: 1.1rem;
+        letter-spacing: 0.5px;
+    }
+
+    .controls {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .controls label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.8rem;
+        color: var(--theme-text-muted);
+    }
+
+    .controls a {
+        color: var(--theme-text-muted);
+        text-decoration: none;
+        font-size: 0.85rem;
+    }
+
+    .controls a:hover {
+        color: var(--accent);
+    }
+
+    select, button, input[type="text"] {
+        font-family: inherit;
+        font-size: 0.82rem;
+        background: var(--theme-surface-muted);
+        color: var(--theme-text);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 7px 10px;
+        cursor: pointer;
+    }
+
+    input[type="text"] {
+        cursor: text;
+    }
+
+    select:hover, button:hover:not(:disabled) {
+        border-color: var(--accent);
+        color: var(--theme-text-strong);
+    }
+
+    button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+
+    button.danger:hover {
+        border-color: var(--theme-danger);
+        color: var(--theme-danger);
+    }
+
+    .main {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 1fr 380px;
+        grid-template-rows: minmax(0, 1fr);
+    }
+
+    .canvas-wrap {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        background: var(--theme-surface-muted);
+    }
+
+    .canvas-wrap .react-flow {
+        width: 100%;
+        height: 100%;
+    }
+
+    .sidebar {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        border-left: 1px solid var(--border);
+        background: var(--panel-bg);
+    }
+
+    .preview-pane, .code-pane {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .preview-pane {
+        border-bottom: 1px solid var(--border);
+    }
+
+    .preview-pane-header, .code-pane-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 12px;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--theme-text-muted);
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+    }
+
+    .code-pane-actions {
+        display: flex;
+        gap: 6px;
+        text-transform: none;
+        letter-spacing: normal;
+    }
+
+    .code-pane-actions button {
+        font-size: 0.74rem;
+        padding: 4px 8px;
+    }
+
+    .preview-scroll {
+        flex: 1;
+        overflow: auto;
+        padding: 14px;
+        position: relative;
+    }
+
+    .preview-diagram {
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+    }
+
+    .preview-diagram svg {
+        max-width: 100%;
+        height: auto;
+    }
+
+    .preview-error {
+        color: var(--theme-danger);
+        font-size: 0.78rem;
+        font-family: var(--theme-font-mono);
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    .preview-placeholder {
+        color: var(--theme-text-muted);
+        font-size: 0.85rem;
+        text-align: center;
+        padding-top: 40px;
+    }
+
+    .code-pane-error {
+        padding: 6px 12px;
+        color: var(--theme-danger);
+        font-size: 0.76rem;
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+    }
+
+    .code-textarea {
+        flex: 1;
+        border: none;
+        resize: none;
+        padding: 12px;
+        font-family: var(--theme-font-mono);
+        font-size: 0.8rem;
+        line-height: 1.5;
+        background: var(--theme-surface);
+        color: var(--theme-text);
+    }
+
+    .code-textarea:focus {
+        outline: none;
+    }
+
+    /* ---------- Knotenformen ---------- */
+    .shape-node {
+        position: relative;
+        min-width: 90px;
+        min-height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 12px 22px;
+        box-sizing: border-box;
+    }
+
+    .shape-node[data-shape="hexagon"],
+    .shape-node[data-shape="parallelogram"],
+    .shape-node[data-shape="parallelogramAlt"],
+    .shape-node[data-shape="trapezoid"],
+    .shape-node[data-shape="trapezoidAlt"] {
+        padding-left: 34px;
+        padding-right: 34px;
+    }
+
+    .shape-node[data-shape="circle"],
+    .shape-node[data-shape="doublecircle"] {
+        padding: 26px;
+        min-width: 90px;
+        min-height: 90px;
+        border-radius: 50%;
+    }
+
+    .shape-node[data-shape="stadium"] {
+        padding-left: 28px;
+        padding-right: 28px;
+    }
+
+    .shape-node[data-shape="cylinder"] {
+        padding-top: 26px;
+    }
+
+    .shape-node.is-selected {
+        outline: 2px dashed var(--accent);
+        outline-offset: 5px;
+        border-radius: 4px;
+    }
+
+    .shape-svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
+        overflow: visible;
+        pointer-events: none;
+    }
+
+    .shape-label {
+        position: relative;
+        z-index: 1;
+        font-size: 12.5px;
+        font-weight: 600;
+        text-align: center;
+        color: var(--theme-text-strong);
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-width: 200px;
+    }
+
+    .shape-label-input {
+        position: relative;
+        z-index: 1;
+        font: inherit;
+        font-weight: 600;
+        text-align: center;
+        width: 130px;
+        background: var(--theme-surface);
+        color: var(--theme-text);
+        border: 1px solid var(--accent);
+        border-radius: 4px;
+        padding: 2px 4px;
+    }
+
+    .shape-node .react-flow__handle {
+        width: 10px;
+        height: 10px;
+        background: var(--theme-surface);
+        border: 2px solid var(--accent);
+        border-radius: 50%;
+        opacity: 0.5;
+        transition: opacity .15s, transform .15s;
+        z-index: 2;
+    }
+
+    .shape-node:hover .react-flow__handle, .shape-node .react-flow__handle:hover {
+        opacity: 1;
+        transform: scale(1.3);
+    }
+
+    /* ---------- Kanten ---------- */
+    .edge-label-wrap {
+        position: absolute;
+        pointer-events: all;
+        background: var(--panel-bg);
+        border: 1px solid transparent;
+        border-radius: 4px;
+        padding: 2px 6px;
+        min-width: 12px;
+        min-height: 12px;
+        font-size: 11.5px;
+        color: var(--theme-text);
+        cursor: text;
+    }
+
+    .edge-label-wrap:hover {
+        border-color: var(--border);
+    }
+
+    .edge-label-input {
+        font: inherit;
+        font-size: 11.5px;
+        width: 90px;
+        text-align: center;
+        border: 1px solid var(--accent);
+        border-radius: 3px;
+        padding: 1px 3px;
+        background: var(--theme-surface);
+        color: var(--theme-text);
+    }
+
+    .edge-label-hint {
+        color: var(--theme-text-muted);
+        font-style: italic;
+    }
+
+    /* ---------- Auswahl-Toolbar ---------- */
+    .selection-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        background: var(--panel-bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px 12px;
+        box-shadow: var(--theme-shadow);
+        font-size: 0.78rem;
+        max-width: 80vw;
+    }
+
+    .selection-toolbar label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--theme-text-muted);
+    }
+
+    .selection-toolbar select {
+        font-size: 0.78rem;
+        padding: 5px 7px;
+    }
+
+    .edge-toolbar-label {
+        font-size: 0.78rem;
+        padding: 5px 7px;
+        width: 130px;
+    }
+
+    .color-swatches {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    .swatch {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: 2px solid;
+        padding: 0;
+        cursor: pointer;
+    }
+
+    .swatch-none {
+        background: var(--theme-surface-muted) !important;
+        border: 2px dashed var(--theme-text-muted) !important;
+        position: relative;
+    }
+
+    .swatch-none::after {
+        content: '';
+        position: absolute;
+        left: 1px;
+        right: 1px;
+        top: 50%;
+        height: 1px;
+        background: var(--theme-danger);
+        transform: rotate(-45deg);
+    }
+
+    .hint-panel {
+        font-size: 0.72rem;
+        color: var(--theme-text-muted);
+        background: var(--panel-bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 5px 9px;
+        max-width: 62vw;
+    }
+
+    /* ---------- React Flow Anpassungen ---------- */
+    .react-flow__background {
+        background: var(--theme-surface-muted);
+    }
+
+    .react-flow__controls {
+        box-shadow: var(--theme-shadow-sm);
+    }
+
+    .react-flow__controls-button {
+        background: var(--panel-bg);
+        border-bottom: 1px solid var(--border);
+        fill: var(--theme-text);
+    }
+
+    .react-flow__controls-button:hover {
+        background: var(--theme-accent-soft);
+    }
+
+    .react-flow__attribution {
+        font-size: 9px;
+        background: transparent;
+    }
+
+    .react-flow__attribution a {
+        color: var(--theme-text-muted);
+    }
+
+    .react-flow__edge-path {
+        cursor: pointer;
+    }
+
+    .react-flow__connection-path {
+        stroke: var(--accent);
+        stroke-width: 2;
+    }
+
+    .react-flow__selection {
+        background: var(--theme-accent-soft);
+        border: 1px dashed var(--accent);
+    }
+
+    @media (max-width: 900px) {
+        .main {
+            grid-template-columns: 1fr;
+            grid-template-rows: 55vh 1fr;
+        }
+
+        .sidebar {
+            border-left: none;
+            border-top: 1px solid var(--border);
+        }
+    }
+</style>
+</head>
+<body>
+<script src="../assets/js/nav.js"></script>
+
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/reactflow@11.11.4/dist/umd/index.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/plain" id="app-source">
+'use strict';
+
+mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'default' });
+
+const {
+    ReactFlow, ReactFlowProvider, Background, Controls, Panel, Handle, Position,
+    MarkerType, ConnectionMode, addEdge, useNodesState, useEdgesState, useReactFlow,
+    EdgeLabelRenderer, getBezierPath, BaseEdge,
+} = window.ReactFlow;
+
+const { useState, useCallback, useRef, useEffect, useMemo } = React;
+
+/* ==========================================================================
+   Konstanten: Knotenformen, Kantenstile, Farben
+   ========================================================================== */
+
+const SHAPES = [
+    { key: 'rectangle',       label: 'Rechteck / Prozess',        open: '[',   close: ']' },
+    { key: 'round',           label: 'Abgerundet / Event',        open: '(',   close: ')' },
+    { key: 'stadium',         label: 'Stadium (Start/Ende)',      open: '([',  close: '])' },
+    { key: 'subroutine',      label: 'Subroutine',                open: '[[',  close: ']]' },
+    { key: 'cylinder',        label: 'Zylinder / Datenbank',      open: '[(',  close: ')]' },
+    { key: 'circle',          label: 'Kreis',                     open: '((',  close: '))' },
+    { key: 'doublecircle',    label: 'Doppelkreis / Stop',        open: '(((', close: ')))' },
+    { key: 'rhombus',         label: 'Raute / Entscheidung',      open: '{',   close: '}' },
+    { key: 'hexagon',         label: 'Sechseck / Vorbereitung',   open: '{{',  close: '}}' },
+    { key: 'parallelogram',   label: 'Parallelogramm ⟋',          open: '[/',  close: '/]' },
+    { key: 'parallelogramAlt',label: 'Parallelogramm ⟍',          open: '[\\', close: '\\]' },
+    { key: 'trapezoid',       label: 'Trapez (schmal oben)',      open: '[/',  close: '\\]' },
+    { key: 'trapezoidAlt',    label: 'Trapez (schmal unten)',     open: '[\\', close: '/]' },
+];
+const SHAPE_MAP = {};
+SHAPES.forEach((s) => { SHAPE_MAP[s.key] = s; });
+
+// Reihenfolge fürs Parsen: spezifischere/längere Klammer-Kombinationen zuerst,
+// sonst würde z. B. "[[Text]]" (Subroutine) bereits vom generischen
+// Rechteck-Muster "[...]" verschluckt.
+const PARSE_ORDER = [
+    'doublecircle', 'circle', 'stadium', 'cylinder', 'subroutine', 'hexagon',
+    'trapezoid', 'trapezoidAlt', 'parallelogram', 'parallelogramAlt',
+    'round', 'rhombus', 'rectangle',
+];
+
+const LINE_STYLES = [
+    { key: 'solid', label: 'Durchgezogen' },
+    { key: 'dashed', label: 'Gestrichelt' },
+    { key: 'thick', label: 'Dick' },
+    { key: 'invisible', label: 'Unsichtbar' },
+];
+
+const ARROW_MODES = [
+    { key: 'forward', label: 'Pfeil →' },
+    { key: 'both', label: 'Pfeil ↔' },
+    { key: 'none', label: 'Ohne Pfeilspitze' },
+];
+
+// Exakte Mermaid-Link-Tokens je Linienart/Pfeilrichtung (siehe
+// https://mermaid.js.org/syntax/flowchart.html, Abschnitt "Links").
+const LINK_TOKENS = {
+    solid:  { none: '---',  forward: '-->',  both: '<-->' },
+    dashed: { none: '-.-',  forward: '-.->', both: '<-.->' },
+    thick:  { none: '===',  forward: '==>',  both: '<==>' },
+};
+
+const TOKEN_TO_STYLE = {
+    '---': ['solid', 'none'], '-->': ['solid', 'forward'], '<-->': ['solid', 'both'],
+    '-.-': ['dashed', 'none'], '-.->': ['dashed', 'forward'], '<-.->': ['dashed', 'both'],
+    '===': ['thick', 'none'], '==>': ['thick', 'forward'], '<==>': ['thick', 'both'],
+    '~~~': ['invisible', 'forward'],
+};
+
+const COLOR_PALETTE = [
+    { key: 'red', fill: '#fee2e2', stroke: '#b91c1c' },
+    { key: 'orange', fill: '#ffedd5', stroke: '#c2410c' },
+    { key: 'yellow', fill: '#fef9c3', stroke: '#a16207' },
+    { key: 'green', fill: '#dcfce7', stroke: '#15803d' },
+    { key: 'blue', fill: '#dbeafe', stroke: '#1d4ed8' },
+    { key: 'purple', fill: '#f3e8ff', stroke: '#7e22ce' },
+    { key: 'gray', fill: '#f4f4f5', stroke: '#52525b' },
+];
+
+/* ==========================================================================
+   Hilfsfunktionen: IDs, Escaping, Regex
+   ========================================================================== */
+
+// Spreadsheet-artige IDs: A, B, ... Z, AA, AB, ... Vermeidet dadurch von sich
+// aus die Mermaid-Falle, dass IDs mit "o"/"x" oder das Wort "end" Sonderfälle
+// auslösen können.
+function idFromIndex(n) {
+    let s = '';
+    n += 1;
+    while (n > 0) {
+        n -= 1;
+        s = String.fromCharCode(65 + (n % 26)) + s;
+        n = Math.floor(n / 26);
+    }
+    return s;
+}
+
+function escapeMermaidText(text) {
+    return String(text == null ? '' : text).replace(/\r?\n/g, ' ').replace(/"/g, '&quot;').trim();
+}
+
+function unquote(text) {
+    let t = (text == null ? '' : text).trim();
+    if (t.length >= 2 && t.charAt(0) === '"' && t.charAt(t.length - 1) === '"') {
+        t = t.slice(1, -1);
+    }
+    return t.replace(/&quot;/g, '"');
+}
+
+function escapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+const SHAPE_REGEX = {};
+SHAPES.forEach((def) => {
+    SHAPE_REGEX[def.key] = new RegExp('^(\\w[\\w-]*)\\s*' + escapeRegex(def.open) + '(.*)' + escapeRegex(def.close) + '\\s*$');
+});
+
+const EDGE_LINE_RE = /^(\w[\w-]*)\s*(<-\.->|<-->|<==>|-\.->|-->|-\.-|==>|===|---|~~~)\s*(?:\|"?([^|"]*)"?\|\s*)?(\w[\w-]*)\s*$/;
+const STYLE_LINE_RE = /^style\s+(\S+)\s+fill:\s*([^,;\s]+)\s*,\s*stroke:\s*([^,;\s]+)/i;
+
+function computeMarkers(lineStyle, arrowMode) {
+    if (lineStyle === 'invisible') {
+        return { markerStart: undefined, markerEnd: undefined };
+    }
+    const marker = { type: MarkerType.ArrowClosed, color: 'var(--theme-text-muted)' };
+    return {
+        markerStart: arrowMode === 'both' ? marker : undefined,
+        markerEnd: (arrowMode === 'forward' || arrowMode === 'both') ? marker : undefined,
+    };
+}
+
+/* ==========================================================================
+   Mermaid-Code-Generierung (leitet sich ausschließlich aus nodes/edges ab,
+   Canvas-Positionen fließen absichtlich nicht ein)
+   ========================================================================== */
+
+function buildEdgeLine(e) {
+    const lineStyle = (e.data && e.data.lineStyle) || 'solid';
+    const arrowMode = (e.data && e.data.arrowMode) || 'forward';
+    if (lineStyle === 'invisible') {
+        return `${e.source}~~~${e.target}`;
+    }
+    const token = LINK_TOKENS[lineStyle][arrowMode];
+    const label = e.data && e.data.label ? escapeMermaidText(e.data.label) : '';
+    if (label) {
+        return `${e.source}${token}|"${label}"|${e.target}`;
+    }
+    return `${e.source}${token}${e.target}`;
+}
+
+function generateMermaidCode(nodes, edges, direction) {
+    if (nodes.length === 0) {
+        return `flowchart ${direction}`;
+    }
+    const lines = [`flowchart ${direction}`];
+    nodes.forEach((n) => {
+        const shape = SHAPE_MAP[n.data.shape] || SHAPE_MAP.rectangle;
+        const text = escapeMermaidText(n.data.label) || n.id;
+        lines.push(`    ${n.id}${shape.open}"${text}"${shape.close}`);
+    });
+    edges.forEach((e) => {
+        lines.push('    ' + buildEdgeLine(e));
+    });
+    nodes.forEach((n) => {
+        if (n.data.color) {
+            lines.push(`    style ${n.id} fill:${n.data.color.fill},stroke:${n.data.color.stroke}`);
+        }
+    });
+    return lines.join('\n');
+}
+
+/* ==========================================================================
+   Mermaid-Code -> Graph (bestmögliches, einfaches Import-Parsing:
+   unterstützt Knoten- und Kantenzeilen im vom Editor selbst erzeugten Stil)
+   ========================================================================== */
+
+function parseMermaidToGraph(code) {
+    const rawLines = code.split(/\r?\n/)
+        .map((l) => l.replace(/%%.*$/, '').trim())
+        .filter(Boolean);
+    if (rawLines.length === 0) {
+        throw new Error('Kein Code zum Importieren gefunden.');
+    }
+
+    let direction = 'TD';
+    let startIdx = 0;
+    const headMatch = rawLines[0].match(/^(?:flowchart|graph)\s+(TD|TB|BT|RL|LR)\b/i);
+    if (headMatch) {
+        const d = headMatch[1].toUpperCase();
+        direction = d === 'TB' ? 'TD' : d;
+        startIdx = 1;
+    }
+
+    const nodeMap = new Map();
+    const order = [];
+    const edgeList = [];
+
+    function ensureNode(id) {
+        if (!nodeMap.has(id)) {
+            nodeMap.set(id, { id, label: id, shape: 'rectangle', color: null });
+            order.push(id);
+        }
+        return nodeMap.get(id);
+    }
+
+    for (let i = startIdx; i < rawLines.length; i++) {
+        const line = rawLines[i];
+        if (/^(flowchart|graph)\b/i.test(line)) continue;
+
+        const styleMatch = line.match(STYLE_LINE_RE);
+        if (styleMatch) {
+            const node = ensureNode(styleMatch[1]);
+            node.color = { fill: styleMatch[2].trim(), stroke: styleMatch[3].trim() };
+            continue;
+        }
+
+        let matchedShape = false;
+        for (const key of PARSE_ORDER) {
+            const m = line.match(SHAPE_REGEX[key]);
+            if (m) {
+                const node = ensureNode(m[1]);
+                node.label = unquote(m[2]) || m[1];
+                node.shape = key;
+                matchedShape = true;
+                break;
+            }
+        }
+        if (matchedShape) continue;
+
+        const edgeMatch = line.match(EDGE_LINE_RE);
+        if (edgeMatch) {
+            const src = edgeMatch[1], token = edgeMatch[2], label = edgeMatch[3], tgt = edgeMatch[4];
+            const style = TOKEN_TO_STYLE[token];
+            ensureNode(src);
+            ensureNode(tgt);
+            edgeList.push({ source: src, target: tgt, label: unquote(label || ''), lineStyle: style[0], arrowMode: style[1] });
+            continue;
+        }
+
+        throw new Error(`Zeile konnte nicht gelesen werden: "${line}"`);
+    }
+
+    if (order.length === 0) {
+        throw new Error('Es wurden keine Knoten gefunden.');
+    }
+
+    const nodes = order.map((id, idx) => {
+        const n = nodeMap.get(id);
+        return {
+            id: n.id,
+            type: 'shapeNode',
+            position: { x: 80 + (idx % 6) * 170, y: 60 + Math.floor(idx / 6) * 130 },
+            data: { label: n.label, shape: n.shape, color: n.color },
+        };
+    });
+
+    const edges = edgeList.map((e, idx) => ({
+        id: 'e' + idx,
+        source: e.source,
+        target: e.target,
+        type: 'shapeEdge',
+        ...computeMarkers(e.lineStyle, e.arrowMode),
+        data: { label: e.label, lineStyle: e.lineStyle, arrowMode: e.arrowMode },
+    }));
+
+    return { nodes, edges, direction };
+}
+
+/* ==========================================================================
+   Knoten-Shape: Form als SVG (normalisiert auf 0..100, non-uniform gestreckt
+   auf die tatsächliche, textgetriebene Box-Größe), Text als HTML-Overlay
+   ========================================================================== */
+
+function shapeStyle(fill, stroke) {
+    return { style: { fill, stroke }, strokeWidth: 2, vectorEffect: 'non-scaling-stroke' };
+}
+
+function renderShapePath(shape, fill, stroke) {
+    const s = shapeStyle(fill, stroke);
+    switch (shape) {
+        case 'round':
+            return <rect x="1" y="1" width="98" height="98" rx="16" ry="16" {...s} />;
+        case 'stadium':
+            return <rect x="1" y="1" width="98" height="98" rx="49" ry="49" {...s} />;
+        case 'subroutine':
+            return (
+                <React.Fragment>
+                    <rect x="1" y="1" width="98" height="98" {...s} />
+                    <line x1="12" y1="1" x2="12" y2="99" stroke={stroke} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                    <line x1="88" y1="1" x2="88" y2="99" stroke={stroke} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                </React.Fragment>
+            );
+        case 'cylinder':
+            return (
+                <React.Fragment>
+                    <path d="M 2,18 C 2,10 98,10 98,18 L 98,82 C 98,90 2,90 2,82 Z" {...s} />
+                    <path d="M 2,18 C 2,26 98,26 98,18" fill="none" stroke={stroke} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                </React.Fragment>
+            );
+        case 'circle':
+            return <ellipse cx="50" cy="50" rx="49" ry="49" {...s} />;
+        case 'doublecircle':
+            return (
+                <React.Fragment>
+                    <ellipse cx="50" cy="50" rx="49" ry="49" {...s} />
+                    <ellipse cx="50" cy="50" rx="40" ry="40" fill="none" stroke={stroke} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                </React.Fragment>
+            );
+        case 'rhombus':
+            return <polygon points="50,1 99,50 50,99 1,50" {...s} />;
+        case 'hexagon':
+            return <polygon points="18,1 82,1 99,50 82,99 18,99 1,50" {...s} />;
+        case 'parallelogram':
+            return <polygon points="22,1 99,1 78,99 1,99" {...s} />;
+        case 'parallelogramAlt':
+            return <polygon points="1,1 78,1 99,99 22,99" {...s} />;
+        case 'trapezoid':
+            return <polygon points="25,1 75,1 99,99 1,99" {...s} />;
+        case 'trapezoidAlt':
+            return <polygon points="1,1 99,1 75,99 25,99" {...s} />;
+        case 'rectangle':
+        default:
+            return <rect x="1" y="1" width="98" height="98" {...s} />;
+    }
+}
+
+function ShapeNode({ id, data, selected }) {
+    const [editing, setEditing] = useState(false);
+    const [draft, setDraft] = useState(data.label);
+    const inputRef = useRef(null);
+
+    useEffect(() => { if (!editing) setDraft(data.label); }, [data.label, editing]);
+    useEffect(() => {
+        if (editing && inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.select();
+        }
+    }, [editing]);
+
+    function commit() {
+        setEditing(false);
+        const value = draft.trim();
+        data.onLabelChange(id, value || data.label);
+    }
+
+    const fill = data.color ? data.color.fill : 'var(--theme-accent-soft)';
+    const stroke = data.color ? data.color.stroke : 'var(--theme-accent)';
+
+    return (
+        <div className={'shape-node' + (selected ? ' is-selected' : '')} data-shape={data.shape}>
+            <Handle type="source" position={Position.Top} id="top" />
+            <Handle type="source" position={Position.Right} id="right" />
+            <Handle type="source" position={Position.Bottom} id="bottom" />
+            <Handle type="source" position={Position.Left} id="left" />
+            <svg className="shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+                {renderShapePath(data.shape, fill, stroke)}
+            </svg>
+            <div className="shape-label" onDoubleClick={() => setEditing(true)}>
+                {editing ? (
+                    <input
+                        ref={inputRef}
+                        className="shape-label-input nodrag"
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        onBlur={commit}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+                            if (e.key === 'Escape') { setDraft(data.label); setEditing(false); }
+                        }}
+                    />
+                ) : (
+                    <span>{data.label}</span>
+                )}
+            </div>
+        </div>
+    );
+}
+
+/* ==========================================================================
+   Kanten-Komponente: Linienstil, Pfeilrichtung, editierbares Label
+   ========================================================================== */
+
+function ShapeEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, selected, markerEnd, markerStart }) {
+    const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+    const [editing, setEditing] = useState(false);
+    const [draft, setDraft] = useState((data && data.label) || '');
+    const inputRef = useRef(null);
+
+    useEffect(() => { if (!editing) setDraft((data && data.label) || ''); }, [data && data.label, editing]);
+    useEffect(() => {
+        if (editing && inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.select();
+        }
+    }, [editing]);
+
+    function commit() {
+        setEditing(false);
+        if (data && data.onLabelChange) data.onLabelChange(id, draft.trim());
+    }
+
+    const lineStyle = (data && data.lineStyle) || 'solid';
+    const isInvisible = lineStyle === 'invisible';
+    const strokeDasharray = lineStyle === 'dashed' ? '6 4' : (isInvisible ? '2 6' : undefined);
+    const strokeWidth = lineStyle === 'thick' ? 4 : 2;
+    const stroke = selected ? 'var(--theme-accent-strong)' : 'var(--theme-text-muted)';
+
+    return (
+        <React.Fragment>
+            <BaseEdge
+                id={id}
+                path={path}
+                markerEnd={markerEnd}
+                markerStart={markerStart}
+                style={{ stroke, strokeWidth, strokeDasharray, opacity: isInvisible ? 0.4 : 1 }}
+            />
+            <EdgeLabelRenderer>
+                <div
+                    className="edge-label-wrap nodrag nopan"
+                    style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
+                    onDoubleClick={(e) => { e.stopPropagation(); setEditing(true); }}
+                >
+                    {editing ? (
+                        <input
+                            ref={inputRef}
+                            className="edge-label-input"
+                            value={draft}
+                            placeholder="Label"
+                            onChange={(e) => setDraft(e.target.value)}
+                            onBlur={commit}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') { e.preventDefault(); commit(); }
+                                if (e.key === 'Escape') { setDraft((data && data.label) || ''); setEditing(false); }
+                            }}
+                        />
+                    ) : (data && data.label) ? (
+                        <span className="edge-label-text">{data.label}</span>
+                    ) : isInvisible ? (
+                        <span className="edge-label-hint">unsichtbar</span>
+                    ) : null}
+                </div>
+            </EdgeLabelRenderer>
+        </React.Fragment>
+    );
+}
+
+const nodeTypes = { shapeNode: ShapeNode };
+const edgeTypes = { shapeEdge: ShapeEdge };
+
+/* ==========================================================================
+   Vorschau (Mermaid-Rendering) und Code-Panel
+   ========================================================================== */
+
+function PreviewPane({ code, isEmpty }) {
+    const containerRef = useRef(null);
+    const [error, setError] = useState('');
+    const seqRef = useRef(0);
+
+    useEffect(() => {
+        if (isEmpty) { setError(''); return; }
+        let cancelled = false;
+        const seq = ++seqRef.current;
+        const timer = setTimeout(async () => {
+            const id = 'flowchart-preview-' + Date.now() + '-' + seq;
+            try {
+                const { svg } = await mermaid.render(id, code);
+                if (cancelled || seq !== seqRef.current) return;
+                if (containerRef.current) containerRef.current.innerHTML = svg;
+                setError('');
+            } catch (err) {
+                if (cancelled || seq !== seqRef.current) return;
+                setError(err && err.message ? err.message : String(err));
+            } finally {
+                const leaked = document.getElementById('d' + id);
+                if (leaked) leaked.remove();
+            }
+        }, 250);
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [code, isEmpty]);
+
+    return (
+        <div className="preview-pane">
+            <div className="preview-pane-header"><span>Vorschau</span></div>
+            <div className="preview-scroll">
+                {isEmpty && <div className="preview-placeholder">Noch keine Knoten. Klicke auf die Fläche oder „+ Neuer Knoten“, um zu starten.</div>}
+                {!isEmpty && error && <div className="preview-error">{error}</div>}
+                <div
+                    ref={containerRef}
+                    className="preview-diagram"
+                    style={{ display: (isEmpty || error) ? 'none' : 'flex' }}
+                />
+            </div>
+        </div>
+    );
+}
+
+function CodePanel({ code, onApplyImport }) {
+    const [draft, setDraft] = useState(code);
+    const [dirty, setDirty] = useState(false);
+    const [copyLabel, setCopyLabel] = useState('Code kopieren');
+    const [importError, setImportError] = useState('');
+
+    useEffect(() => { if (!dirty) setDraft(code); }, [code, dirty]);
+
+    function handleChange(e) {
+        setDraft(e.target.value);
+        setDirty(true);
+        setImportError('');
+    }
+
+    function handleApply() {
+        try {
+            onApplyImport(draft);
+            setDirty(false);
+            setImportError('');
+        } catch (err) {
+            setImportError(err && err.message ? err.message : String(err));
+        }
+    }
+
+    function handleDiscard() {
+        setDraft(code);
+        setDirty(false);
+        setImportError('');
+    }
+
+    async function handleCopy() {
+        try {
+            await navigator.clipboard.writeText(dirty ? draft : code);
+            setCopyLabel('Kopiert ✓');
+            setTimeout(() => setCopyLabel('Code kopieren'), 1500);
+        } catch (err) {
+            /* Zwischenablage evtl. nicht verfügbar (Berechtigung/Browser) */
+        }
+    }
+
+    return (
+        <div className="code-pane">
+            <div className="code-pane-header">
+                <span>Mermaid-Code{dirty ? ' (bearbeitet)' : ''}</span>
+                <div className="code-pane-actions">
+                    {dirty && <button type="button" onClick={handleApply}>Diagramm übernehmen</button>}
+                    {dirty && <button type="button" onClick={handleDiscard}>Verwerfen</button>}
+                    <button type="button" onClick={handleCopy}>{copyLabel}</button>
+                </div>
+            </div>
+            {importError && <div className="code-pane-error">{importError}</div>}
+            <textarea className="code-textarea" spellCheck="false" value={draft} onChange={handleChange} />
+        </div>
+    );
+}
+
+/* ==========================================================================
+   Haupt-Editor: Graph-Zustand (nodes/edges via ReactFlow = Single Source of
+   Truth), Canvas-Interaktionen, Auswahl-Toolbar, Header-Controls
+   ========================================================================== */
+
+function FlowchartEditor() {
+    const [nodes, setNodes, onNodesChange] = useNodesState([]);
+    const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+    const [direction, setDirection] = useState('TD');
+    const [selectedNodeId, setSelectedNodeId] = useState(null);
+    const [selectedEdgeId, setSelectedEdgeId] = useState(null);
+
+    const idCounterRef = useRef(0);
+    const edgeCounterRef = useRef(0);
+    const nodeIdsRef = useRef(new Set());
+    const wrapperRef = useRef(null);
+    const reactFlowInstance = useReactFlow();
+
+    useEffect(() => { nodeIdsRef.current = new Set(nodes.map((n) => n.id)); }, [nodes]);
+
+    const updateNodeLabel = useCallback((id, label) => {
+        setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, label } } : n)));
+    }, [setNodes]);
+
+    const updateEdgeLabel = useCallback((id, label) => {
+        setEdges((eds) => eds.map((e) => (e.id === id ? { ...e, data: { ...e.data, label } } : e)));
+    }, [setEdges]);
+
+    function nextNodeId() {
+        let id;
+        do { id = idFromIndex(idCounterRef.current++); } while (nodeIdsRef.current.has(id));
+        return id;
+    }
+
+    const createNode = useCallback((position) => {
+        const id = nextNodeId();
+        const newNode = {
+            id,
+            type: 'shapeNode',
+            position,
+            data: { label: id, shape: 'rectangle', color: null, onLabelChange: updateNodeLabel },
+        };
+        setNodes((nds) => nds.concat(newNode));
+        nodeIdsRef.current.add(id);
+    }, [setNodes, updateNodeLabel]);
+
+    const onPaneClick = useCallback((event) => {
+        if (event.detail !== 1) return; // Doppelklick auf die Fläche soll keine 2 Knoten erzeugen
+        const pos = reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+        createNode(pos);
+    }, [reactFlowInstance, createNode]);
+
+    function handleAddNodeButton() {
+        const rect = wrapperRef.current ? wrapperRef.current.getBoundingClientRect() : { left: 200, top: 200, width: 400, height: 300 };
+        const pos = reactFlowInstance.screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+        createNode(pos);
+    }
+
+    const onConnect = useCallback((params) => {
+        const id = 'e' + (edgeCounterRef.current++);
+        setEdges((eds) => addEdge({
+            ...params,
+            id,
+            type: 'shapeEdge',
+            ...computeMarkers('solid', 'forward'),
+            data: { label: '', lineStyle: 'solid', arrowMode: 'forward', onLabelChange: updateEdgeLabel },
+        }, eds));
+    }, [setEdges, updateEdgeLabel]);
+
+    const onSelectionChange = useCallback(({ nodes: selNodes, edges: selEdges }) => {
+        setSelectedNodeId(selNodes.length === 1 && selEdges.length === 0 ? selNodes[0].id : null);
+        setSelectedEdgeId(selEdges.length === 1 && selNodes.length === 0 ? selEdges[0].id : null);
+    }, []);
+
+    function setNodeShape(id, shape) {
+        setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, shape } } : n)));
+    }
+
+    function setNodeColor(id, color) {
+        setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, color } } : n)));
+    }
+
+    function deleteNode(id) {
+        setNodes((nds) => nds.filter((n) => n.id !== id));
+        setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id));
+        setSelectedNodeId(null);
+    }
+
+    function setEdgeLineStyle(id, lineStyle) {
+        setEdges((eds) => eds.map((e) => (e.id === id
+            ? { ...e, data: { ...e.data, lineStyle }, ...computeMarkers(lineStyle, e.data.arrowMode) }
+            : e)));
+    }
+
+    function setEdgeArrowMode(id, arrowMode) {
+        setEdges((eds) => eds.map((e) => (e.id === id
+            ? { ...e, data: { ...e.data, arrowMode }, ...computeMarkers(e.data.lineStyle, arrowMode) }
+            : e)));
+    }
+
+    function deleteEdge(id) {
+        setEdges((eds) => eds.filter((e) => e.id !== id));
+        setSelectedEdgeId(null);
+    }
+
+    function clearAll() {
+        if (nodes.length === 0 && edges.length === 0) return;
+        if (!window.confirm('Wirklich das gesamte Diagramm löschen?')) return;
+        setNodes([]);
+        setEdges([]);
+        idCounterRef.current = 0;
+        edgeCounterRef.current = 0;
+        setSelectedNodeId(null);
+        setSelectedEdgeId(null);
+    }
+
+    const handleApplyImport = useCallback((codeText) => {
+        const parsed = parseMermaidToGraph(codeText);
+        const importedNodes = parsed.nodes.map((n) => ({ ...n, data: { ...n.data, onLabelChange: updateNodeLabel } }));
+        const importedEdges = parsed.edges.map((e) => ({ ...e, data: { ...e.data, onLabelChange: updateEdgeLabel } }));
+        setNodes(importedNodes);
+        setEdges(importedEdges);
+        setDirection(parsed.direction);
+        idCounterRef.current = importedNodes.length;
+        edgeCounterRef.current = importedEdges.length;
+        nodeIdsRef.current = new Set(importedNodes.map((n) => n.id));
+        setSelectedNodeId(null);
+        setSelectedEdgeId(null);
+        setTimeout(() => { if (reactFlowInstance && reactFlowInstance.fitView) reactFlowInstance.fitView({ padding: 0.2 }); }, 50);
+    }, [setNodes, setEdges, updateNodeLabel, updateEdgeLabel, reactFlowInstance]);
+
+    const code = useMemo(() => generateMermaidCode(nodes, edges, direction), [nodes, edges, direction]);
+
+    const selectedNode = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) : null;
+    const selectedEdge = selectedEdgeId ? edges.find((e) => e.id === selectedEdgeId) : null;
+
+    return (
+        <React.Fragment>
+            <header>
+                <div className="brand"><h1>Flowchart Editor</h1></div>
+                <div className="controls">
+                    <label>Richtung
+                        <select value={direction} onChange={(e) => setDirection(e.target.value)}>
+                            <option value="TD">Top-Down (TD)</option>
+                            <option value="LR">Links-Rechts (LR)</option>
+                            <option value="BT">Bottom-Up (BT)</option>
+                            <option value="RL">Rechts-Links (RL)</option>
+                        </select>
+                    </label>
+                    <button type="button" onClick={handleAddNodeButton}>+ Neuer Knoten</button>
+                    <button type="button" onClick={clearAll}>Alles löschen</button>
+                    <a href="https://mermaid.js.org/syntax/flowchart.html" target="_blank" rel="noopener">Mermaid-Syntax</a>
+                </div>
+            </header>
+
+            <div className="main">
+                <div className="canvas-wrap" ref={wrapperRef}>
+                    <ReactFlow
+                        nodes={nodes}
+                        edges={edges}
+                        onNodesChange={onNodesChange}
+                        onEdgesChange={onEdgesChange}
+                        onConnect={onConnect}
+                        nodeTypes={nodeTypes}
+                        edgeTypes={edgeTypes}
+                        connectionMode={ConnectionMode.Loose}
+                        deleteKeyCode={['Delete', 'Backspace']}
+                        onPaneClick={onPaneClick}
+                        onSelectionChange={onSelectionChange}
+                        zoomOnDoubleClick={false}
+                        minZoom={0.2}
+                        maxZoom={2.5}
+                    >
+                        <Background gap={18} size={1} />
+                        <Controls showInteractive={false} />
+
+                        {selectedNode && (
+                            <Panel position="top-center" className="selection-toolbar">
+                                <label>Form
+                                    <select value={selectedNode.data.shape} onChange={(e) => setNodeShape(selectedNode.id, e.target.value)}>
+                                        {SHAPES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                                    </select>
+                                </label>
+                                <div className="color-swatches">
+                                    <button type="button" className="swatch swatch-none" title="Keine Farbe" onClick={() => setNodeColor(selectedNode.id, null)} />
+                                    {COLOR_PALETTE.map((c) => (
+                                        <button
+                                            key={c.key}
+                                            type="button"
+                                            className="swatch"
+                                            style={{ background: c.fill, borderColor: c.stroke }}
+                                            title={c.key}
+                                            onClick={() => setNodeColor(selectedNode.id, c)}
+                                        />
+                                    ))}
+                                </div>
+                                <button type="button" className="danger" onClick={() => deleteNode(selectedNode.id)}>Löschen</button>
+                            </Panel>
+                        )}
+
+                        {selectedEdge && (
+                            <Panel position="top-center" className="selection-toolbar">
+                                <label>Linie
+                                    <select value={selectedEdge.data.lineStyle} onChange={(e) => setEdgeLineStyle(selectedEdge.id, e.target.value)}>
+                                        {LINE_STYLES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                                    </select>
+                                </label>
+                                <label>Pfeil
+                                    <select
+                                        value={selectedEdge.data.arrowMode}
+                                        disabled={selectedEdge.data.lineStyle === 'invisible'}
+                                        onChange={(e) => setEdgeArrowMode(selectedEdge.id, e.target.value)}
+                                    >
+                                        {ARROW_MODES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                                    </select>
+                                </label>
+                                <input
+                                    type="text"
+                                    className="edge-toolbar-label"
+                                    placeholder="Kantenlabel"
+                                    value={selectedEdge.data.label}
+                                    onChange={(e) => updateEdgeLabel(selectedEdge.id, e.target.value)}
+                                />
+                                <button type="button" className="danger" onClick={() => deleteEdge(selectedEdge.id)}>Löschen</button>
+                            </Panel>
+                        )}
+
+                        <Panel position="bottom-left" className="hint-panel">
+                            Klick auf die Fläche = neuer Knoten · Rand ziehen = Verbindung · Doppelklick = Text bearbeiten · Entf = löschen
+                        </Panel>
+                    </ReactFlow>
+                </div>
+
+                <div className="sidebar">
+                    <PreviewPane code={code} isEmpty={nodes.length === 0} />
+                    <CodePanel code={code} onApplyImport={handleApplyImport} />
+                </div>
+            </div>
+        </React.Fragment>
+    );
+}
+
+function Root() {
+    return (
+        <ReactFlowProvider>
+            <FlowchartEditor />
+        </ReactFlowProvider>
+    );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<Root />);
+</script>
+<script>
+    // Babels automatischer "text/babel"-Scan verwendet standardmäßig das neue
+    // JSX-Runtime ("automatic"), das ein `import ... from "react/jsx-runtime"`
+    // in den Output einfügt - das schlägt in einem normalen, nicht-modularen
+    // <script> fehl. Daher hier die klassische Runtime (React.createElement)
+    // manuell erzwingen und das Ergebnis selbst ausführen, statt uns auf die
+    // data-presets-Attribut-Automatik zu verlassen.
+    (function () {
+        var source = document.getElementById('app-source').textContent;
+        var output = Babel.transform(source, {
+            presets: [['react', { runtime: 'classic' }]],
+            filename: 'flowchart-app.jsx',
+        }).code;
+        var script = document.createElement('script');
+        script.textContent = output;
+        document.body.appendChild(script);
+    })();
+</script>
+
+</body>
+</html>
