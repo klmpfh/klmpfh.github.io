@@ -88,12 +88,10 @@
         { key: 'abz',           href: 'abz/',           label: 'Arbeitszeit-Tracker' },
         { key: 'choose',        href: 'choose/',        label: 'Choose Wisely' },
         { key: 'fileshare',     href: 'fileshare/',     label: 'Fileshare' },
-        { key: 'flowchart',     href: 'flowchart/',     label: 'Flowchart' },
         { key: 'ical',          href: 'ical/',          label: 'iCal Terminsuche' },
         { key: 'icaltools',     href: 'icaltools/',     label: 'iCal Tools' },
         { key: 'knallbum',      href: 'knallbum/',      label: 'Knall Bumm' },
         { key: 'laserfeelings', href: 'laserfeelings/', label: 'Laser & Feelings' },
-        { key: 'piecahart',           href: 'piecahart/',           label: 'Piechart' },
         { key: 'sport',         href: 'sport/',         label: 'Sport' },
         { key: 'zauberkloppen', href: 'zauberkloppen/', label: 'Zaubern & Kloppen' }
     ];

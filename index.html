@@ -39,13 +39,15 @@
             list-style: none;
             max-width: 760px;
             width: 100%;
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
             gap: 12px;
         }
 
         li {
             position: relative;
+            flex: 0 1 calc((100% - 24px) / 3);
             background: var(--theme-surface);
             border: 1px solid var(--theme-border);
             border-top: 3px solid var(--theme-accent);
@@ -87,8 +89,8 @@
         }
 
         @media (max-width: 640px) {
-            ul {
-                grid-template-columns: 1fr;
+            li {
+                flex-basis: 100%;
             }
         }
 
@@ -129,10 +131,6 @@
             <p>Teilt Dateien direkt zwischen zwei Browsern per WebRTC – ohne Upload auf einen Server.</p>
         </li>
         <li>
-            <a href="flowchart/">Flowchart</a>
-            <p>Grafischer Editor für Mermaid-Flowcharts: Knoten und Kanten per Maus erstellen, Code live generieren.</p>
-        </li>
-        <li>
             <a href="ical/">iCal Terminsuche</a>
             <p>Findet freie Termin-Slots anhand mehrerer hochgeladener iCal-Dateien.</p>
         </li>
@@ -147,10 +145,6 @@
         <li>
             <a href="laserfeelings/">Laser &amp; Feelings</a>
             <p>Szenario-Generator für das Sci-Fi-Rollenspiel Laser &amp; Feelings – würfelt Bedrohungen, Ziele und Konsequenzen.</p>
-        </li>
-        <li>
-            <a href="piechart/">Piechart</a>
-            <p>Formularbasierter Editor für Mermaid-Pie-Charts: Kuchenstücke eintragen, Code live generieren.</p>
         </li>
         <li>
             <a href="sport/">Sport</a>
