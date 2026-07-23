@@ -361,16 +361,16 @@
         z-index: 2;
     }
 
-    /* Ein einzelner Verbindungspunkt in der Mitte statt vier Punkten am
-       Rand - Kanten werden per Center-zu-Center-Gerade gezeichnet (siehe
-       ShapeEdge/getStraightPath) und von der undurchsichtigen Knotenform
-       automatisch am Rand "abgeschnitten". */
-    .node-handle-center {
-        top: 50% !important;
-        left: 50% !important;
-        right: auto !important;
-        bottom: auto !important;
-        transform: translate(-50%, -50%) !important;
+    /* Ein einzelner Verbindungspunkt unten rechts statt vier Punkten am Rand.
+       Seine Position ist rein die Greiffläche zum Ziehen einer Verbindung -
+       Start/Ende der eigentlichen Kante werden unabhängig davon in ShapeEdge
+       über getBoxIntersection an den tatsächlichen Kachelrand berechnet. */
+    .node-handle-corner {
+        top: auto !important;
+        left: auto !important;
+        right: 3px !important;
+        bottom: 3px !important;
+        transform: none !important;
     }
 
     .shape-node:hover .react-flow__handle, .shape-node .react-flow__handle:hover,
@@ -1245,7 +1245,7 @@ function ShapeNode({ id, data, selected }) {
 
     return (
         <div className={'shape-node' + (selected ? ' is-selected' : '')} data-shape={data.shape}>
-            <Handle type="source" position={Position.Top} id="center" className="node-handle-center" />
+            <Handle type="source" position={Position.Top} id="center" className="node-handle-corner" />
             <svg className="shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
                 {renderShapePath(data.shape, fill, stroke)}
             </svg>
@@ -1302,7 +1302,7 @@ function SubgraphNode({ id, data, selected }) {
 
     return (
         <div className={'subgraph-node' + (selected ? ' is-selected' : '')}>
-            <Handle type="source" position={Position.Top} id="center" className="node-handle-center" />
+            <Handle type="source" position={Position.Top} id="center" className="node-handle-corner" />
             <NodeResizer
                 isVisible={selected}
                 minWidth={200}
@@ -1336,8 +1336,41 @@ function SubgraphNode({ id, data, selected }) {
    Kanten-Komponente: Linienstil, Pfeilrichtung, editierbares Label
    ========================================================================== */
 
-function ShapeEdge({ id, sourceX, sourceY, targetX, targetY, data, selected, markerEnd, markerStart }) {
-    const [path, labelX, labelY] = getStraightPath({ sourceX, sourceY, targetX, targetY });
+// Schnittpunkt der Gerade zwischen den Mittelpunkten von "from" und "to" mit
+// dem Rechteck-Rand von "from" ("floating edge"-Verfahren). Dadurch endet die
+// Kante (und damit die Pfeilspitze) sichtbar am Kachelrand statt verdeckt in
+// der Mitte, unabhängig vom Handle, an dem tatsächlich gezogen wurde.
+function getBoxIntersection(from, to) {
+    const w = (from.width || 0) / 2;
+    const h = (from.height || 0) / 2;
+    const posFrom = from.positionAbsolute || from.position;
+    const posTo = to.positionAbsolute || to.position;
+    const cx = posFrom.x + w;
+    const cy = posFrom.y + h;
+    if (!w || !h) return { x: cx, y: cy };
+
+    const dx = (posTo.x + (to.width || 0) / 2) - cx;
+    const dy = (posTo.y + (to.height || 0) / 2) - cy;
+    if (dx === 0 && dy === 0) return { x: cx, y: cy };
+
+    const xx1 = dx / (2 * w) - dy / (2 * h);
+    const yy1 = dx / (2 * w) + dy / (2 * h);
+    const a = 1 / (Math.abs(xx1) + Math.abs(yy1));
+    return { x: w * (a * xx1 + a * yy1) + cx, y: h * (-a * xx1 + a * yy1) + cy };
+}
+
+function ShapeEdge({ id, source, target, sourceX, sourceY, targetX, targetY, data, selected, markerEnd, markerStart }) {
+    const { getNode } = useReactFlow();
+    const sourceNode = getNode(source);
+    const targetNode = getNode(target);
+
+    let sx = sourceX, sy = sourceY, tx = targetX, ty = targetY;
+    if (sourceNode && targetNode && sourceNode.width && sourceNode.height && targetNode.width && targetNode.height) {
+        ({ x: sx, y: sy } = getBoxIntersection(sourceNode, targetNode));
+        ({ x: tx, y: ty } = getBoxIntersection(targetNode, sourceNode));
+    }
+
+    const [path, labelX, labelY] = getStraightPath({ sourceX: sx, sourceY: sy, targetX: tx, targetY: ty });
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState((data && data.label) || '');
     const inputRef = useRef(null);
