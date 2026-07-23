@@ -373,6 +373,28 @@
         transform: none !important;
     }
 
+    /* Unsichtbares Ziel-Handle über der gesamten Kachel: React Flow trackt
+       dessen gemessene Position/Größe rein geometrisch fürs Erkennen eines
+       gültigen Drop-Ziels beim Ziehen einer Verbindung - pointer-events:none
+       und isConnectableStart={false} sorgen dafür, dass es weder normales
+       Verschieben des Knotens noch Doppelklick-Bearbeitung stört und selbst
+       keine neue Verbindung starten kann. */
+    .node-handle-target-area {
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        transform: none !important;
+        background: transparent !important;
+        border: none !important;
+        border-radius: 0 !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        z-index: 0 !important;
+    }
+
     .shape-node:hover .react-flow__handle, .shape-node .react-flow__handle:hover,
     .subgraph-node:hover .react-flow__handle, .subgraph-node .react-flow__handle:hover {
         opacity: 1;
@@ -1245,6 +1267,13 @@ function ShapeNode({ id, data, selected }) {
 
     return (
         <div className={'shape-node' + (selected ? ' is-selected' : '')} data-shape={data.shape}>
+            <Handle
+                type="target"
+                position={Position.Top}
+                id="target-area"
+                className="node-handle-target-area"
+                isConnectableStart={false}
+            />
             <Handle type="source" position={Position.Top} id="center" className="node-handle-corner" />
             <svg className="shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
                 {renderShapePath(data.shape, fill, stroke)}
@@ -1302,6 +1331,13 @@ function SubgraphNode({ id, data, selected }) {
 
     return (
         <div className={'subgraph-node' + (selected ? ' is-selected' : '')}>
+            <Handle
+                type="target"
+                position={Position.Top}
+                id="target-area"
+                className="node-handle-target-area"
+                isConnectableStart={false}
+            />
             <Handle type="source" position={Position.Top} id="center" className="node-handle-corner" />
             <NodeResizer
                 isVisible={selected}
