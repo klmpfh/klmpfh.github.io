@@ -1162,6 +1162,18 @@
             return required.every(function (code) { return allowedEquipment.has(code); });
         }
 
+        // Liefert die erste Kategorie mit offenem Kontingent, für die es bei den
+        // aktuell freigegebenen Geräten überhaupt keine passende Übung gibt
+        // (z. B. wenn alle Geräte abgewählt wurden). Verhindert, dass
+        // pickExercise ins Leere greift.
+        function findEquipmentBlockedCategory(counts, allowedEquipment) {
+            return CATEGORY_ORDER.find(function (cat) {
+                return counts[cat] > 0 && !EXERCISES.some(function (e) {
+                    return e.category === cat && equipmentAllowed(e, allowedEquipment);
+                });
+            });
+        }
+
         // Baut die Reihenfolge der Hauptübungen direkt aus der je Muskelgruppe
         // eingestellten Anzahl: reihum eine Übung je Gruppe mit noch offenem
         // Kontingent, bis alle Kontingente aufgebraucht sind. Ergibt eine
@@ -1314,11 +1326,17 @@
         }
 
         function refreshLiveEstimate() {
-            var mainCount = totalCategoryCount(getCategoryCounts());
-            updateDurationDisplay(estimateDurationMinutesLive());
-            durationMetaEl.innerHTML = mainCount > 0
-                ? formatDurationMeta(mainCount, Number(intensityRange.value))
-                : "Bitte mindestens eine Übung auswählen";
+            var counts = getCategoryCounts();
+            var mainCount = totalCategoryCount(counts);
+            var blockedCategory = mainCount > 0 ? findEquipmentBlockedCategory(counts, getEnabledEquipment()) : null;
+            updateDurationDisplay(blockedCategory ? 0 : estimateDurationMinutesLive());
+            if (blockedCategory) {
+                durationMetaEl.innerHTML = "Für „" + CATEGORY_META[blockedCategory].label + "“ ist mit den gewählten Geräten keine Übung möglich.";
+            } else {
+                durationMetaEl.innerHTML = mainCount > 0
+                    ? formatDurationMeta(mainCount, Number(intensityRange.value))
+                    : "Bitte mindestens eine Übung auswählen";
+            }
         }
 
         function updateLabels() {
@@ -1350,6 +1368,19 @@
                 currentWorkout = null;
                 outputEl.hidden = true;
                 sportModeBtn.hidden = true;
+                return;
+            }
+
+            var blockedCategory = findEquipmentBlockedCategory(counts, equipment);
+            if (blockedCategory) {
+                // Für eine gewählte Kategorie gibt es mit den freigegebenen
+                // Geräten keine einzige passende Übung (z. B. alle Geräte
+                // abgewählt) - Hinweis anzeigen statt mit undefined weiterzurechnen.
+                currentWorkout = null;
+                outputEl.hidden = true;
+                sportModeBtn.hidden = true;
+                updateDurationDisplay(0);
+                durationMetaEl.innerHTML = "Für „" + CATEGORY_META[blockedCategory].label + "“ ist mit den gewählten Geräten keine Übung möglich.";
                 return;
             }
 
