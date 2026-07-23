@@ -187,6 +187,31 @@
         font-size: 0.7rem;
     }
 
+    .preview-bg-picker {
+        display: flex;
+        align-items: center;
+        cursor: pointer;
+    }
+
+    .preview-bg-picker input[type="color"] {
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        background: none;
+        cursor: pointer;
+    }
+
+    .preview-bg-picker input[type="color"]::-webkit-color-swatch-wrapper {
+        padding: 2px;
+    }
+
+    .preview-bg-picker input[type="color"]::-webkit-color-swatch {
+        border: none;
+        border-radius: 3px;
+    }
+
     .preview-scroll {
         flex: 1;
         overflow: auto;
@@ -331,9 +356,21 @@
         background: var(--theme-surface);
         border: 2px solid var(--accent);
         border-radius: 50%;
-        opacity: 0.5;
+        opacity: 0;
         transition: opacity .15s, transform .15s;
         z-index: 2;
+    }
+
+    /* Ein einzelner Verbindungspunkt in der Mitte statt vier Punkten am
+       Rand - Kanten werden per Center-zu-Center-Gerade gezeichnet (siehe
+       ShapeEdge/getStraightPath) und von der undurchsichtigen Knotenform
+       automatisch am Rand "abgeschnitten". */
+    .node-handle-center {
+        top: 50% !important;
+        left: 50% !important;
+        right: auto !important;
+        bottom: auto !important;
+        transform: translate(-50%, -50%) !important;
     }
 
     .shape-node:hover .react-flow__handle, .shape-node .react-flow__handle:hover,
@@ -592,7 +629,7 @@ mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'defaul
 const {
     ReactFlow, ReactFlowProvider, Background, Controls, Panel, Handle, Position,
     MarkerType, ConnectionMode, addEdge, useNodesState, useEdgesState, useReactFlow,
-    EdgeLabelRenderer, getBezierPath, BaseEdge, NodeResizer,
+    EdgeLabelRenderer, getStraightPath, BaseEdge, NodeResizer,
 } = window.ReactFlow;
 
 const { useState, useCallback, useRef, useEffect, useMemo } = React;
@@ -1208,10 +1245,7 @@ function ShapeNode({ id, data, selected }) {
 
     return (
         <div className={'shape-node' + (selected ? ' is-selected' : '')} data-shape={data.shape}>
-            <Handle type="source" position={Position.Top} id="top" />
-            <Handle type="source" position={Position.Right} id="right" />
-            <Handle type="source" position={Position.Bottom} id="bottom" />
-            <Handle type="source" position={Position.Left} id="left" />
+            <Handle type="source" position={Position.Top} id="center" className="node-handle-center" />
             <svg className="shape-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
                 {renderShapePath(data.shape, fill, stroke)}
             </svg>
@@ -1268,10 +1302,7 @@ function SubgraphNode({ id, data, selected }) {
 
     return (
         <div className={'subgraph-node' + (selected ? ' is-selected' : '')}>
-            <Handle type="source" position={Position.Top} id="top" />
-            <Handle type="source" position={Position.Right} id="right" />
-            <Handle type="source" position={Position.Bottom} id="bottom" />
-            <Handle type="source" position={Position.Left} id="left" />
+            <Handle type="source" position={Position.Top} id="center" className="node-handle-center" />
             <NodeResizer
                 isVisible={selected}
                 minWidth={200}
@@ -1305,8 +1336,8 @@ function SubgraphNode({ id, data, selected }) {
    Kanten-Komponente: Linienstil, Pfeilrichtung, editierbares Label
    ========================================================================== */
 
-function ShapeEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, selected, markerEnd, markerStart }) {
-    const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+function ShapeEdge({ id, sourceX, sourceY, targetX, targetY, data, selected, markerEnd, markerStart }) {
+    const [path, labelX, labelY] = getStraightPath({ sourceX, sourceY, targetX, targetY });
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState((data && data.label) || '');
     const inputRef = useRef(null);
@@ -1386,10 +1417,10 @@ function getSvgSize(svgEl) {
     return { width: rect.width, height: rect.height };
 }
 
-// Rendert das aktuelle Vorschau-SVG auf ein Canvas (mit weissem Hintergrund,
-// damit das Bild auch beim Einfuegen in dunkle Umgebungen lesbar bleibt) und
-// kopiert es als PNG in die Zwischenablage.
-async function copySvgAsPng(svgEl) {
+// Rendert das aktuelle Vorschau-SVG auf ein Canvas (mit der in der Vorschau
+// gewaehlten Hintergrundfarbe, damit das Bild auch beim Einfuegen in dunkle
+// Umgebungen lesbar bleibt) und kopiert es als PNG in die Zwischenablage.
+async function copySvgAsPng(svgEl, background) {
     if (!svgEl) throw new Error('Kein gerendertes Diagramm zum Kopieren vorhanden.');
 
     let source = new XMLSerializer().serializeToString(svgEl);
@@ -1413,7 +1444,7 @@ async function copySvgAsPng(svgEl) {
     canvas.width = Math.max(1, Math.round((width + padding * 2) * scale));
     canvas.height = Math.max(1, Math.round((height + padding * 2) * scale));
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = background || '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(img, padding * scale, padding * scale, width * scale, height * scale);
 
@@ -1425,7 +1456,7 @@ async function copySvgAsPng(svgEl) {
     await navigator.clipboard.write([new window.ClipboardItem({ 'image/png': blob })]);
 }
 
-function PreviewPane({ code, isEmpty }) {
+function PreviewPane({ code, isEmpty, background, onBackgroundChange }) {
     const containerRef = useRef(null);
     const [error, setError] = useState('');
     const [imageCopyLabel, setImageCopyLabel] = useState('Bild kopieren');
@@ -1458,7 +1489,7 @@ function PreviewPane({ code, isEmpty }) {
         setImageCopyError('');
         try {
             const svgEl = containerRef.current && containerRef.current.querySelector('svg');
-            await copySvgAsPng(svgEl);
+            await copySvgAsPng(svgEl, background);
             setImageCopyLabel('Kopiert ✓');
             setTimeout(() => setImageCopyLabel('Bild kopieren'), 1500);
         } catch (err) {
@@ -1472,10 +1503,17 @@ function PreviewPane({ code, isEmpty }) {
                 <span>Vorschau</span>
                 <div className="preview-pane-actions">
                     {imageCopyError && <span className="image-copy-error">{imageCopyError}</span>}
+                    <label className="preview-bg-picker" title="Hintergrundfarbe der Vorschau">
+                        <input
+                            type="color"
+                            value={background}
+                            onChange={(e) => onBackgroundChange(e.target.value)}
+                        />
+                    </label>
                     <button type="button" disabled={isEmpty || !!error} onClick={handleCopyImage}>{imageCopyLabel}</button>
                 </div>
             </div>
-            <div className="preview-scroll">
+            <div className="preview-scroll" style={{ background }}>
                 {isEmpty && <div className="preview-placeholder">Noch keine Knoten. Klicke auf die Fläche oder „+ Neuer Knoten“, um zu starten.</div>}
                 {!isEmpty && error && <div className="preview-error">{error}</div>}
                 <div
@@ -1555,6 +1593,7 @@ function FlowchartEditor() {
     const [direction, setDirection] = useState('TD');
     const [theme, setTheme] = useState('');
     const [title, setTitle] = useState('');
+    const [previewBackground, setPreviewBackground] = useState('#ffffff');
     const [selectedNodeId, setSelectedNodeId] = useState(null);
     const [selectedEdgeId, setSelectedEdgeId] = useState(null);
     const [dropTargetId, setDropTargetId] = useState(null);
@@ -1857,6 +1896,7 @@ function FlowchartEditor() {
                         nodeTypes={nodeTypes}
                         edgeTypes={edgeTypes}
                         connectionMode={ConnectionMode.Loose}
+                        connectionLineType="straight"
                         deleteKeyCode={['Delete', 'Backspace']}
                         onSelectionChange={onSelectionChange}
                         minZoom={0.2}
@@ -1944,7 +1984,12 @@ function FlowchartEditor() {
                 </div>
 
                 <div className="sidebar">
-                    <PreviewPane code={code} isEmpty={nodes.length === 0} />
+                    <PreviewPane
+                        code={code}
+                        isEmpty={nodes.length === 0}
+                        background={previewBackground}
+                        onBackgroundChange={setPreviewBackground}
+                    />
                     <CodePanel code={code} onApplyImport={handleApplyImport} />
                 </div>
             </div>
