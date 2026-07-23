@@ -391,6 +391,25 @@
         font-size: 0.7rem;
     }
 
+    .bg-color-field {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 0.72rem;
+        color: var(--theme-text-muted);
+        cursor: pointer;
+    }
+
+    .bg-color-field input[type="color"] {
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: none;
+        cursor: pointer;
+    }
+
     .preview-scroll {
         flex: 1;
         min-height: 160px;
@@ -773,10 +792,9 @@ function getSvgSize(svgEl) {
     return { width: rect.width, height: rect.height };
 }
 
-// Rendert das aktuelle Vorschau-SVG auf ein Canvas (mit weissem Hintergrund,
-// damit das Bild auch beim Einfuegen in dunkle Umgebungen lesbar bleibt) und
-// kopiert es als PNG in die Zwischenablage.
-async function copySvgAsPng(svgEl) {
+// Rendert das aktuelle Vorschau-SVG auf ein Canvas (mit der in der Vorschau
+// gewaehlten Hintergrundfarbe) und kopiert es als PNG in die Zwischenablage.
+async function copySvgAsPng(svgEl, bgColor) {
     if (!svgEl) throw new Error('Kein gerendertes Diagramm zum Kopieren vorhanden.');
 
     let source = new XMLSerializer().serializeToString(svgEl);
@@ -800,7 +818,7 @@ async function copySvgAsPng(svgEl) {
     canvas.width = Math.max(1, Math.round((width + padding * 2) * scale));
     canvas.height = Math.max(1, Math.round((height + padding * 2) * scale));
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = bgColor || '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(img, padding * scale, padding * scale, width * scale, height * scale);
 
@@ -817,6 +835,7 @@ function PreviewPane({ code, isEmpty }) {
     const [error, setError] = useState('');
     const [imageCopyLabel, setImageCopyLabel] = useState('Bild kopieren');
     const [imageCopyError, setImageCopyError] = useState('');
+    const [bgColor, setBgColor] = useState('#ffffff');
     const seqRef = useRef(0);
 
     useEffect(() => {
@@ -845,7 +864,7 @@ function PreviewPane({ code, isEmpty }) {
         setImageCopyError('');
         try {
             const svgEl = containerRef.current && containerRef.current.querySelector('svg');
-            await copySvgAsPng(svgEl);
+            await copySvgAsPng(svgEl, bgColor);
             setImageCopyLabel('Kopiert ✓');
             setTimeout(() => setImageCopyLabel('Bild kopieren'), 1500);
         } catch (err) {
@@ -858,11 +877,15 @@ function PreviewPane({ code, isEmpty }) {
             <div className="preview-pane-header">
                 <span>Vorschau</span>
                 <div className="preview-pane-actions">
+                    <label className="bg-color-field" title="Hintergrundfarbe der Vorschau und des kopierten Bilds">
+                        <span>Hintergrund</span>
+                        <input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} />
+                    </label>
                     {imageCopyError && <span className="image-copy-error">{imageCopyError}</span>}
                     <button type="button" disabled={isEmpty || !!error} onClick={handleCopyImage}>{imageCopyLabel}</button>
                 </div>
             </div>
-            <div className="preview-scroll">
+            <div className="preview-scroll" style={{ background: bgColor }}>
                 {isEmpty && <div className="preview-placeholder">Noch keine gültigen Stücke. Trage mindestens ein Stück mit Label und Wert &gt; 0 ein.</div>}
                 {!isEmpty && error && <div className="preview-error">{error}</div>}
                 <div
