@@ -580,6 +580,7 @@
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/reactflow@11.11.4/dist/umd/index.js"></script>
+<script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
@@ -814,6 +815,141 @@ function generateMermaidCode(nodes, edges, direction, theme, title) {
 }
 
 /* ==========================================================================
+   Automatisches Layout (Dagre - dieselbe Layout-Engine, die auch Mermaid
+   selbst für Flowcharts verwendet): ordnet Knoten hierarchisch nach Kanten
+   und Fließrichtung an, statt sie nur in Import-Reihenfolge zu belassen.
+   Wird sowohl beim Import als auch über den "Automatisch anordnen"-Button
+   verwendet.
+   ========================================================================== */
+
+const DAGRE_RANKDIR = { TD: 'TB', LR: 'LR', BT: 'BT', RL: 'RL' };
+
+function estimateNodeSize(node) {
+    const shape = node.data.shape;
+    const label = node.data.label || '';
+    const charWidth = 7.2;
+    const extraPad = {
+        hexagon: 68, parallelogram: 68, parallelogramAlt: 68,
+        trapezoid: 68, trapezoidAlt: 68, stadium: 56,
+    }[shape] || 44;
+    if (shape === 'circle' || shape === 'doublecircle') {
+        const side = Math.max(90, label.length * charWidth + 52);
+        return { width: side, height: side };
+    }
+    const width = Math.min(244, Math.max(90, label.length * charWidth + extraPad));
+    const height = shape === 'cylinder' ? 70 : 50;
+    return { width, height };
+}
+
+function dagreLayoutLevel(sizedChildren, levelEdges, direction) {
+    const g = new dagre.graphlib.Graph();
+    g.setGraph({ rankdir: DAGRE_RANKDIR[direction] || 'TB', nodesep: 45, ranksep: 65, marginx: 0, marginy: 0 });
+    g.setDefaultEdgeLabel(() => ({}));
+    sizedChildren.forEach((c) => g.setNode(c.id, { width: c.width, height: c.height }));
+    const seen = new Set();
+    levelEdges.forEach((e) => {
+        const key = e.source + '->' + e.target;
+        if (seen.has(key) || e.source === e.target) return;
+        seen.add(key);
+        g.setEdge(e.source, e.target);
+    });
+    dagre.layout(g);
+    const positions = new Map();
+    sizedChildren.forEach((c) => {
+        const gn = g.node(c.id);
+        positions.set(c.id, { x: gn.x - c.width / 2, y: gn.y - c.height / 2 });
+    });
+    return positions;
+}
+
+// Ordnet den gesamten Graphen neu an - rekursiv je Subgraph-Ebene, damit
+// Kanten zwischen Kindern verschiedener Subgraphs auf ihrer jeweils
+// gemeinsamen Ebene mit einfließen (analog zu Mermaids eigenem Cluster-
+// Layout). Liefert ein neues nodes-Array (Positionen + Subgraph-Größen),
+// edges/IDs bleiben unverändert.
+function autoLayoutNodes(nodes, edges, direction) {
+    if (!window.dagre || nodes.length === 0) return nodes;
+
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    const childrenOf = new Map();
+    nodes.forEach((n) => {
+        const key = n.parentNode || '';
+        if (!childrenOf.has(key)) childrenOf.set(key, []);
+        childrenOf.get(key).push(n.id);
+    });
+
+    function ancestorAtLevel(nodeId, scopeKey) {
+        let cur = byId.get(nodeId);
+        while (cur) {
+            const key = cur.parentNode || '';
+            if (key === scopeKey) return cur.id;
+            cur = cur.parentNode ? byId.get(cur.parentNode) : null;
+        }
+        return null;
+    }
+
+    const sizes = new Map();
+    const positions = new Map();
+
+    function computeSubgraphSize(subgraphId) {
+        const kids = childrenOf.get(subgraphId) || [];
+        if (kids.length === 0) return { width: 220, height: 140 };
+        const padX = 30, padTop = 55, padBottom = 25;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        kids.forEach((kid) => {
+            const pos = positions.get(kid);
+            const size = sizes.get(kid);
+            minX = Math.min(minX, pos.x);
+            minY = Math.min(minY, pos.y);
+            maxX = Math.max(maxX, pos.x + size.width);
+            maxY = Math.max(maxY, pos.y + size.height);
+        });
+        const shiftX = padX - minX, shiftY = padTop - minY;
+        kids.forEach((kid) => {
+            const pos = positions.get(kid);
+            positions.set(kid, { x: pos.x + shiftX, y: pos.y + shiftY });
+        });
+        return { width: Math.max(220, maxX - minX + padX * 2), height: Math.max(140, maxY - minY + padTop + padBottom) };
+    }
+
+    function layoutLevel(scopeKey) {
+        const childIds = childrenOf.get(scopeKey) || [];
+        if (childIds.length === 0) return;
+
+        childIds.forEach((id) => {
+            const n = byId.get(id);
+            if (n.type === 'subgraphNode') {
+                layoutLevel(id);
+                sizes.set(id, computeSubgraphSize(id));
+            } else {
+                sizes.set(id, estimateNodeSize(n));
+            }
+        });
+
+        const sizedChildren = childIds.map((id) => ({ id, ...sizes.get(id) }));
+        const levelEdges = [];
+        edges.forEach((e) => {
+            const s = ancestorAtLevel(e.source, scopeKey);
+            const t = ancestorAtLevel(e.target, scopeKey);
+            if (s && t && s !== t) levelEdges.push({ source: s, target: t });
+        });
+
+        const levelPositions = dagreLayoutLevel(sizedChildren, levelEdges, direction);
+        childIds.forEach((id) => positions.set(id, levelPositions.get(id)));
+    }
+
+    layoutLevel('');
+
+    return nodes.map((n) => {
+        const pos = positions.get(n.id) || n.position;
+        if (n.type === 'subgraphNode') {
+            return { ...n, position: pos, style: { ...n.style, ...sizes.get(n.id) } };
+        }
+        return { ...n, position: pos };
+    });
+}
+
+/* ==========================================================================
    Mermaid-Code -> Graph (bestmögliches, einfaches Import-Parsing:
    unterstützt Knoten- und Kantenzeilen im vom Editor selbst erzeugten Stil)
    ========================================================================== */
@@ -947,58 +1083,27 @@ function parseMermaidToGraph(code) {
         throw new Error('Es wurden keine Knoten gefunden.');
     }
 
-    // Kinder je Subgraph, fuer eine kompakte Grid-Platzierung innerhalb der Box.
-    const childrenByParent = new Map();
-    order.forEach((id) => {
+    let rawNodes = order.map((id) => {
         const n = nodeMap.get(id);
-        if (n.parentNode) {
-            if (!childrenByParent.has(n.parentNode)) childrenByParent.set(n.parentNode, []);
-            childrenByParent.get(n.parentNode).push(id);
-        }
-    });
-
-    function layoutPosition(idx) {
-        return { x: 80 + (idx % 6) * 170, y: 60 + Math.floor(idx / 6) * 130 };
-    }
-
-    const nodes = [];
-    let topIdx = 0;
-    order.forEach((id) => {
-        const n = nodeMap.get(id);
-        if (n.parentNode) return; // wird beim jeweiligen Subgraph-Eintrag mit erzeugt
         if (n.type === 'subgraphNode') {
-            const kids = childrenByParent.get(id) || [];
-            const cols = Math.max(1, Math.min(4, kids.length || 1));
-            const rows = Math.ceil((kids.length || 1) / cols);
-            const width = Math.max(220, cols * 160 + 40);
-            const height = Math.max(140, rows * 110 + 70);
-            nodes.push({
+            return {
                 id: n.id,
                 type: 'subgraphNode',
-                position: layoutPosition(topIdx),
-                style: { width, height },
+                position: { x: 0, y: 0 },
+                style: { width: 220, height: 140 },
+                parentNode: n.parentNode || undefined,
                 data: { label: n.label },
-            });
-            kids.forEach((cid, kidx) => {
-                const cn = nodeMap.get(cid);
-                nodes.push({
-                    id: cn.id,
-                    type: 'shapeNode',
-                    position: { x: 30 + (kidx % cols) * 160, y: 55 + Math.floor(kidx / cols) * 110 },
-                    parentNode: n.id,
-                    data: { label: cn.label, shape: cn.shape, color: cn.color },
-                });
-            });
-        } else {
-            nodes.push({
-                id: n.id,
-                type: 'shapeNode',
-                position: layoutPosition(topIdx),
-                data: { label: n.label, shape: n.shape, color: n.color },
-            });
+            };
         }
-        topIdx += 1;
+        return {
+            id: n.id,
+            type: 'shapeNode',
+            position: { x: 0, y: 0 },
+            parentNode: n.parentNode || undefined,
+            data: { label: n.label, shape: n.shape, color: n.color },
+        };
     });
+    rawNodes = sortNodesByHierarchy(rawNodes);
 
     const edges = edgeList.map((e, idx) => ({
         id: 'e' + idx,
@@ -1008,6 +1113,8 @@ function parseMermaidToGraph(code) {
         ...computeMarkers(e.lineStyle, e.arrowMode),
         data: { label: e.label, lineStyle: e.lineStyle, arrowMode: e.arrowMode },
     }));
+
+    const nodes = autoLayoutNodes(rawNodes, edges, direction);
 
     return { nodes, edges, direction, theme, title };
 }
@@ -1528,6 +1635,17 @@ function FlowchartEditor() {
         createSubgraph(pos);
     }
 
+    // Ordnet die vorhandenen Knoten neu an (Dagre-Layout nach Kanten und
+    // Fließrichtung) - kann jederzeit manuell angestoßen werden, um eine
+    // "verwurstelte" Anordnung wieder aufzuräumen.
+    function handleAutoLayout() {
+        if (nodes.length === 0) return;
+        setNodes((nds) => sortNodesByHierarchy(autoLayoutNodes(nds, edges, direction)));
+        setSelectedNodeId(null);
+        setSelectedEdgeId(null);
+        setTimeout(() => { if (reactFlowInstance && reactFlowInstance.fitView) reactFlowInstance.fitView({ padding: 0.2 }); }, 50);
+    }
+
     // Knoten während des Ziehens über einen Subgraph-Container hervorheben.
     const onNodeDrag = useCallback((event, draggedNode) => {
         if (draggedNode.type === 'subgraphNode') return;
@@ -1719,6 +1837,7 @@ function FlowchartEditor() {
                     </label>
                     <button type="button" onClick={handleAddNodeButton}>+ Neuer Knoten</button>
                     <button type="button" onClick={handleAddSubgraphButton}>+ Neuer Subgraph</button>
+                    <button type="button" onClick={handleAutoLayout} disabled={nodes.length === 0}>Automatisch anordnen</button>
                     <button type="button" onClick={clearAll}>Alles löschen</button>
                     <a href="https://mermaid.js.org/syntax/flowchart.html" target="_blank" rel="noopener">Mermaid-Syntax</a>
                 </div>
