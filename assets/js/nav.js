@@ -93,7 +93,7 @@
         { key: 'icaltools',     href: 'icaltools/',     label: 'iCal Tools' },
         { key: 'knallbum',      href: 'knallbum/',      label: 'Knall Bumm' },
         { key: 'laserfeelings', href: 'laserfeelings/', label: 'Laser & Feelings' },
-        { key: 'pie',           href: 'pie/',           label: 'Pie' },
+        { key: 'piecahart',           href: 'piecahart/',           label: 'Piechart' },
         { key: 'sport',         href: 'sport/',         label: 'Sport' },
         { key: 'zauberkloppen', href: 'zauberkloppen/', label: 'Zaubern & Kloppen' }
     ];
