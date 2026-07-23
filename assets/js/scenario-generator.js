@@ -14,10 +14,10 @@ function initScenarioGenerator({ threats, wants, targets, consequences }) {
             <span class="value">${threats[t]}</span>
 
             <span class="label">will</span>
-            <span class="value">${wants[w]}</span>
+            <span class="value">${targets[g]}</span>
 
             <span class="label">…</span>
-            <span class="value">${targets[g]}</span>
+            <span class="value">${wants[w]}</span>
 
             <span class="label">was</span>
             <span class="value">${consequences[k]}</span>
