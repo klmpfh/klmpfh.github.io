@@ -135,6 +135,14 @@
         if (faviconLink) faviconLink.href = iconDataUri(currentKey, accentColor);
     }
 
+    // Als installierte App (Standalone-Modus, z. B. auf dem Handy-Homescreen)
+    // liegt jede Unterseite per manifest.json "scope" isoliert für sich - ein
+    // Sprung zu einem anderen Tool oder zur Startseite würde ohnehin aus der
+    // App heraus in den normalen Browser wechseln. Deshalb bekommt der Header
+    // dort nur noch den Hell/Dunkel-Umschalter statt Logo/Menü mit Tool-Liste.
+    var isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+        window.navigator.standalone === true;
+
     var style = document.createElement('style');
     style.textContent =
         '.site-nav{position:fixed;top:0;left:0;right:0;height:56px;box-sizing:border-box;' +
@@ -161,11 +169,39 @@
         '.site-nav-theme-toggle:hover{background:var(--theme-accent-soft);color:var(--theme-accent);}' +
         '.site-nav-divider{height:1px;background:var(--theme-border);margin:5px 4px;}' +
         '@media (max-width:520px){.site-nav{padding:0 14px;}.site-nav-toggle-label{display:none;}' +
-        '.site-nav-toggle{padding:7px 10px;}.site-nav-menu{right:14px;}}';
+        '.site-nav-toggle{padding:7px 10px;}.site-nav-menu{right:14px;}}' +
+        '.site-nav-standalone{justify-content:flex-end;}' +
+        '.site-nav-theme-toggle-standalone{display:flex;align-items:center;width:auto;background:none;cursor:pointer;' +
+        'border:1px solid var(--theme-border);border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600;' +
+        'color:var(--theme-text-muted);font-family:inherit;transition:border-color .15s,color .15s;}' +
+        '.site-nav-theme-toggle-standalone:hover{border-color:var(--theme-accent);color:var(--theme-accent);}';
     document.head.appendChild(style);
 
     var nav = document.createElement('nav');
     nav.className = 'site-nav';
+
+    if (isStandalone) {
+        // Installierte App: nur der Hell/Dunkel-Umschalter bleibt, direkt
+        // klickbar statt hinter einem Menü versteckt - Logo/Startseiten-Link
+        // und Tool-Liste entfallen (siehe Begründung oben bei isStandalone).
+        nav.classList.add('site-nav-standalone');
+
+        var standaloneThemeToggle = document.createElement('button');
+        standaloneThemeToggle.type = 'button';
+        standaloneThemeToggle.className = 'site-nav-theme-toggle-standalone';
+        standaloneThemeToggle.textContent = THEME_LABELS[currentThemeMode];
+        standaloneThemeToggle.addEventListener('click', function () {
+            var idx = THEME_MODES.indexOf(currentThemeMode);
+            currentThemeMode = THEME_MODES[(idx + 1) % THEME_MODES.length];
+            try { localStorage.setItem(THEME_KEY, currentThemeMode); } catch (err) { /* localStorage evtl. nicht verfügbar (privater Modus) */ }
+            applyThemeMode(currentThemeMode);
+            standaloneThemeToggle.textContent = THEME_LABELS[currentThemeMode];
+        });
+
+        nav.appendChild(standaloneThemeToggle);
+        scriptEl.insertAdjacentElement('afterend', nav);
+        return;
+    }
 
     var brand = document.createElement('a');
     brand.className = 'site-nav-brand';
