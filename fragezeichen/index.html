@@ -9,6 +9,17 @@
     <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="../assets/css/reset.css">
     <link rel="stylesheet" href="../assets/css/theme.css">
+
+    <!-- Installierbar & offline nutzbar (siehe manifest.json/sw.js). Auf
+         file:// oder ohne HTTPS bleibt das wirkungslos - die Seite läuft dann
+         unverändert wie zuvor, nur ohne Installations-/Offline-Funktion. -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#4b2c83">
+    <link rel="apple-touch-icon" href="icons/icon-180.png">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="??? Album">
     <style>
         body {
             display: flex;
@@ -109,6 +120,18 @@
 
 <body>
     <script src="../assets/js/nav.js"></script>
+    <script>
+        // Registriert den Service Worker für Offline-/Installier-Unterstützung.
+        // Läuft nur unter HTTPS/localhost (Voraussetzung der Browser für
+        // Service Worker); unter file:// oder http:// ist navigator.serviceWorker
+        // gar nicht erst vorhanden bzw. register() schlägt fehl - dann bleibt
+        // die Seite einfach eine normale Seite ohne Offline-Funktion.
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function () {
+                navigator.serviceWorker.register('sw.js').catch(function () { /* kein sicherer Kontext - ignorieren */ });
+            });
+        }
+    </script>
 
     <div class="container">
         <div id="result">
