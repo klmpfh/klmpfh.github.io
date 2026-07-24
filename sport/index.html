@@ -68,6 +68,7 @@
         .control-row {
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 14px;
             margin-bottom: 16px;
         }
@@ -79,7 +80,7 @@
         }
 
         .control-row input[type="range"] {
-            flex: 1;
+            flex: 0 1 220px;
             accent-color: var(--theme-accent);
         }
 
@@ -90,6 +91,32 @@
             font-weight: 700;
             color: var(--theme-accent-strong);
             font-size: 0.85rem;
+        }
+
+        /* Umschließt Label/Regler/Wert der Lautstärke-Zeile, damit der
+           Stumm-Button (der bei keiner anderen Zeile existiert) nicht in die
+           Zentrierung mit eingerechnet wird - so starten Intensität und
+           Lautstärke auf derselben Höhe. */
+        .control-row-core {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            position: relative;
+            /* 148px Label + 14px Gap + 220px Regler + 14px Gap + 64px Wert -
+               fest statt automatisch berechnet, weil Browser die Breite eines
+               verschachtelten Flex-Containers sonst anhand der intrinsischen
+               Breite von <input type="range"> (~129px) statt dessen
+               flex-basis (220px) schätzen und die Zeile dadurch zu schmal
+               ausfällt. */
+            width: 460px;
+        }
+
+        #muteBtn {
+            position: absolute;
+            left: 100%;
+            top: 50%;
+            margin-left: 14px;
+            transform: translateY(-50%);
         }
 
         .checkbox-row {
@@ -136,6 +163,7 @@
             margin: 0;
             display: flex;
             flex-wrap: wrap;
+            justify-content: center;
             gap: 8px;
         }
 
@@ -299,6 +327,20 @@
             color: var(--theme-text-muted);
         }
 
+        .equipment-summary {
+            font-size: 0.85rem;
+            color: var(--theme-text-muted);
+            background: var(--theme-surface-muted);
+            border: 1px solid var(--theme-border);
+            border-radius: var(--theme-radius);
+            padding: 10px 16px;
+            margin-bottom: 22px;
+        }
+
+        .equipment-summary strong {
+            color: var(--theme-text-strong);
+        }
+
         .warmup ul {
             list-style: none;
             background: var(--theme-surface-muted);
@@ -309,7 +351,26 @@
 
         .warmup li {
             font-size: 0.88rem;
-            padding: 6px 0;
+            padding: 8px 0;
+        }
+
+        .warmup li + li {
+            border-top: 1px solid var(--theme-border);
+        }
+
+        .warmup-item-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .warmup-item-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            flex: 0 0 auto;
         }
 
         .warmup-desc {
@@ -439,6 +500,17 @@
             color: var(--cat-color, var(--theme-accent));
         }
 
+        .exercise-card-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .lock-btn:hover {
+            border-color: var(--theme-danger);
+            color: var(--theme-danger);
+        }
+
         @media (max-width: 480px) {
             .control-row {
                 flex-wrap: wrap;
@@ -450,6 +522,17 @@
 
             .control-row input[type="range"] {
                 flex: 1 1 auto;
+            }
+
+            .control-row-core {
+                flex-wrap: wrap;
+                width: 100%;
+            }
+
+            #muteBtn {
+                position: static;
+                margin-left: 0;
+                transform: none;
             }
         }
 
@@ -677,8 +760,8 @@
             margin-bottom: 18px;
         }
 
-        /* --- Übungsdatenbank-Overlay --- */
-        .db-overlay {
+        /* --- Verwaltung gesperrter Übungen --- */
+        .blocked-overlay {
             position: fixed;
             inset: 0;
             z-index: 10000;
@@ -687,11 +770,11 @@
             flex-direction: column;
         }
 
-        .db-overlay[hidden] {
+        .blocked-overlay[hidden] {
             display: none;
         }
 
-        .db-topbar {
+        .blocked-topbar {
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -701,12 +784,12 @@
             flex: 0 0 auto;
         }
 
-        .db-title {
+        .blocked-title {
             font-weight: 700;
             font-size: 1rem;
         }
 
-        .db-body {
+        .blocked-body {
             flex: 1;
             overflow-y: auto;
             padding: 20px;
@@ -715,69 +798,30 @@
             width: 100%;
         }
 
-        .db-category {
-            margin-bottom: 26px;
+        .blocked-empty {
+            font-size: 0.9rem;
+            color: var(--theme-text-muted);
+            text-align: center;
+            padding: 40px 0;
         }
 
-        .db-category h3 {
-            font-size: 1rem;
-            margin-bottom: 8px;
-            padding-bottom: 6px;
-            border-bottom: 2px solid var(--cat-color);
-            color: var(--theme-text-strong);
-        }
-
-        .db-entry {
-            padding: 10px 0;
+        .blocked-entry {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding: 12px 0;
             border-bottom: 1px solid var(--theme-border);
         }
 
-        .db-entry:last-child {
+        .blocked-entry:last-child {
             border-bottom: none;
         }
 
-        .db-entry-head {
-            display: flex;
-            justify-content: space-between;
-            gap: 8px;
-            flex-wrap: wrap;
-            align-items: baseline;
-        }
-
-        .db-entry-name {
+        .blocked-entry-name {
             font-weight: 700;
             font-size: 0.92rem;
-        }
-
-        .db-entry-meta {
-            font-size: 0.7rem;
-            color: var(--theme-text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
-            white-space: nowrap;
-        }
-
-        .db-entry-desc {
-            font-size: 0.85rem;
-            line-height: 1.5;
-            margin-top: 4px;
-        }
-
-        .db-entry-muscles {
-            font-size: 0.75rem;
-            color: var(--theme-text-muted);
-            margin-top: 2px;
-        }
-
-        .db-entry-equipment {
-            display: inline-block;
-            margin-top: 4px;
-            font-size: 0.68rem;
-            font-weight: 600;
-            padding: 2px 8px;
-            border-radius: 999px;
-            background: var(--theme-warning-soft);
-            color: var(--theme-warning);
         }
     </style>
 </head>
@@ -832,10 +876,12 @@
             </div>
 
             <div class="control-row">
-                <label for="volumeRange">Lautstärke</label>
-                <input type="range" id="volumeRange" min="0" max="100" step="5" value="100">
-                <span class="control-value" id="volumeValue">100 %</span>
-                <button type="button" class="icon-btn" id="muteBtn" aria-label="Signaltöne stummschalten" aria-pressed="false"></button>
+                <div class="control-row-core">
+                    <label for="volumeRange">Lautstärke</label>
+                    <input type="range" id="volumeRange" min="0" max="100" step="5" value="100">
+                    <span class="control-value" id="volumeValue">100 %</span>
+                    <button type="button" class="icon-btn" id="muteBtn" aria-label="Signaltöne stummschalten" aria-pressed="false"></button>
+                </div>
             </div>
 
             <div class="advanced-settings">
@@ -859,12 +905,14 @@
 
             <div class="controls-actions">
                 <button class="btn btn-outline" id="generateBtn" type="button">neues Training generieren</button>
-                <button class="btn btn-outline" id="dbShowBtn" type="button">Datenbank anzeigen</button>
+                <button class="btn btn-outline" id="blockedShowBtn" type="button">Gesperrte Übungen (<span id="blockedCountBadge">0</span>)</button>
             </div>
         </div>
 
         <div class="output" id="output" hidden aria-live="polite">
             <button type="button" class="btn" id="sportModeBtn">Sport-Modus starten</button>
+
+            <div class="equipment-summary" id="equipmentSummary"></div>
 
             <section class="phase warmup" id="warmupSection">
                 <h2>Aufwärmen <span class="phase-time" id="warmupTimeLabel">ca. 5 Min.</span></h2>
@@ -911,14 +959,14 @@
         </div>
     </div>
 
-    <!-- Übungsdatenbank: reine Referenzansicht aller hinterlegten Übungen,
-         unabhängig von der aktuellen Filterung, gruppiert nach Muskelbereich. -->
-    <div class="db-overlay" id="dbOverlay" hidden>
-        <div class="db-topbar">
-            <span class="db-title">Übungsdatenbank</span>
-            <button type="button" class="icon-btn danger-hover" id="dbExitBtn" aria-label="Datenbank schließen">×</button>
+    <!-- Verwaltung dauerhaft gesperrter Übungen: zeigt alle gesperrten
+         Übungen mit der Möglichkeit, sie einzeln wieder freizuschalten. -->
+    <div class="blocked-overlay" id="blockedOverlay" hidden>
+        <div class="blocked-topbar">
+            <span class="blocked-title">Gesperrte Übungen</span>
+            <button type="button" class="icon-btn danger-hover" id="blockedExitBtn" aria-label="Schließen">×</button>
         </div>
-        <div class="db-body" id="dbBody"></div>
+        <div class="blocked-body" id="blockedBody"></div>
     </div>
 
     <script>
@@ -963,6 +1011,8 @@
             { name: "Erhöhtes Wadenheben", category: "beine", type: "reps", difficulty: "leicht", muscles: "Waden", equipment: ["elevated"], description: "Mit dem Vorderfuß auf eine Erhöhung (z. B. Stufenkante) stellen, die Ferse tief unter die Kante absenken, dann auf die Zehenspitzen drücken – größerer Bewegungsradius als am Boden." },
             { name: "Kniebeuge-Halten (hoch)", category: "beine", type: "time", difficulty: "leicht", muscles: "Quadrizeps, Gesäß", description: "In eine leichte Kniebeuge gehen (Oberschenkel etwa auf halbem Weg nach unten), Rücken gerade halten und die Position ruhig atmend halten." },
             { name: "Ausfallschritt-Halten (tief)", category: "beine", type: "time", difficulty: "schwer", muscles: "Quadrizeps, Gesäß, Balance", description: "In einen tiefen Ausfallschritt gehen, bis das hintere Knie fast den Boden berührt, und die Position stabil halten. Seite wechseln." },
+            { name: "Curtsy-Sprünge", category: "beine", type: "reps", difficulty: "schwer", muscles: "Gesäß, Adduktoren, Quadrizeps", description: "Aus dem Stand mit einem Bein diagonal nach hinten hinter das Standbein springen wie bei einem Knicks, weich landen, dann die Seite wechseln." },
+            { name: "Einbeiniger Wandsitz", category: "beine", type: "time", difficulty: "schwer", muscles: "Quadrizeps, Gesäß, Balance", equipment: ["wall"], description: "Aus dem beidbeinigen Wandsitz ein Bein gestreckt nach vorne anheben und halten, das Standbein bleibt im rechten Winkel gebeugt. Seite wechseln." },
 
             // --- Rücken (Pull) ---------------------------------------------------
             { name: "Rumpfheber (Halten)", category: "ruecken", type: "time", difficulty: "leicht", muscles: "unterer Rücken, Gesäß", equipment: ["mat"], description: "Bauchlage, Arme nach vorne gestreckt. Arme, Oberkörper und Beine gleichzeitig leicht vom Boden abheben und die Position halten." },
@@ -984,6 +1034,9 @@
             { name: "Rückwärts-Brücke", category: "ruecken", type: "time", difficulty: "mittel", muscles: "unterer Rücken, Gesäß, hintere Oberschenkel, Schultern", equipment: ["mat"], description: "Im Sitzen die Hände hinter dem Körper aufstellen, Fingerspitzen zeigen zu den Füßen, Hüfte anheben, bis der Körper eine gerade Linie bildet, Kopf neutral lassen, Position halten." },
             { name: "Diagonalhalten (Vierfüßlerstand)", category: "ruecken", type: "time", difficulty: "mittel", muscles: "unterer Rücken, Core, Gesäß", equipment: ["mat"], description: "Vierfüßlerstand, gegenüberliegenden Arm und Bein gleichzeitig gerade ausstrecken und die angespannte Position ruhig atmend halten. Seite wechseln." },
             { name: "Superman-Halten (volle Streckung)", category: "ruecken", type: "time", difficulty: "schwer", muscles: "unterer Rücken, Gesäß, Schultern", equipment: ["mat"], description: "Bauchlage, Arme nach vorne und Beine gestreckt. Arme, Oberkörper und Beine so weit wie möglich gleichzeitig vom Boden abheben und die Spannung halten." },
+            { name: "Y-Heben im Stand", category: "ruecken", type: "reps", difficulty: "leicht", muscles: "oberer Rücken, Schultern", description: "Im Stehen den Oberkörper leicht nach vorne beugen, die Arme schräg nach oben zu einem Y strecken und dabei die Schulterblätter zusammenziehen, dann absenken." },
+            { name: "Reverse Fly im Stand", category: "ruecken", type: "reps", difficulty: "mittel", muscles: "oberer Rücken, Schultern", description: "Im Stehen den Oberkörper leicht nach vorne beugen, die Arme mit leicht gebeugten Ellbogen seitlich nach hinten schwingen, dann kontrolliert wieder nach vorne führen." },
+            { name: "Standwaage", category: "ruecken", type: "time", difficulty: "schwer", muscles: "unterer Rücken, Gesäß, Balance", description: "Auf einem Bein stehen, den Oberkörper nach vorne kippen und gleichzeitig das andere Bein gestreckt nach hinten heben, bis Rumpf und Bein eine waagrechte Linie bilden, Arme nach vorne strecken und halten. Seite wechseln." },
 
             // --- Brust/Schulter/Arme (Push) --------------------------------------
             { name: "Liegestütze", category: "push", type: "reps", difficulty: "mittel", muscles: "Brust, Schultern, Trizeps", equipment: ["mat"], description: "Hände etwas breiter als schulterbreit aufsetzen, Körper bildet eine gerade Linie. Brust kontrolliert Richtung Boden senken und wieder hochdrücken." },
@@ -1005,6 +1058,10 @@
             { name: "Wand-Liegestütz-Halten", category: "push", type: "time", difficulty: "leicht", muscles: "Brust, Schultern, Trizeps", equipment: ["wall"], description: "Im Stehen mit ausgestreckten Armen gegen eine Wand stützen, den Oberkörper zur Wand absenken und in der abgesenkten Position halten." },
             { name: "Liegestütz-Halten (Mitte)", category: "push", type: "time", difficulty: "mittel", muscles: "Brust, Schultern, Trizeps, Core", equipment: ["mat"], description: "In die halbe Liegestütz-Position gehen (Ellbogen etwa 90° gebeugt) und dort die Spannung halten, der Körper bildet dabei eine gerade Linie." },
             { name: "Liegestütz-Halten (unten)", category: "push", type: "time", difficulty: "schwer", muscles: "Brust, Trizeps, Schultern, Core", equipment: ["mat"], description: "In die tiefste Liegestütz-Position absenken, kurz bevor die Brust den Boden berührt, und dort die Spannung halten, ohne abzusetzen." },
+            { name: "Isometrisches Handdrücken", category: "push", type: "time", difficulty: "leicht", muscles: "Brust, Trizeps", description: "Im Stehen die Handflächen vor der Brust fest zusammenpressen und die Spannung halten, ohne die Ellbogen abzusenken." },
+            { name: "Seitheben-Halten", category: "push", type: "time", difficulty: "mittel", muscles: "Schultern", description: "Im Stehen die Arme seitlich auf Schulterhöhe ausstrecken (T-Position) und dort ruhig atmend halten, ohne die Schultern hochzuziehen." },
+            { name: "Überkopf-Halten", category: "push", type: "time", difficulty: "leicht", muscles: "Schultern, Trizeps", description: "Im Stehen beide Arme gestreckt senkrecht über den Kopf heben und dort halten, den unteren Rücken dabei nicht ins Hohlkreuz ziehen." },
+            { name: "Trizeps-Pulse im Stand", category: "push", type: "reps", difficulty: "mittel", muscles: "Trizeps", description: "Im Stehen die Arme gestreckt hinter dem Körper halten, Handflächen nach hinten, und in kleinen Pulsen weiter nach oben und hinten drücken." },
 
             // --- Core / Rumpf -----------------------------------------------------
             { name: "Unterarmstütz", category: "core", type: "time", difficulty: "leicht", muscles: "gesamter Rumpf", equipment: ["mat"], description: "Auf Unterarmen und Zehenspitzen abstützen, der Körper bildet eine gerade Linie von Kopf bis Ferse. Position halten, Bauch anspannen." },
@@ -1028,6 +1085,10 @@
             { name: "Toter-Käfer-Halten", category: "core", type: "time", difficulty: "leicht", muscles: "tiefe Bauchmuskulatur, Rumpf", equipment: ["mat"], description: "Rückenlage, Arme zur Decke, Knie 90° angewinkelt. Einen Arm und das gegenüberliegende Bein leicht abgesenkt halten, ohne den unteren Rücken durchzudrücken. Seite wechseln." },
             { name: "Beinheben-Halten", category: "core", type: "time", difficulty: "mittel", muscles: "unterer Bauch, Hüftbeuger", equipment: ["mat"], description: "Rückenlage, Beine gestreckt zur Decke anheben und knapp über 90° in der Schwebe halten, unteren Rücken dabei fest am Boden lassen." },
             { name: "V-Sitz-Halten", category: "core", type: "time", difficulty: "schwer", muscles: "gesamter Bauch, Hüftbeuger, Balance", equipment: ["mat"], description: "Auf dem Gesäß balancieren, Ober- und Unterkörper zu einem V formen, Arme neben den Beinen nach vorne strecken, und die Position halten." },
+            { name: "Stehender Diagonal-Crunch", category: "core", type: "reps", difficulty: "mittel", muscles: "schräge Bauchmuskeln, Hüftbeuger", description: "Im Stehen die Hände hinter dem Kopf falten, ein Knie anheben und den gegenüberliegenden Ellbogen dazu führen, dann die Seite wechseln." },
+            { name: "Seitliche Rumpfbeugen im Stand", category: "core", type: "reps", difficulty: "leicht", muscles: "seitliche Bauchmuskeln", description: "Im Stehen, Füße hüftbreit, den Oberkörper abwechselnd sanft zur Seite neigen, ohne dabei nach vorne oder hinten auszuweichen." },
+            { name: "Bauch-Vakuum", category: "core", type: "time", difficulty: "mittel", muscles: "tiefe Bauchmuskulatur (Transversus)", description: "Im Stehen vollständig ausatmen, dann den Bauchnabel so weit wie möglich Richtung Wirbelsäule einziehen und die Spannung halten, dabei flach weiteratmen." },
+            { name: "Stehendes Knieheben mit Halten", category: "core", type: "time", difficulty: "leicht", muscles: "unterer Bauch, Hüftbeuger, Balance", description: "Im Stehen ein Knie auf Hüfthöhe anheben und dort ruhig balancierend halten, der Rumpf bleibt dabei aufrecht und angespannt. Seite wechseln." },
 
             // --- Cardio / Mobility (Aufwärmen & Finisher) -------------------------
             { name: "Hampelmänner", category: "cardio", type: "reps", difficulty: "leicht", muscles: "Ganzkörper, Herz-Kreislauf", description: "Im Stand gleichzeitig mit einem Sprung die Beine seitlich öffnen und die Arme über dem Kopf zusammenführen, dann zurückspringen." },
@@ -1046,7 +1107,9 @@
             { name: "Grätschsprünge mit Kniebeuge", category: "cardio", type: "reps", difficulty: "mittel", muscles: "Beine, Gesäß, Herz-Kreislauf", description: "Wie Hampelmänner (im Stand mit einem Sprung die Beine seitlich öffnen und die Arme über dem Kopf zusammenführen), aber bei geöffneten Beinen jeweils zusätzlich in eine kurze Kniebeuge absinken, bevor die Beine wieder zusammenspringen." },
             { name: "Seitliches Knieheben im Stand", category: "cardio", type: "reps", difficulty: "leicht", muscles: "schräge Bauchmuskeln, Beine", description: "Im Stehen abwechselnd ein Knie seitlich anheben und mit dem gegenüberliegenden Ellbogen antippen, dabei zügig im Wechsel bleiben." },
             { name: "Schulterkreisen", category: "cardio", type: "time", difficulty: "leicht", muscles: "Schultern, oberer Rücken", description: "Locker im Stand die Schultern durchgehend in großen, gleichmäßigen Kreisen erst vorwärts, dann rückwärts kreisen lassen." },
-            { name: "Sprungbereitschafts-Halten", category: "cardio", type: "time", difficulty: "schwer", muscles: "Beine, Gesäß, Herz-Kreislauf", description: "In eine tiefe, athletische Sprungbereitschaftsposition gehen (Knie und Hüfte gebeugt, Gewicht auf den Fußballen) und die angespannte, wachsame Haltung bei erhöhtem Puls halten." }
+            { name: "Sprungbereitschafts-Halten", category: "cardio", type: "time", difficulty: "schwer", muscles: "Beine, Gesäß, Herz-Kreislauf", description: "In eine tiefe, athletische Sprungbereitschaftsposition gehen (Knie und Hüfte gebeugt, Gewicht auf den Fußballen) und die angespannte, wachsame Haltung bei erhöhtem Puls halten." },
+            { name: "Wandengel", category: "cardio", type: "reps", difficulty: "leicht", muscles: "Schultern, oberer Rücken (Mobilität)", equipment: ["wall"], description: "Rücken, Kopf und Arme an eine Wand anlehnen und die Arme wie bei einem Schneeengel langsam an der Wand entlang nach oben und unten gleiten lassen." },
+            { name: "Cardio-Steigen", category: "cardio", type: "time", difficulty: "mittel", muscles: "Beine, Herz-Kreislauf", equipment: ["elevated"], description: "Zügig und im ständigen Wechsel auf eine stabile Erhöhung steigen und wieder heruntersteigen, dabei ein flottes Lauftempo halten." }
         ];
 
         /* Anzeige-Metadaten je Kategorie: Label und Badge-Farbe. */
@@ -1107,13 +1170,15 @@
         var muteBtn = document.getElementById("muteBtn");
         var sportMuteBtn = document.getElementById("sportMuteBtn");
         var generateBtn = document.getElementById("generateBtn");
-        var dbShowBtn = document.getElementById("dbShowBtn");
-        var dbExitBtn = document.getElementById("dbExitBtn");
-        var dbOverlayEl = document.getElementById("dbOverlay");
-        var dbBodyEl = document.getElementById("dbBody");
+        var blockedShowBtn = document.getElementById("blockedShowBtn");
+        var blockedExitBtn = document.getElementById("blockedExitBtn");
+        var blockedOverlayEl = document.getElementById("blockedOverlay");
+        var blockedBodyEl = document.getElementById("blockedBody");
+        var blockedCountBadgeEl = document.getElementById("blockedCountBadge");
         var durationNumberEl = document.getElementById("durationNumber");
         var durationMetaEl = document.getElementById("durationMeta");
         var outputEl = document.getElementById("output");
+        var equipmentSummaryEl = document.getElementById("equipmentSummary");
         var warmupSectionEl = document.getElementById("warmupSection");
         var warmupTimeLabelEl = document.getElementById("warmupTimeLabel");
         var warmupListEl = document.getElementById("warmupList");
@@ -1169,7 +1234,7 @@
         function findEquipmentBlockedCategory(counts, allowedEquipment) {
             return CATEGORY_ORDER.find(function (cat) {
                 return counts[cat] > 0 && !EXERCISES.some(function (e) {
-                    return e.category === cat && equipmentAllowed(e, allowedEquipment);
+                    return e.category === cat && exerciseSelectable(e, allowedEquipment);
                 });
             });
         }
@@ -1203,16 +1268,17 @@
         function pickExercise(category, pool, usedNames, allowedEquipment) {
             var candidates = EXERCISES.filter(function (e) {
                 return e.category === category && pool.indexOf(e.difficulty) !== -1 &&
-                    !usedNames.has(e.name) && equipmentAllowed(e, allowedEquipment);
+                    !usedNames.has(e.name) && exerciseSelectable(e, allowedEquipment);
             });
             if (candidates.length === 0) {
                 candidates = EXERCISES.filter(function (e) {
-                    return e.category === category && pool.indexOf(e.difficulty) !== -1 && equipmentAllowed(e, allowedEquipment);
+                    return e.category === category && pool.indexOf(e.difficulty) !== -1 && exerciseSelectable(e, allowedEquipment);
                 });
             }
             if (candidates.length === 0) {
-                candidates = EXERCISES.filter(function (e) { return e.category === category && equipmentAllowed(e, allowedEquipment); });
+                candidates = EXERCISES.filter(function (e) { return e.category === category && exerciseSelectable(e, allowedEquipment); });
             }
+            candidates = preferNotRecentlyPerformed(candidates);
             return candidates[Math.floor(Math.random() * candidates.length)];
         }
 
@@ -1234,14 +1300,20 @@
         // damit dieselbe Übung nicht in Aufwärmen UND Hauptteil auftaucht.
         function pickWarmup(allowedEquipment, mainCount, usedNames) {
             var pool = EXERCISES.filter(function (e) {
-                return e.category === "cardio" && equipmentAllowed(e, allowedEquipment) && !usedNames.has(e.name);
+                return e.category === "cardio" && exerciseSelectable(e, allowedEquipment) && !usedNames.has(e.name);
             });
             var count = warmupExerciseCount(mainCount);
+            // Zuerst aus Übungen wählen, die nicht kürzlich dran waren; erst
+            // wenn dieser Pool erschöpft ist, auf kürzlich durchgeführte
+            // zurückgreifen, damit die Aufwärmphase nie kürzer ausfällt.
+            var preferredPool = pool.filter(function (e) { return !wasRecentlyPerformed(e.name); });
+            var fallbackPool = pool.filter(function (e) { return wasRecentlyPerformed(e.name); });
             var picked = [];
-            for (var n = 0; n < count && pool.length > 0; n++) {
-                var idx = Math.floor(Math.random() * pool.length);
-                picked.push(pool[idx]);
-                pool.splice(idx, 1);
+            for (var n = 0; n < count && (preferredPool.length > 0 || fallbackPool.length > 0); n++) {
+                var source = preferredPool.length > 0 ? preferredPool : fallbackPool;
+                var idx = Math.floor(Math.random() * source.length);
+                picked.push(source[idx]);
+                source.splice(idx, 1);
             }
             return picked;
         }
@@ -1258,10 +1330,10 @@
         // aktualisierte Dauer-Schätzung, bevor überhaupt konkret gewürfelt wurde.
         function categoryAverageWorkSeconds(category, cfg, allowedEquipment) {
             var candidates = EXERCISES.filter(function (e) {
-                return e.category === category && cfg.pool.indexOf(e.difficulty) !== -1 && equipmentAllowed(e, allowedEquipment);
+                return e.category === category && cfg.pool.indexOf(e.difficulty) !== -1 && exerciseSelectable(e, allowedEquipment);
             });
             if (candidates.length === 0) {
-                candidates = EXERCISES.filter(function (e) { return e.category === category && equipmentAllowed(e, allowedEquipment); });
+                candidates = EXERCISES.filter(function (e) { return e.category === category && exerciseSelectable(e, allowedEquipment); });
             }
             if (candidates.length === 0) return ((cfg.repsMin + cfg.repsMax) / 2) * 3;
             var total = 0;
@@ -1331,7 +1403,7 @@
             var blockedCategory = mainCount > 0 ? findEquipmentBlockedCategory(counts, getEnabledEquipment()) : null;
             updateDurationDisplay(blockedCategory ? 0 : estimateDurationMinutesLive());
             if (blockedCategory) {
-                durationMetaEl.innerHTML = "Für „" + CATEGORY_META[blockedCategory].label + "“ ist mit den gewählten Geräten keine Übung möglich.";
+                durationMetaEl.innerHTML = "Für „" + CATEGORY_META[blockedCategory].label + "“ ist mit den gewählten Geräten und gesperrten Übungen keine Übung möglich.";
             } else {
                 durationMetaEl.innerHTML = mainCount > 0
                     ? formatDurationMeta(mainCount, Number(intensityRange.value))
@@ -1348,6 +1420,139 @@
         function handleControlChange() {
             updateLabels();
             refreshLiveEstimate();
+            saveSettings();
+        }
+
+        /* =====================================================================
+         * Persistenz (localStorage)
+         * ---------------------------------------------------------------------
+         * Drei unabhängige Speicher:
+         *   sport.settings         - zuletzt gewählte Regler-/Checkbox-Werte
+         *   sport.blockedExercises - dauerhaft gesperrte Übungsnamen (werden
+         *                            nie wieder ausgewählt)
+         *   sport.exerciseHistory  - Übungsname -> Zeitstempel der letzten
+         *                            Ausführung; Einträge älter als 14 Tage
+         *                            zählen nicht mehr als "kürzlich
+         *                            durchgeführt" und werden verworfen
+         * ===================================================================== */
+        var STORAGE_KEY_SETTINGS = "sport.settings";
+        var STORAGE_KEY_BLOCKED = "sport.blockedExercises";
+        var STORAGE_KEY_HISTORY = "sport.exerciseHistory";
+        var HISTORY_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+
+        function loadJson(key, fallback) {
+            try {
+                var raw = localStorage.getItem(key);
+                return raw ? JSON.parse(raw) : fallback;
+            } catch (e) {
+                return fallback;
+            }
+        }
+
+        function saveJson(key, value) {
+            try {
+                localStorage.setItem(key, JSON.stringify(value));
+            } catch (e) { /* z. B. privater Modus ohne Storage-Zugriff - ignorieren */ }
+        }
+
+        function saveSettings() {
+            var equipment = [];
+            document.querySelectorAll(".equipment-checkbox").forEach(function (cb) {
+                if (cb.checked) equipment.push(cb.value);
+            });
+            saveJson(STORAGE_KEY_SETTINGS, {
+                counts: getCategoryCounts(),
+                intensity: Number(intensityRange.value),
+                volume: Number(volumeRange.value),
+                muted: muted,
+                aufwaermen: toggleAufwaermen.checked,
+                cooldown: toggleCooldown.checked,
+                equipment: equipment
+            });
+        }
+
+        // Überträgt zuletzt gespeicherte Einstellungen auf die Steuerelemente -
+        // wird einmalig beim Laden der Seite aufgerufen, bevor irgendetwas
+        // gerendert wird.
+        function restoreSettings() {
+            var s = loadJson(STORAGE_KEY_SETTINGS, null);
+            if (!s) return;
+            if (s.counts) {
+                CATEGORY_ORDER.forEach(function (cat) {
+                    if (s.counts[cat] != null) countInputs[cat].value = s.counts[cat];
+                });
+            }
+            if (s.intensity != null) intensityRange.value = s.intensity;
+            if (s.volume != null) volumeRange.value = s.volume;
+            if (s.aufwaermen != null) toggleAufwaermen.checked = s.aufwaermen;
+            if (s.cooldown != null) toggleCooldown.checked = s.cooldown;
+            if (Array.isArray(s.equipment)) {
+                var enabled = new Set(s.equipment);
+                document.querySelectorAll(".equipment-checkbox").forEach(function (cb) {
+                    cb.checked = enabled.has(cb.value);
+                });
+            }
+            if (s.muted) {
+                muted = true;
+                volume = Number(volumeRange.value) / 100;
+            }
+        }
+
+        var blockedExercises = new Set(loadJson(STORAGE_KEY_BLOCKED, []));
+
+        function saveBlockedExercises() {
+            saveJson(STORAGE_KEY_BLOCKED, Array.from(blockedExercises));
+        }
+
+        function updateBlockedCountBadge() {
+            blockedCountBadgeEl.textContent = String(blockedExercises.size);
+        }
+
+        // Kombiniert Geräte-Verfügbarkeit und dauerhafte Sperrung: nur Übungen,
+        // die beides erfüllen, dürfen überhaupt zur Auswahl stehen.
+        function exerciseSelectable(ex, allowedEquipment) {
+            return equipmentAllowed(ex, allowedEquipment) && !blockedExercises.has(ex.name);
+        }
+
+        var exerciseHistory = loadJson(STORAGE_KEY_HISTORY, {});
+
+        // Entfernt Einträge, die älter als 14 Tage sind, aus der Historie.
+        function pruneExerciseHistory() {
+            var cutoff = Date.now() - HISTORY_MAX_AGE_MS;
+            var changed = false;
+            Object.keys(exerciseHistory).forEach(function (name) {
+                if (exerciseHistory[name] < cutoff) {
+                    delete exerciseHistory[name];
+                    changed = true;
+                }
+            });
+            if (changed) saveJson(STORAGE_KEY_HISTORY, exerciseHistory);
+        }
+        pruneExerciseHistory();
+
+        function wasRecentlyPerformed(name) {
+            var ts = exerciseHistory[name];
+            return !!ts && (Date.now() - ts) < HISTORY_MAX_AGE_MS;
+        }
+
+        // Bevorzugt Übungen, die in den letzten 14 Tagen nicht schon dran
+        // waren - fällt auf den vollen Kandidatenpool zurück, falls das alle
+        // Kandidaten ausschließen würde.
+        function preferNotRecentlyPerformed(candidates) {
+            var fresh = candidates.filter(function (e) { return !wasRecentlyPerformed(e.name); });
+            return fresh.length > 0 ? fresh : candidates;
+        }
+
+        // Merkt sich für alle Übungen des aktuellen Trainings (Aufwärmen und
+        // Hauptteil), dass sie jetzt durchgeführt wurden - wird beim Start des
+        // Sport-Modus aufgerufen, um sie künftig bei der Auswahl zu
+        // depriorisieren (siehe preferNotRecentlyPerformed).
+        function recordWorkoutPerformed(workout) {
+            var now = Date.now();
+            workout.exercises.forEach(function (ex) { exerciseHistory[ex.name] = now; });
+            workout.warmup.forEach(function (ex) { exerciseHistory[ex.name] = now; });
+            pruneExerciseHistory();
+            saveJson(STORAGE_KEY_HISTORY, exerciseHistory);
         }
 
         /* =====================================================================
@@ -1380,7 +1585,7 @@
                 outputEl.hidden = true;
                 sportModeBtn.hidden = true;
                 updateDurationDisplay(0);
-                durationMetaEl.innerHTML = "Für „" + CATEGORY_META[blockedCategory].label + "“ ist mit den gewählten Geräten keine Übung möglich.";
+                durationMetaEl.innerHTML = "Für „" + CATEGORY_META[blockedCategory].label + "“ ist mit den gewählten Geräten und gesperrten Übungen keine Übung möglich.";
                 return;
             }
 
@@ -1422,16 +1627,54 @@
             var usedNames = new Set(currentWorkout.exercises.map(function (e) { return e.name; }));
             currentWorkout.warmup.forEach(function (e) { usedNames.add(e.name); });
             var replacement = pickExercise(current.category, cfg.pool, usedNames, equipment);
-            currentWorkout.exercises[idx] = replacement;
+            // replacement kann nur fehlen, wenn buchstäblich jede Übung dieser
+            // Kategorie gesperrt ist - dann die Karte unverändert lassen statt abzustürzen.
+            if (replacement) currentWorkout.exercises[idx] = replacement;
             render();
         }
         // Für die inline onclick-Handler im generierten HTML zugänglich machen.
         window.rerollExercise = rerollExercise;
 
+        // Würfelt eine einzelne Aufwärm-Übung (per Klick auf "andere Übung")
+        // neu, ohne den Rest des Aufwärmens oder das Haupttraining zu verändern.
+        function rerollWarmupExercise(idx) {
+            var equipment = getEnabledEquipment();
+            var usedNames = new Set(currentWorkout.exercises.map(function (e) { return e.name; }));
+            currentWorkout.warmup.forEach(function (e) { usedNames.add(e.name); });
+            var pool = EXERCISES.filter(function (e) {
+                return e.category === "cardio" && exerciseSelectable(e, equipment) && !usedNames.has(e.name);
+            });
+            if (pool.length === 0) {
+                pool = EXERCISES.filter(function (e) { return e.category === "cardio" && exerciseSelectable(e, equipment); });
+            }
+            if (pool.length === 0) {
+                // Kein Ersatz verfügbar (z. B. alle Cardio-Übungen gesperrt) -
+                // Slot entfernen statt eine gesperrte Übung stehen zu lassen.
+                currentWorkout.warmup.splice(idx, 1);
+            } else {
+                currentWorkout.warmup[idx] = pool[Math.floor(Math.random() * pool.length)];
+            }
+            render();
+        }
+        window.rerollWarmupExercise = rerollWarmupExercise;
+
         function equipmentChipHtml(ex) {
             if (!ex.equipment || ex.equipment.length === 0) return "";
             var names = ex.equipment.map(function (code) { return EQUIPMENT_META[code].label; }).join(", ");
             return "<span class=\"stat-chip stat-chip-equipment\">Benötigt: " + names + "</span>";
+        }
+
+        // Fasst alle Geräte zusammen, die für das aktuelle Training (Aufwärmen
+        // und Hauptteil) insgesamt benötigt werden, in fester Geräte-Reihenfolge.
+        function requiredEquipmentSummary(workout) {
+            var codes = new Set();
+            workout.exercises.forEach(function (ex) { (ex.equipment || []).forEach(function (c) { codes.add(c); }); });
+            workout.warmup.forEach(function (ex) { (ex.equipment || []).forEach(function (c) { codes.add(c); }); });
+            var names = Object.keys(EQUIPMENT_META).filter(function (c) { return codes.has(c); })
+                .map(function (c) { return EQUIPMENT_META[c].label; });
+            return names.length === 0
+                ? "Benötigte Geräte: <strong>keine</strong> – reines Bodyweight-Training."
+                : "Benötigte Geräte: <strong>" + names.join(", ") + "</strong>";
         }
 
         function render() {
@@ -1444,12 +1687,22 @@
             durationMetaEl.innerHTML = formatDurationMeta(workout.exercises.length, workout.intensity);
             updateDurationDisplay(estimateDurationMinutes(workout));
 
+            equipmentSummaryEl.innerHTML = requiredEquipmentSummary(workout);
+
             warmupSectionEl.hidden = !workout.aufwaermenEnabled;
             if (workout.aufwaermenEnabled) {
                 warmupTimeLabelEl.textContent = "ca. " + warmupMinutesEstimate(workout.exercises.length) + " Min.";
-                warmupListEl.innerHTML = workout.warmup.map(function (ex) {
-                    return "<li><strong>" + ex.name + "</strong> – ca. 45 Sek. lockeres Tempo" +
-                        "<div class=\"warmup-desc\">" + ex.description + "</div></li>";
+                warmupListEl.innerHTML = workout.warmup.map(function (ex, idx) {
+                    return "<li>" +
+                        "  <div class=\"warmup-item-head\">" +
+                        "    <span><strong>" + ex.name + "</strong> – ca. 45 Sek. lockeres Tempo</span>" +
+                        "    <div class=\"warmup-item-actions\">" +
+                        "      <button type=\"button\" class=\"reroll-btn\" onclick=\"rerollWarmupExercise(" + idx + ")\" aria-label=\"Andere Aufwärm-Übung für " + ex.name + " auswürfeln\">andere Übung</button>" +
+                        "      <button type=\"button\" class=\"reroll-btn lock-btn\" onclick=\"blockExercise('" + ex.name + "', 'warmup', " + idx + ")\" aria-label=\"" + ex.name + " dauerhaft sperren\">Übung für immer sperren</button>" +
+                        "    </div>" +
+                        "  </div>" +
+                        "  <div class=\"warmup-desc\">" + ex.description + "</div>" +
+                        "</li>";
                 }).join("");
             }
 
@@ -1473,53 +1726,63 @@
                     "    <p class=\"exercise-desc\">" + ex.description + "</p>" +
                     "    <p class=\"exercise-muscles\">Muskeln: " + ex.muscles + "</p>" +
                     "  </div>" +
-                    "  <button type=\"button\" class=\"reroll-btn\" onclick=\"rerollExercise(" + idx + ")\" aria-label=\"Andere Übung für " + meta.label.replace(/&amp;/g, "&") + " auswürfeln\">andere Übung</button>" +
+                    "  <div class=\"exercise-card-actions\">" +
+                    "    <button type=\"button\" class=\"reroll-btn\" onclick=\"rerollExercise(" + idx + ")\" aria-label=\"Andere Übung für " + meta.label.replace(/&amp;/g, "&") + " auswürfeln\">andere Übung</button>" +
+                    "    <button type=\"button\" class=\"reroll-btn lock-btn\" onclick=\"blockExercise('" + ex.name + "', 'main', " + idx + ")\" aria-label=\"" + ex.name + " dauerhaft sperren\">Übung für immer sperren</button>" +
+                    "  </div>" +
                     "</div>";
             }).join("");
         }
 
-        /* =====================================================================
-         * Übungsdatenbank-Overlay (reine Referenzansicht, ungefiltert)
-         * ===================================================================== */
-        var dbRendered = false;
+        // Sperrt eine Übung dauerhaft (wird nie wieder ausgewählt) und würfelt
+        // sie, falls sie gerade im aktuellen Training angezeigt wird, direkt
+        // durch eine andere Übung derselben Rolle (Haupttraining oder
+        // Aufwärmen) aus.
+        function blockExercise(name, kind, idx) {
+            blockedExercises.add(name);
+            saveBlockedExercises();
+            updateBlockedCountBadge();
+            if (kind === "main") {
+                rerollExercise(idx);
+            } else if (kind === "warmup") {
+                rerollWarmupExercise(idx);
+            }
+        }
+        window.blockExercise = blockExercise;
 
-        function renderDatabase() {
-            if (dbRendered) return;
-            dbBodyEl.innerHTML = CATEGORY_ORDER.map(function (cat) {
-                var meta = CATEGORY_META[cat];
-                var entries = EXERCISES.filter(function (e) { return e.category === cat; });
-                var entriesHtml = entries.map(function (ex) {
-                    var typeLabel = ex.type === "time" ? "Haltezeit" : "Wiederholungen";
-                    var equipmentTag = (ex.equipment && ex.equipment.length)
-                        ? "<span class=\"db-entry-equipment\">Benötigt: " + ex.equipment.map(function (c) { return EQUIPMENT_META[c].label; }).join(", ") + "</span>"
-                        : "";
-                    return "" +
-                        "<div class=\"db-entry\">" +
-                        "  <div class=\"db-entry-head\">" +
-                        "    <span class=\"db-entry-name\">" + ex.name + "</span>" +
-                        "    <span class=\"db-entry-meta\">" + typeLabel + " · " + ex.difficulty + "</span>" +
-                        "  </div>" +
-                        "  <p class=\"db-entry-desc\">" + ex.description + "</p>" +
-                        "  <p class=\"db-entry-muscles\">Muskeln: " + ex.muscles + "</p>" +
-                        equipmentTag +
-                        "</div>";
-                }).join("");
+        function unblockExercise(name) {
+            blockedExercises.delete(name);
+            saveBlockedExercises();
+            updateBlockedCountBadge();
+            renderBlockedList();
+        }
+        window.unblockExercise = unblockExercise;
+
+        function renderBlockedList() {
+            var entries = EXERCISES.filter(function (e) { return blockedExercises.has(e.name); })
+                .sort(function (a, b) { return a.name.localeCompare(b.name, "de"); });
+            if (entries.length === 0) {
+                blockedBodyEl.innerHTML = "<p class=\"blocked-empty\">Keine Übungen gesperrt.</p>";
+                return;
+            }
+            blockedBodyEl.innerHTML = entries.map(function (ex) {
+                var meta = CATEGORY_META[ex.category];
                 return "" +
-                    "<div class=\"db-category\" style=\"--cat-color:" + meta.color + "\">" +
-                    "  <h3>" + meta.label + " (" + entries.length + ")</h3>" +
-                    entriesHtml +
+                    "<div class=\"blocked-entry\">" +
+                    "  <span class=\"blocked-entry-name\">" + ex.name + "</span>" +
+                    "  <span class=\"badge-category\" style=\"--cat-color:" + meta.color + "\">" + meta.label + "</span>" +
+                    "  <button type=\"button\" class=\"reroll-btn\" onclick=\"unblockExercise('" + ex.name + "')\">entsperren</button>" +
                     "</div>";
             }).join("");
-            dbRendered = true;
         }
 
-        function showDatabase() {
-            renderDatabase();
-            dbOverlayEl.hidden = false;
+        function showBlockedList() {
+            renderBlockedList();
+            blockedOverlayEl.hidden = false;
         }
 
-        function hideDatabase() {
-            dbOverlayEl.hidden = true;
+        function hideBlockedList() {
+            blockedOverlayEl.hidden = true;
         }
 
         /* =====================================================================
@@ -1603,6 +1866,7 @@
         function toggleMute() {
             muted = !muted;
             syncMuteButtons();
+            saveSettings();
         }
         window.toggleMute = toggleMute;
 
@@ -1979,6 +2243,7 @@
 
         function enterSportMode() {
             if (!currentWorkout) return;
+            recordWorkoutPerformed(currentWorkout);
             ensureAudioContext();
             sportState = { steps: buildSportSteps(currentWorkout), index: 0, remaining: 0, running: false, deadline: 0, intervalId: null, lastBeepSecond: null, elapsedStart: null, elapsedIntervalId: null, elapsedTotalSec: 0 };
             sportElapsedTimerEl.hidden = true;
@@ -2033,12 +2298,16 @@
         toggleCooldown.addEventListener("change", handleControlChange);
         toggleCooldown.addEventListener("change", generateWorkout);
         document.querySelectorAll(".equipment-checkbox").forEach(function (cb) {
-            cb.addEventListener("change", generateWorkout);
+            cb.addEventListener("change", function () {
+                saveSettings();
+                generateWorkout();
+            });
         });
 
         volumeRange.addEventListener("input", function () {
             volume = Number(volumeRange.value) / 100;
             volumeValueEl.textContent = volumeRange.value + " %";
+            saveSettings();
         });
         volumeRange.addEventListener("change", function () {
             playTestBeep();
@@ -2057,9 +2326,11 @@
         sportExitConfirmEl.addEventListener("click", function (e) {
             if (e.target === sportExitConfirmEl) hideSportExitConfirm();
         });
-        dbShowBtn.addEventListener("click", showDatabase);
-        dbExitBtn.addEventListener("click", hideDatabase);
+        blockedShowBtn.addEventListener("click", showBlockedList);
+        blockedExitBtn.addEventListener("click", hideBlockedList);
 
+        restoreSettings();
+        updateBlockedCountBadge();
         updateLabels();
         syncMuteButtons();
         refreshLiveEstimate();
