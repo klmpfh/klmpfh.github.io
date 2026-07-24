@@ -68,43 +68,71 @@
     // sind je Abstufung in theme.css fest hinterlegt und bleiben so konstant.
     document.documentElement.style.setProperty('--theme-accent-hue', Math.round(Math.random() * 360));
 
-    // Favicon in derselben zufälligen Highlight-Farbe einfärben (ersetzt das
-    // statische assets/img/favicon.svg durch eine passend eingefärbte
-    // Kopie als data:-URI). getComputedStyle liefert --theme-accent bereits
-    // mit aufgelöstem Hue-Wert, z. B. "hsl(210, 78%, 45%)".
-    var accentColor = getComputedStyle(document.documentElement).getPropertyValue('--theme-accent').trim();
-    if (accentColor) {
-        var faviconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
-            + '<rect width="64" height="64" fill="' + accentColor + '"/>'
-            + '<text x="32" y="44" font-family="Courier New, Courier, monospace" font-size="40" font-weight="bold" fill="#ffffff" text-anchor="middle">k</text>'
-            + '</svg>';
-        var faviconLink = document.querySelector('link[rel="icon"]');
-        if (faviconLink) faviconLink.href = 'data:image/svg+xml,' + encodeURIComponent(faviconSvg);
-    }
-
     var tools = [
         { key: '',              href: '',               label: 'Start' },
-        { key: 'fragezeichen',  href: 'fragezeichen/',  label: '??? Album' },
-        { key: 'abz',           href: 'abz/',           label: 'Arbeitszeit-Tracker' },
-        { key: 'choose',        href: 'choose/',        label: 'Choose Wisely' },
-        { key: 'fileshare',     href: 'fileshare/',     label: 'Fileshare' },
-        { key: 'ical',          href: 'ical/',          label: 'iCal Terminsuche' },
-        { key: 'icaltools',     href: 'icaltools/',     label: 'iCal Tools' },
-        { key: 'knallbum',      href: 'knallbum/',      label: 'Knall Bumm' },
-        { key: 'laserfeelings', href: 'laserfeelings/', label: 'Laser & Feelings' },
-        { key: 'sport',         href: 'sport/',         label: 'Sport' },
-        { key: 'zauberkloppen', href: 'zauberkloppen/', label: 'Zaubern & Kloppen' }
+        { key: 'fragezeichen',  href: 'fragezeichen/',  label: '??? Album',          letter: '?' },
+        { key: 'abz',           href: 'abz/',           label: 'Arbeitszeit-Tracker', letter: 'a' },
+        { key: 'choose',        href: 'choose/',        label: 'Choose Wisely',      letter: 'c' },
+        { key: 'fileshare',     href: 'fileshare/',     label: 'Fileshare',          letter: 'f' },
+        { key: 'ical',          href: 'ical/',          label: 'iCal Terminsuche',   letter: 'i' },
+        { key: 'knallbum',      href: 'knallbum/',      label: 'Knall Bumm',         letter: 'k' },
+        { key: 'laserfeelings', href: 'laserfeelings/', label: 'Laser & Feelings',   letter: 'l' },
+        { key: 'sport',         href: 'sport/',         label: 'Sport',              letter: 's' },
+        { key: 'zauberkloppen', href: 'zauberkloppen/', label: 'Zaubern & Kloppen',  letter: 'z' }
     ];
 
     // Aktuelle Seite an der Ordnerstruktur erkennen (funktioniert für
-    // ".../abz/", ".../abz/index.html" und "/" bzw. "/index.html").
-    var parts = location.pathname.split('/').filter(Boolean);
-    var last = parts[parts.length - 1];
+    // ".../abz/", ".../abz/index.html" und "/" bzw. "/index.html"). Die
+    // Startseite wird dabei über `base` erkannt (leer nur dort) statt über
+    // die Anzahl der Pfadsegmente: bei lokalem Öffnen per file:// steckt
+    // die Seite immer in mindestens einem Ordner (z. B. dem Repo-Ordner),
+    // wodurch die reine Segmentzählung die Startseite fälschlich für eine
+    // Unterseite gehalten hätte.
     var currentKey = '';
-    if (last && last !== 'index.html') {
-        currentKey = last;
-    } else if (parts.length >= 2) {
-        currentKey = parts[parts.length - 2];
+    if (base !== '') {
+        var parts = location.pathname.split('/').filter(Boolean);
+        var last = parts[parts.length - 1];
+        if (last && last !== 'index.html') {
+            currentKey = last;
+        } else if (parts.length >= 2) {
+            currentKey = parts[parts.length - 2];
+        }
+    }
+
+    // Icon-SVG fürs Favicon bauen: Die Startseite bekommt alle Buchstaben von
+    // "klmpfh" übereinandergelegt an derselben Stelle, jede Unterseite
+    // stattdessen ihren eigenen Buchstaben aus der `tools`-Liste oben
+    // (letter), ersatzweise den ersten Buchstaben ihres Schlüssels.
+    function glyphsForKey(key) {
+        if (key === '') {
+            return ['k', 'l', 'm', 'p', 'f', 'h'].map(function (ch) {
+                return '<text x="32" y="44" font-family="monospace" font-size="40" font-weight="bold" fill="#ffffff" text-anchor="middle">' + ch + '</text>';
+            }).join('');
+        }
+        var tool = null;
+        for (var i = 0; i < tools.length; i++) {
+            if (tools[i].key === key) { tool = tools[i]; break; }
+        }
+        var letter = (tool && tool.letter) || key.charAt(0).toLowerCase();
+        return '<text x="32" y="44" font-family="monospace" font-size="40" font-weight="bold" fill="#ffffff" text-anchor="middle">' + letter + '</text>';
+    }
+
+    function iconDataUri(key, color) {
+        var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
+            + '<rect width="64" height="64" fill="' + color + '"/>'
+            + glyphsForKey(key)
+            + '</svg>';
+        return 'data:image/svg+xml,' + encodeURIComponent(svg);
+    }
+
+    // Favicon in derselben zufälligen Highlight-Farbe einfärben (ersetzt das
+    // statische assets/img/favicon.svg durch eine passend eingefärbte Kopie
+    // als data:-URI). getComputedStyle liefert --theme-accent bereits mit
+    // aufgelöstem Hue-Wert, z. B. "hsl(210, 78%, 45%)".
+    var accentColor = getComputedStyle(document.documentElement).getPropertyValue('--theme-accent').trim();
+    if (accentColor) {
+        var faviconLink = document.querySelector('link[rel="icon"]');
+        if (faviconLink) faviconLink.href = iconDataUri(currentKey, accentColor);
     }
 
     var style = document.createElement('style');
