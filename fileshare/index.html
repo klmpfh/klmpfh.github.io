@@ -34,6 +34,27 @@
         min-height: 100vh;
     }
 
+    #debugConsole {
+        height: 100px;
+        overflow-y: auto;
+        background: #0b0b10;
+        color: #8fd19e;
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 11px;
+        line-height: 1.5;
+        text-align: left;
+        margin-top: 14px;
+        padding: 4px 10px;
+        box-sizing: border-box;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    #debugConsole .log-warn { color: #fbbf24; }
+    #debugConsole .log-error { color: #f87171; }
+
     .container {
         width: 100%;
         max-width: 620px;
@@ -411,7 +432,10 @@
         Übertragung geöffnet bleiben.
     </div>
 
-    <footer>bei manchen Netzwerken/Firewalls kann die Verbindung nicht zustande kommen</footer>
+    <footer>
+        bei manchen Netzwerken/Firewalls kann die Verbindung nicht zustande kommen
+        <div id="debugConsole" aria-label="Debug-Konsole"></div>
+    </footer>
 </div>
 
 <script src="vendor/peerjs.min.js"></script>
@@ -419,6 +443,36 @@
 <script src="../assets/js/escape-html.js"></script>
 <script>
 (function () {
+    // ---------- Debug-Konsole ----------
+    const debugEl = document.getElementById('debugConsole');
+
+    function logToPanel(level, args) {
+        const time = new Date().toLocaleTimeString('de-DE', { hour12: false });
+        const text = args.map(a => {
+            if (a instanceof Error) return a.message;
+            if (typeof a === 'object' && a !== null) { try { return JSON.stringify(a); } catch (e) { return String(a); } }
+            return String(a);
+        }).join(' ');
+        const line = document.createElement('div');
+        line.className = 'log-' + level;
+        line.textContent = `[${time}] ${text}`;
+        debugEl.appendChild(line);
+        debugEl.scrollTop = debugEl.scrollHeight;
+    }
+
+    ['log', 'info', 'warn', 'error'].forEach(level => {
+        const original = console[level].bind(console);
+        console[level] = function (...args) {
+            original(...args);
+            logToPanel(level, args);
+        };
+    });
+
+    window.addEventListener('error', e => logToPanel('error', [e.message]));
+    window.addEventListener('unhandledrejection', e => {
+        logToPanel('error', ['Unhandled: ' + (e.reason && e.reason.message ? e.reason.message : e.reason)]);
+    });
+
     if (typeof window.RTCPeerConnection === 'undefined' || typeof window.Peer === 'undefined') {
         document.querySelector('.container').innerHTML =
             '<header><h1><span>Fileshare</span></h1></header>' +
@@ -537,15 +591,19 @@
     }
 
     function handleIncomingConnection(conn) {
+        console.log('Eingehende Verbindungsanfrage von', conn.peer);
         conns.set(conn.peer, { conn, sending: false });
         updateHostStatus();
 
         conn.on('open', () => {
+            console.log('Datenkanal zu', conn.peer, 'geöffnet.');
             conn.send(JSON.stringify({
                 t: 'manifest',
                 files: files.map((f, i) => ({ id: i, name: f.name, size: f.size, type: f.type }))
             }));
         });
+
+        conn.on('iceStateChanged', state => console.log('ICE-Status (' + conn.peer + '):', state));
 
         conn.on('data', data => {
             if (typeof data !== 'string') return;
@@ -554,15 +612,17 @@
             if (msg.t === 'request' && Array.isArray(msg.ids)) handleFileRequest(conn, msg.ids);
         });
 
-        conn.on('close', () => { conns.delete(conn.peer); updateHostStatus(); });
-        conn.on('error', () => { conns.delete(conn.peer); updateHostStatus(); });
+        conn.on('close', () => { console.log('Verbindung zu', conn.peer, 'beendet.'); conns.delete(conn.peer); updateHostStatus(); });
+        conn.on('error', err => { console.error('Verbindungsfehler zu', conn.peer, err); conns.delete(conn.peer); updateHostStatus(); });
     }
 
     function startSession() {
+        console.log('Sitzung wird gestartet …');
         const sessionId = generateSessionId();
-        peer = new Peer(PEER_PREFIX + sessionId, { debug: 0 });
+        peer = new Peer(PEER_PREFIX + sessionId, { debug: 2 });
 
-        peer.on('open', () => {
+        peer.on('open', id => {
+            console.log('Signaling-Verbindung hergestellt, Peer-ID:', id);
             senderPanel.hidden = true;
             sharePanel.hidden = false;
             renderSharedFileList();
@@ -587,9 +647,12 @@
         peer.on('connection', handleIncomingConnection);
 
         peer.on('error', err => {
+            console.error('Peer-Fehler:', err.type, err);
             if (err.type === 'unavailable-id') { startSession(); return; }
             hostStatus.textContent = 'Verbindungsfehler: ' + err.type;
         });
+
+        peer.on('disconnected', () => console.warn('Von Signaling-Server getrennt.'));
     }
 
     startBtn.addEventListener('click', startSession);
@@ -619,6 +682,7 @@
     const requestBtn = document.getElementById('requestBtn');
 
     function initReceiver(sessionId) {
+        console.log('Öffne Empfänger-Ansicht für Sitzung', sessionId);
         senderPanel.hidden = true;
         receiverPanel.hidden = false;
 
@@ -714,21 +778,26 @@
             }
         }
 
-        const peerR = new Peer(undefined, { debug: 0 });
+        const peerR = new Peer(undefined, { debug: 2 });
 
-        peerR.on('open', () => {
+        peerR.on('open', id => {
+            console.log('Eigene Peer-ID:', id, '– verbinde zum Host …');
             conn = peerR.connect(PEER_PREFIX + sessionId, { serialization: 'raw' });
-            conn.on('open', () => { incomingStatus.textContent = 'Verbunden – warte auf Dateiliste …'; });
+            conn.on('open', () => { console.log('Datenkanal zum Host geöffnet.'); incomingStatus.textContent = 'Verbunden – warte auf Dateiliste …'; });
+            conn.on('iceStateChanged', state => console.log('ICE-Status:', state));
             conn.on('data', onData);
-            conn.on('close', () => { incomingStatus.textContent = 'Verbindung beendet.'; });
-            conn.on('error', () => { incomingStatus.textContent = 'Verbindungsfehler.'; });
+            conn.on('close', () => { console.log('Verbindung zum Host beendet.'); incomingStatus.textContent = 'Verbindung beendet.'; });
+            conn.on('error', err => { console.error('Verbindungsfehler:', err); incomingStatus.textContent = 'Verbindungsfehler.'; });
         });
 
         peerR.on('error', err => {
+            console.error('Peer-Fehler:', err.type, err);
             incomingStatus.textContent = err.type === 'peer-unavailable'
                 ? 'Sitzung nicht gefunden – Link abgelaufen oder ungültig.'
                 : 'Verbindung fehlgeschlagen: ' + err.type;
         });
+
+        peerR.on('disconnected', () => console.warn('Von Signaling-Server getrennt.'));
 
         window.addEventListener('beforeunload', () => peerR.destroy());
     }
@@ -736,8 +805,10 @@
     // ---------- Mode detection ----------
     const sParam = new URLSearchParams(location.search).get('s');
     if (sParam && ID_REGEX.test(sParam)) {
+        console.log('Modus: Empfänger');
         initReceiver(sParam);
     } else {
+        console.log('Modus: Sender');
         renderSelList();
     }
 })();
