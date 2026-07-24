@@ -116,65 +116,66 @@
         <button type="button" class="new-album-btn" id="newAlbumBtn">Neues Album</button>
     </div>
 
-    <footer class="update-note">Alben-Liste zuletzt aktualisiert: 21.07.2026</footer>
+    <footer class="update-note">Alben-Liste zuletzt aktualisiert: 24.07.2026</footer>
 
     <script>
-        /*
-         * PROMPT ZUM AKTUALISIEREN DIESER LISTE (in einen neuen Chat kopieren):
-         *
-         * Aktualisiere die Liste `albumLinks` in fragezeichen/index.html auf
-         * klmpfh.github.io. Das ist die Liste der Spotify-Alben, aus denen
-         * der Zufallsgenerator dieser Seite ein "Die drei ???"-Hörspiel
-         * auswählt. Ziel: alle bisher fehlenden Hörspiel-Alben ergänzen.
-         *
-         * EINSCHLIESSEN:
-         * - Hauptreihe (Folge 1, 2, 3, ... fortlaufend), außer reinen
-         *   Musik-/Soundtrack-Veröffentlichungen ohne Geschichte (z. B.
-         *   Europa-Nr. 29 "Die Original-Musik der Europa-Jugendserie").
-         * - Sonderveröffentlichungen, die als echtes, mehrstimmig
-         *   inszeniertes Hörspiel erschienen sind: Kurzgeschichten-
-         *   Sammlungen, Adventskalender, Live-Mitschnitte, Neufassungen,
-         *   Top Secret Editions, Midi-Bände, Graphic-Novel-Vertonungen,
-         *   Sonderfolgen wie "und der dreiTag".
-         *
-         * AUSSCHLIESSEN (keine Hörbücher/Fremdserien):
-         * - Alles mit "<Name> liest ..." im Titel (Einzelsprecher-Lesung,
-         *   z. B. "Oliver Rohrbeck liest ...").
-         * - "Rocky Beach Crimes" (Tante Mathilda, Victor Hugenay, Kommissar
-         *   Reynolds, Skinny Norris, Morton ermittelt) - von EUROPA selbst
-         *   als "Hörbücher" geführt, siehe Spotify-Playlist
-         *   "Rocky Beach Crimes - Alle Hörbücher".
-         * - "Mitratefälle" - bisher nur als Buch erschienen, kein Hörspiel.
-         * - Die separate Serie "Die drei ??? Kids" (jüngere Zielgruppe).
-         * - Sachbücher, Detektivhandbücher, Bildbände, fremdsprachige
-         *   Ausgaben, Filme (keine Hörspiel-Alben).
-         *
-         * VORGEHEN:
-         * 1. Neue Folgen/Specials recherchieren, z. B. über die deutsche
-         *    Wikipedia-Seite "Liste der Die-drei-???-Folgen" oder die
-         *    offizielle Spotify-Playlist "Die drei ??? - Die drei
-         *    Fragezeichen - Alle Hörspiele".
-         * 2. Für jedes neue Album die Spotify-Album-ID ermitteln und über
-         *    https://open.spotify.com/oembed?url=https://open.spotify.com/album/<ID>
-         *    den Titel verifizieren (Titel darf NICHT "... liest ..."
-         *    enthalten).
-         * 3. Spieldauer ermitteln: HTML von
-         *    https://open.spotify.com/embed/album/<ID> abrufen, das JSON in
-         *    <script id="__NEXT_DATA__"> auslesen und alle "duration"-Werte
-         *    (ms) in props.pageProps.state.data.entity.trackList aufsummieren,
-         *    dann in Minuten runden. Falls trackList.length >= 100 (Spotify
-         *    kappt dort), zusätzlich `approx: true` setzen.
-         * 4. Neuen Eintrag im gleichen Format ergänzen:
-         *    { url: "https://open.spotify.com/embed/album/<ID>", min: <Minuten> },
-         *    optional mit `, approx: true` und einem `// <Titel/Hinweis>`-
-         *    Kommentar bei Sonderveröffentlichungen.
-         * 5. Datum im Footer (Klasse "update-note", Text "Alben-Liste zuletzt
-         *    aktualisiert: ...") auf das heutige Datum setzen.
-         *
-         * Hinweis: Spotifys oEmbed-/Embed-Endpunkte sind inoffiziell und
-         * antworten bei zu vielen parallelen Anfragen kurzzeitig mit
-         * HTTP 429. Bei mehreren neuen Alben Anfragen seriell mit ca. 1
-         * Sekunde Abstand stellen statt parallel/gebündelt.
+        /* PROMPT ZUM AKTUALISIEREN DIESER LISTE (in einen neuen Chat kopieren):
+
+Aktualisiere die Liste `albumLinks` in fragezeichen/index.html auf
+klmpfh.github.io. Das ist die Liste der Spotify-Alben, aus denen
+der Zufallsgenerator dieser Seite ein "Die drei ???"-Hörspiel
+auswählt. Ziel: alle bisher fehlenden Hörspiel-Alben ergänzen.
+
+EINSCHLIESSEN:
+- Hauptreihe (Folge 1, 2, 3, ... fortlaufend), außer reinen
+Musik-/Soundtrack-Veröffentlichungen ohne Geschichte (z. B.
+Europa-Nr. 29 "Die Original-Musik der Europa-Jugendserie").
+- Sonderveröffentlichungen, die als echtes, mehrstimmig
+inszeniertes Hörspiel erschienen sind: Kurzgeschichten-
+Sammlungen, Adventskalender, Live-Mitschnitte, Neufassungen,
+Top Secret Editions, Midi-Bände, Graphic-Novel-Vertonungen,
+Sonderfolgen wie "und der dreiTag".
+
+AUSSCHLIESSEN (keine Hörbücher/Fremdserien):
+- Alles mit "<Name> liest ..." im Titel (Einzelsprecher-Lesung,
+z. B. "Oliver Rohrbeck liest ...").
+- "Rocky Beach Crimes" (Tante Mathilda, Victor Hugenay, Kommissar
+Reynolds, Skinny Norris, Morton ermittelt) - von EUROPA selbst
+als "Hörbücher" geführt, siehe Spotify-Playlist
+"Rocky Beach Crimes - Alle Hörbücher".
+- "Mitratefälle" - bisher nur als Buch erschienen, kein Hörspiel.
+- Die separate Serie "Die drei ??? Kids" (jüngere Zielgruppe).
+- Sachbücher, Detektivhandbücher, Bildbände, fremdsprachige
+Ausgaben, Filme (keine Hörspiel-Alben).
+- Rocky Beach Radio Show
+- Original-Hörspiel zum Kinofilm
+
+VORGEHEN:
+1. Neue Folgen/Specials recherchieren, z. B. über die deutsche
+Wikipedia-Seite "Liste der Die-drei-???-Folgen" oder die
+offizielle Spotify-Playlist "Die drei ??? - Die drei
+Fragezeichen - Alle Hörspiele".
+2. Für jedes neue Album die Spotify-Album-ID ermitteln und über
+https://open.spotify.com/oembed?url=https://open.spotify.com/albumID>
+den Titel verifizieren (Titel darf NICHT "... liest ..."
+enthalten).
+3. Spieldauer ermitteln: HTML von
+https://open.spotify.com/embed/album/<ID> abrufen, das JSON in
+<script id="__NEXT_DATA__"> auslesen und alle "duration"-Werte
+(ms) in props.pageProps.state.data.entity.trackList aufsummieren,
+dann in Minuten runden. Falls trackList.length >= 100 (Spotify
+kappt dort), zusätzlich `approx: true` setzen.
+4. Neuen Eintrag im gleichen Format ergänzen:
+{ url: "https://open.spotify.com/embed/album/<ID>", min: <Minuten> },
+optional mit `, approx: true` und einem `// <Titel/Hinweis>`-
+Kommentar bei Sonderveröffentlichungen.
+5. Datum im Footer (Klasse "update-note", Text "Alben-Liste zuletzt
+aktualisiert: ...") auf das heutige Datum setzen.
+
+Hinweis: Spotifys oEmbed-/Embed-Endpunkte sind inoffiziell und
+antworten bei zu vielen parallelen Anfragen kurzzeitig mit
+HTTP 429. Bei mehreren neuen Alben Anfragen seriell mit ca. 1
+Sekunde Abstand stellen statt parallel/gebündelt.
          */
         const albumLinks = [
             { url: "https://open.spotify.com/embed/album/4N9tvSjWfZXx3eHKblYEWQ", min: 53 },
