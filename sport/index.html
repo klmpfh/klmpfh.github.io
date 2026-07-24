@@ -918,6 +918,14 @@
                 </fieldset>
             </div>
 
+            <div class="advanced-settings">
+                <div class="advanced-settings-title">Weitere Filter</div>
+                <fieldset class="chip-group">
+                    <label class="chip-checkbox"><input type="checkbox" id="toggleJump" checked> Springen/Hüpfen</label>
+                </fieldset>
+                <p class="hint">Deaktivieren, um laute Sprung-/Hüpf-Übungen auszuschließen – z. B. im Mehrfamilienhaus.</p>
+            </div>
+
             <div class="duration-highlight" id="durationHighlight">
                 <div class="duration-main">
                     <span class="duration-number" id="durationNumber">–</span>
@@ -929,6 +937,7 @@
             <div class="controls-actions">
                 <button class="btn btn-outline" id="generateBtn" type="button">neues Training generieren</button>
                 <button class="btn btn-outline" id="blockedShowBtn" type="button">Gesperrte Übungen (<span id="blockedCountBadge">0</span>)</button>
+                <button class="btn btn-outline" id="resetDataBtn" type="button">Alle gespeicherten Daten löschen</button>
             </div>
         </div>
 
@@ -982,6 +991,18 @@
         </div>
     </div>
 
+    <!-- Rückfrage vor dem Löschen aller gespeicherten Daten (Einstellungen +
+         gesperrte Übungen), damit das nicht versehentlich per Klick passiert. -->
+    <div class="confirm-overlay" id="resetConfirm" hidden>
+        <div class="confirm-box">
+            <p class="confirm-text">Wirklich alle gespeicherten Einstellungen und gesperrten Übungen löschen?</p>
+            <div class="sport-controls">
+                <button type="button" class="sport-btn sport-btn-secondary" id="resetConfirmNoBtn">Abbrechen</button>
+                <button type="button" class="sport-btn sport-btn-primary" id="resetConfirmYesBtn">Löschen</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Verwaltung dauerhaft gesperrter Übungen: zeigt alle gesperrten
          Übungen mit der Möglichkeit, sie einzeln wieder freizuschalten. -->
     <div class="blocked-overlay" id="blockedOverlay" hidden>
@@ -1011,6 +1032,10 @@
          *                 ('pullup' | 'bar' | 'elevated' | 'wall' | 'mat').
          *                 Fehlt das Feld, ist die Übung reine
          *                 Körpergewichtsübung ohne jedes Hilfsmittel.
+         *   jump        - optional: true, wenn die Übung Sprünge/Hüpfen mit
+         *                 Bodenaufprall enthält (laut, z. B. in
+         *                 Mehrfamilienhäusern störend). Fehlt das Feld, kommt
+         *                 die Übung ohne Sprünge/Hüpfen aus.
          * ===================================================================== */
         var EXERCISES = [
             // --- Beine & Gesäß --------------------------------------------------
@@ -1018,7 +1043,7 @@
             { name: "Ausfallschritte", category: "beine", type: "reps", difficulty: "mittel", muscles: "Quadrizeps, Gesäß, Waden", description: "Großen Schritt nach vorne machen, das hintere Knie Richtung Boden senken, bis beide Knie etwa 90° gebeugt sind, dann zurück in den Stand drücken. Seite wechseln." },
             { name: "Wandsitz", category: "beine", type: "time", difficulty: "mittel", muscles: "Quadrizeps, Gesäß", equipment: ["wall"], description: "Mit geradem Rücken an einer Wand entlang in die Hocke gehen, bis die Oberschenkel parallel zum Boden sind, und die Position wie auf einem unsichtbaren Stuhl halten." },
             { name: "Sumo-Kniebeugen", category: "beine", type: "reps", difficulty: "leicht", muscles: "Innere Oberschenkel, Gesäß", description: "Füße breiter als schulterbreit aufstellen, Zehen leicht nach außen drehen, in die Hocke gehen und dabei die Knie in Zehenrichtung führen, dann aufstehen." },
-            { name: "Kniebeugen-Sprünge", category: "beine", type: "reps", difficulty: "schwer", muscles: "Quadrizeps, Gesäß, Waden", description: "Aus der Kniebeuge explosiv nach oben abspringen, weich in den Knien landen und direkt in die nächste Wiederholung übergehen." },
+            { name: "Kniebeugen-Sprünge", category: "beine", type: "reps", difficulty: "schwer", muscles: "Quadrizeps, Gesäß, Waden", jump: true, description: "Aus der Kniebeuge explosiv nach oben abspringen, weich in den Knien landen und direkt in die nächste Wiederholung übergehen." },
             { name: "Bulgarische Ausfallschritte", category: "beine", type: "reps", difficulty: "schwer", muscles: "Quadrizeps, Gesäß", equipment: ["elevated"], description: "Den hinteren Fuß erhöht ablegen (z. B. auf einem Stuhl), das vordere Bein tief beugen, bis das hintere Knie fast den Boden berührt, dann hochdrücken. Seite wechseln." },
             { name: "Hüftheben", category: "beine", type: "reps", difficulty: "leicht", muscles: "Gesäß, hintere Oberschenkel", equipment: ["mat"], description: "Rückenlage, Füße aufgestellt. Die Hüfte nach oben drücken, bis Schultern, Hüfte und Knie eine Linie bilden, kurz halten, kontrolliert absenken." },
             { name: "Einbeinige Hüftheben", category: "beine", type: "reps", difficulty: "mittel", muscles: "Gesäß, hintere Oberschenkel", equipment: ["mat"], description: "Wie Hüftheben (Rückenlage, Füße aufgestellt, Hüfte nach oben drücken), aber ein Bein gestreckt in der Luft halten und die Hüfte nur mit dem Standbein anheben. Seite wechseln." },
@@ -1034,7 +1059,7 @@
             { name: "Erhöhtes Wadenheben", category: "beine", type: "reps", difficulty: "leicht", muscles: "Waden", equipment: ["elevated"], description: "Mit dem Vorderfuß auf eine Erhöhung (z. B. Stufenkante) stellen, die Ferse tief unter die Kante absenken, dann auf die Zehenspitzen drücken – größerer Bewegungsradius als am Boden." },
             { name: "Kniebeuge-Halten (hoch)", category: "beine", type: "time", difficulty: "leicht", muscles: "Quadrizeps, Gesäß", description: "In eine leichte Kniebeuge gehen (Oberschenkel etwa auf halbem Weg nach unten), Rücken gerade halten und die Position ruhig atmend halten." },
             { name: "Ausfallschritt-Halten (tief)", category: "beine", type: "time", difficulty: "schwer", muscles: "Quadrizeps, Gesäß, Balance", description: "In einen tiefen Ausfallschritt gehen, bis das hintere Knie fast den Boden berührt, und die Position stabil halten. Seite wechseln." },
-            { name: "Curtsy-Sprünge", category: "beine", type: "reps", difficulty: "schwer", muscles: "Gesäß, Adduktoren, Quadrizeps", description: "Aus dem Stand mit einem Bein diagonal nach hinten hinter das Standbein springen wie bei einem Knicks, weich landen, dann die Seite wechseln." },
+            { name: "Curtsy-Sprünge", category: "beine", type: "reps", difficulty: "schwer", muscles: "Gesäß, Adduktoren, Quadrizeps", jump: true, description: "Aus dem Stand mit einem Bein diagonal nach hinten hinter das Standbein springen wie bei einem Knicks, weich landen, dann die Seite wechseln." },
             { name: "Einbeiniger Wandsitz", category: "beine", type: "time", difficulty: "schwer", muscles: "Quadrizeps, Gesäß, Balance", equipment: ["wall"], description: "Aus dem beidbeinigen Wandsitz ein Bein gestreckt nach vorne anheben und halten, das Standbein bleibt im rechten Winkel gebeugt. Seite wechseln." },
 
             // --- Rücken (Pull) ---------------------------------------------------
@@ -1100,7 +1125,7 @@
             { name: "Toter Käfer", category: "core", type: "reps", difficulty: "leicht", muscles: "tiefe Bauchmuskulatur, Rumpf", equipment: ["mat"], description: "Rückenlage, Arme zur Decke, Knie 90° angewinkelt. Gegenüberliegenden Arm und Bein langsam absenken, ohne den Rücken durchzudrücken, dann wechseln." },
             { name: "Beinschlagen", category: "core", type: "reps", difficulty: "mittel", muscles: "unterer Bauch, Hüftbeuger", equipment: ["mat"], description: "Rückenlage, Beine leicht angehoben und gestreckt. Beine im Wechsel in kleinen, schnellen Bewegungen auf und ab bewegen." },
             { name: "Zehenheber", category: "core", type: "reps", difficulty: "leicht", muscles: "gerade Bauchmuskeln", equipment: ["mat"], description: "Rückenlage, Beine gestreckt zur Decke. Kopf und Schultern anheben und mit den Händen versuchen, die Zehenspitzen zu berühren, dann kontrolliert absenken." },
-            { name: "Stütz-Hampelmann", category: "core", type: "reps", difficulty: "mittel", muscles: "Rumpf, Beine, Herz-Kreislauf", equipment: ["mat"], description: "In der hohen Liegestütz-Position mit kleinen Sprüngen die Füße gleichzeitig nach außen und wieder zusammen springen lassen, Rumpf dabei stabil halten." },
+            { name: "Stütz-Hampelmann", category: "core", type: "reps", difficulty: "mittel", muscles: "Rumpf, Beine, Herz-Kreislauf", equipment: ["mat"], jump: true, description: "In der hohen Liegestütz-Position mit kleinen Sprüngen die Füße gleichzeitig nach außen und wieder zusammen springen lassen, Rumpf dabei stabil halten." },
             { name: "Hüftsenken im Seitstütz", category: "core", type: "reps", difficulty: "mittel", muscles: "seitliche Bauchmuskeln, Rumpf", equipment: ["mat"], description: "Aus dem seitlichen Unterarmstütz die Hüfte kontrolliert leicht Richtung Boden absenken und wieder anheben, ohne den Boden zu berühren. Seite wechseln." },
             { name: "Hängendes Knieheben", category: "core", type: "reps", difficulty: "mittel", muscles: "unterer Bauch, Hüftbeuger, Griffkraft", equipment: ["pullup"], description: "An der Klimmzugstange hängen, die Knie kontrolliert zur Brust ziehen, kurz halten, dann langsam absenken, ohne zu schwingen." },
             { name: "Hängendes Beinheben", category: "core", type: "reps", difficulty: "schwer", muscles: "unterer Bauch, Hüftbeuger, Griffkraft", equipment: ["pullup"], description: "An der Klimmzugstange hängen, die gestreckten Beine kontrolliert bis auf Hüfthöhe anheben, kurz halten, dann langsam absenken, ohne zu schwingen." },
@@ -1114,20 +1139,20 @@
             { name: "Stehendes Knieheben mit Halten", category: "core", type: "time", difficulty: "leicht", muscles: "unterer Bauch, Hüftbeuger, Balance", description: "Im Stehen ein Knie auf Hüfthöhe anheben und dort ruhig balancierend halten, der Rumpf bleibt dabei aufrecht und angespannt. Seite wechseln." },
 
             // --- Cardio / Mobility (Aufwärmen & Finisher) -------------------------
-            { name: "Hampelmänner", category: "cardio", type: "reps", difficulty: "leicht", muscles: "Ganzkörper, Herz-Kreislauf", description: "Im Stand gleichzeitig mit einem Sprung die Beine seitlich öffnen und die Arme über dem Kopf zusammenführen, dann zurückspringen." },
+            { name: "Hampelmänner", category: "cardio", type: "reps", difficulty: "leicht", muscles: "Ganzkörper, Herz-Kreislauf", jump: true, description: "Im Stand gleichzeitig mit einem Sprung die Beine seitlich öffnen und die Arme über dem Kopf zusammenführen, dann zurückspringen." },
             { name: "Hohe Knie", category: "cardio", type: "reps", difficulty: "mittel", muscles: "Hüftbeuger, Beine, Herz-Kreislauf", description: "Auf der Stelle laufen und die Knie abwechselnd so hoch wie möglich Richtung Brust ziehen." },
             { name: "Armkreisen", category: "cardio", type: "time", difficulty: "leicht", muscles: "Schultern", description: "Arme seitlich ausstrecken und in kontrollierten, gleichmäßigen Kreisen erst vorwärts, dann rückwärts kreisen lassen." },
             { name: "Hüftkreisen", category: "cardio", type: "time", difficulty: "leicht", muscles: "Hüfte, unterer Rücken", description: "Hände in die Hüften stützen und das Becken in großen, weichen Kreisen bewegen, beide Richtungen." },
             { name: "Anfersen", category: "cardio", type: "reps", difficulty: "mittel", muscles: "hintere Oberschenkel, Herz-Kreislauf", description: "Auf der Stelle laufen und dabei die Fersen abwechselnd zügig Richtung Gesäß führen." },
             { name: "Ausfallschritte mit Rotation", category: "cardio", type: "reps", difficulty: "mittel", muscles: "Beine, Rumpf, Mobilität", description: "In einen Ausfallschritt gehen und den Oberkörper zur Seite des vorderen Beins rotieren, dann zurück und Seite wechseln." },
             { name: "Großer Hüftöffner", category: "cardio", type: "reps", difficulty: "mittel", muscles: "Hüfte, Rumpf, Beine (Mobilität)", description: "1) Tiefer Ausfallschritt: ein Bein weit nach vorne, das andere weit nach hinten strecken, beide Hände neben dem vorderen Fuß auf dem Boden abstützen. 2) Den Ellbogen der vorderen Seite innen neben dem Fuß zum Boden führen. 3) Von dort Oberkörper und denselben Arm nach oben zur Decke aufdrehen, dabei dem Arm mit dem Blick folgen. 4) Kurz halten, dann zurück zu Schritt 2. 5) Nach den Wiederholungen die Seite wechseln." },
-            { name: "Seilspringen (ohne Seil)", category: "cardio", type: "time", difficulty: "mittel", muscles: "Waden, Herz-Kreislauf", description: "Auf der Stelle in kleinen, schnellen Sprüngen hüpfen, so als würde ein Springseil geschwungen." },
+            { name: "Seilspringen (ohne Seil)", category: "cardio", type: "time", difficulty: "mittel", muscles: "Waden, Herz-Kreislauf", jump: true, description: "Auf der Stelle in kleinen, schnellen Sprüngen hüpfen, so als würde ein Springseil geschwungen." },
             { name: "Raupengang", category: "cardio", type: "reps", difficulty: "mittel", muscles: "Rumpf, hintere Oberschenkel, Schultern", equipment: ["mat"], description: "Aus dem Stand mit den Händen am Boden nach vorne laufen bis zum hohen Liegestütz, kurz halten, dann zu den Füßen zurücklaufen." },
             { name: "Katze-Kuh", category: "cardio", type: "reps", difficulty: "leicht", muscles: "Wirbelsäule, Rumpf (Mobilität)", equipment: ["mat"], description: "Vierfüßlerstand, abwechselnd den Rücken rund zur Decke drücken (Katze) und ins Hohlkreuz Richtung Boden senken (Kuh)." },
-            { name: "Schlittschuhsprünge", category: "cardio", type: "reps", difficulty: "schwer", muscles: "Beine, Gesäß, Balance", description: "Seitlich von einem Bein zum anderen springen wie ein Schlittschuhläufer, weich landen und kurz die Balance halten." },
+            { name: "Schlittschuhsprünge", category: "cardio", type: "reps", difficulty: "schwer", muscles: "Beine, Gesäß, Balance", jump: true, description: "Seitlich von einem Bein zum anderen springen wie ein Schlittschuhläufer, weich landen und kurz die Balance halten." },
             { name: "Kniebeugen mit Armkreisen", category: "cardio", type: "reps", difficulty: "leicht", muscles: "Ganzkörper (Aufwärmen)", description: "Langsame Kniebeugen ausführen und dabei gleichzeitig die Arme locker nach vorne kreisen, um Gelenke und Kreislauf aufzuwärmen." },
-            { name: "Liegestütz-Strecksprung", category: "cardio", type: "reps", difficulty: "schwer", muscles: "Ganzkörper, Herz-Kreislauf", equipment: ["mat"], description: "Aus dem Stand in die Hocke gehen, in den hohen Liegestütz zurückspringen, einen Liegestütz ausführen, die Füße wieder heranziehen und mit einem Strecksprung nach oben abschließen." },
-            { name: "Grätschsprünge mit Kniebeuge", category: "cardio", type: "reps", difficulty: "mittel", muscles: "Beine, Gesäß, Herz-Kreislauf", description: "Wie Hampelmänner (im Stand mit einem Sprung die Beine seitlich öffnen und die Arme über dem Kopf zusammenführen), aber bei geöffneten Beinen jeweils zusätzlich in eine kurze Kniebeuge absinken, bevor die Beine wieder zusammenspringen." },
+            { name: "Liegestütz-Strecksprung", category: "cardio", type: "reps", difficulty: "schwer", muscles: "Ganzkörper, Herz-Kreislauf", equipment: ["mat"], jump: true, description: "Aus dem Stand in die Hocke gehen, in den hohen Liegestütz zurückspringen, einen Liegestütz ausführen, die Füße wieder heranziehen und mit einem Strecksprung nach oben abschließen." },
+            { name: "Grätschsprünge mit Kniebeuge", category: "cardio", type: "reps", difficulty: "mittel", muscles: "Beine, Gesäß, Herz-Kreislauf", jump: true, description: "Wie Hampelmänner (im Stand mit einem Sprung die Beine seitlich öffnen und die Arme über dem Kopf zusammenführen), aber bei geöffneten Beinen jeweils zusätzlich in eine kurze Kniebeuge absinken, bevor die Beine wieder zusammenspringen." },
             { name: "Seitliches Knieheben im Stand", category: "cardio", type: "reps", difficulty: "leicht", muscles: "schräge Bauchmuskeln, Beine", description: "Im Stehen abwechselnd ein Knie seitlich anheben und mit dem gegenüberliegenden Ellbogen antippen, dabei zügig im Wechsel bleiben." },
             { name: "Schulterkreisen", category: "cardio", type: "time", difficulty: "leicht", muscles: "Schultern, oberer Rücken", description: "Locker im Stand die Schultern durchgehend in großen, gleichmäßigen Kreisen erst vorwärts, dann rückwärts kreisen lassen." },
             { name: "Sprungbereitschafts-Halten", category: "cardio", type: "time", difficulty: "schwer", muscles: "Beine, Gesäß, Herz-Kreislauf", description: "In eine tiefe, athletische Sprungbereitschaftsposition gehen (Knie und Hüfte gebeugt, Gewicht auf den Fußballen) und die angespannte, wachsame Haltung bei erhöhtem Puls halten." },
@@ -1186,6 +1211,7 @@
         };
         var toggleAufwaermen = document.getElementById("toggleAufwaermen");
         var toggleCooldown = document.getElementById("toggleCooldown");
+        var toggleJump = document.getElementById("toggleJump");
         var intensityRange = document.getElementById("intensityRange");
         var intensityValue = document.getElementById("intensityValue");
         var volumeRange = document.getElementById("volumeRange");
@@ -1198,6 +1224,10 @@
         var blockedOverlayEl = document.getElementById("blockedOverlay");
         var blockedBodyEl = document.getElementById("blockedBody");
         var blockedCountBadgeEl = document.getElementById("blockedCountBadge");
+        var resetDataBtn = document.getElementById("resetDataBtn");
+        var resetConfirmEl = document.getElementById("resetConfirm");
+        var resetConfirmYesBtn = document.getElementById("resetConfirmYesBtn");
+        var resetConfirmNoBtn = document.getElementById("resetConfirmNoBtn");
         var durationNumberEl = document.getElementById("durationNumber");
         var durationMetaEl = document.getElementById("durationMeta");
         var outputEl = document.getElementById("output");
@@ -1301,7 +1331,6 @@
             if (candidates.length === 0) {
                 candidates = EXERCISES.filter(function (e) { return e.category === category && exerciseSelectable(e, allowedEquipment); });
             }
-            candidates = preferNotRecentlyPerformed(candidates);
             return candidates[Math.floor(Math.random() * candidates.length)];
         }
 
@@ -1326,17 +1355,11 @@
                 return e.category === "cardio" && exerciseSelectable(e, allowedEquipment) && !usedNames.has(e.name);
             });
             var count = warmupExerciseCount(mainCount);
-            // Zuerst aus Übungen wählen, die nicht kürzlich dran waren; erst
-            // wenn dieser Pool erschöpft ist, auf kürzlich durchgeführte
-            // zurückgreifen, damit die Aufwärmphase nie kürzer ausfällt.
-            var preferredPool = pool.filter(function (e) { return !wasRecentlyPerformed(e.name); });
-            var fallbackPool = pool.filter(function (e) { return wasRecentlyPerformed(e.name); });
             var picked = [];
-            for (var n = 0; n < count && (preferredPool.length > 0 || fallbackPool.length > 0); n++) {
-                var source = preferredPool.length > 0 ? preferredPool : fallbackPool;
-                var idx = Math.floor(Math.random() * source.length);
-                picked.push(source[idx]);
-                source.splice(idx, 1);
+            for (var n = 0; n < count && pool.length > 0; n++) {
+                var idx = Math.floor(Math.random() * pool.length);
+                picked.push(pool[idx]);
+                pool.splice(idx, 1);
             }
             return picked;
         }
@@ -1426,7 +1449,7 @@
             var blockedCategory = mainCount > 0 ? findEquipmentBlockedCategory(counts, getEnabledEquipment()) : null;
             updateDurationDisplay(blockedCategory ? 0 : estimateDurationMinutesLive());
             if (blockedCategory) {
-                durationMetaEl.innerHTML = "Für „" + CATEGORY_META[blockedCategory].label + "“ ist mit den gewählten Geräten und gesperrten Übungen keine Übung möglich.";
+                durationMetaEl.innerHTML = "Für „" + CATEGORY_META[blockedCategory].label + "“ ist mit den gewählten Geräten, Filtern und gesperrten Übungen keine Übung möglich.";
             } else {
                 durationMetaEl.innerHTML = mainCount > 0
                     ? formatDurationMeta(mainCount, Number(intensityRange.value))
@@ -1449,19 +1472,16 @@
         /* =====================================================================
          * Persistenz (localStorage)
          * ---------------------------------------------------------------------
-         * Drei unabhängige Speicher:
+         * Zwei unabhängige Speicher, beide über die Oberfläche einsehbar (die
+         * Regler/Checkboxen selbst zeigen die gespeicherten Werte, die Liste
+         * der gesperrten Übungen ist über "Gesperrte Übungen" einsehbar) und
+         * gemeinsam über "Alle Daten löschen" komplett entfernbar:
          *   sport.settings         - zuletzt gewählte Regler-/Checkbox-Werte
          *   sport.blockedExercises - dauerhaft gesperrte Übungsnamen (werden
          *                            nie wieder ausgewählt)
-         *   sport.exerciseHistory  - Übungsname -> Zeitstempel der letzten
-         *                            Ausführung; Einträge älter als 14 Tage
-         *                            zählen nicht mehr als "kürzlich
-         *                            durchgeführt" und werden verworfen
          * ===================================================================== */
         var STORAGE_KEY_SETTINGS = "sport.settings";
         var STORAGE_KEY_BLOCKED = "sport.blockedExercises";
-        var STORAGE_KEY_HISTORY = "sport.exerciseHistory";
-        var HISTORY_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
         function loadJson(key, fallback) {
             try {
@@ -1490,6 +1510,7 @@
                 muted: muted,
                 aufwaermen: toggleAufwaermen.checked,
                 cooldown: toggleCooldown.checked,
+                jump: toggleJump.checked,
                 equipment: equipment
             });
         }
@@ -1509,6 +1530,7 @@
             if (s.volume != null) volumeRange.value = s.volume;
             if (s.aufwaermen != null) toggleAufwaermen.checked = s.aufwaermen;
             if (s.cooldown != null) toggleCooldown.checked = s.cooldown;
+            if (s.jump != null) toggleJump.checked = s.jump;
             if (Array.isArray(s.equipment)) {
                 var enabled = new Set(s.equipment);
                 document.querySelectorAll(".equipment-checkbox").forEach(function (cb) {
@@ -1531,51 +1553,21 @@
             blockedCountBadgeEl.textContent = String(blockedExercises.size);
         }
 
-        // Kombiniert Geräte-Verfügbarkeit und dauerhafte Sperrung: nur Übungen,
-        // die beides erfüllen, dürfen überhaupt zur Auswahl stehen.
+        // Löscht alle gespeicherten Daten (Einstellungen + gesperrte Übungen)
+        // auf einmal und lädt die Seite neu, damit alle Regler/Checkboxen
+        // wieder ihre HTML-Standardwerte zeigen statt einzeln zurückgesetzt
+        // werden zu müssen.
+        function resetAllData() {
+            localStorage.removeItem(STORAGE_KEY_SETTINGS);
+            localStorage.removeItem(STORAGE_KEY_BLOCKED);
+            location.reload();
+        }
+
+        // Kombiniert Geräte-Verfügbarkeit, dauerhafte Sperrung und den
+        // Springen/Hüpfen-Filter: nur Übungen, die alles erfüllen, dürfen
+        // überhaupt zur Auswahl stehen.
         function exerciseSelectable(ex, allowedEquipment) {
-            return equipmentAllowed(ex, allowedEquipment) && !blockedExercises.has(ex.name);
-        }
-
-        var exerciseHistory = loadJson(STORAGE_KEY_HISTORY, {});
-
-        // Entfernt Einträge, die älter als 14 Tage sind, aus der Historie.
-        function pruneExerciseHistory() {
-            var cutoff = Date.now() - HISTORY_MAX_AGE_MS;
-            var changed = false;
-            Object.keys(exerciseHistory).forEach(function (name) {
-                if (exerciseHistory[name] < cutoff) {
-                    delete exerciseHistory[name];
-                    changed = true;
-                }
-            });
-            if (changed) saveJson(STORAGE_KEY_HISTORY, exerciseHistory);
-        }
-        pruneExerciseHistory();
-
-        function wasRecentlyPerformed(name) {
-            var ts = exerciseHistory[name];
-            return !!ts && (Date.now() - ts) < HISTORY_MAX_AGE_MS;
-        }
-
-        // Bevorzugt Übungen, die in den letzten 14 Tagen nicht schon dran
-        // waren - fällt auf den vollen Kandidatenpool zurück, falls das alle
-        // Kandidaten ausschließen würde.
-        function preferNotRecentlyPerformed(candidates) {
-            var fresh = candidates.filter(function (e) { return !wasRecentlyPerformed(e.name); });
-            return fresh.length > 0 ? fresh : candidates;
-        }
-
-        // Merkt sich für alle Übungen des aktuellen Trainings (Aufwärmen und
-        // Hauptteil), dass sie jetzt durchgeführt wurden - wird beim Start des
-        // Sport-Modus aufgerufen, um sie künftig bei der Auswahl zu
-        // depriorisieren (siehe preferNotRecentlyPerformed).
-        function recordWorkoutPerformed(workout) {
-            var now = Date.now();
-            workout.exercises.forEach(function (ex) { exerciseHistory[ex.name] = now; });
-            workout.warmup.forEach(function (ex) { exerciseHistory[ex.name] = now; });
-            pruneExerciseHistory();
-            saveJson(STORAGE_KEY_HISTORY, exerciseHistory);
+            return equipmentAllowed(ex, allowedEquipment) && !blockedExercises.has(ex.name) && (!ex.jump || toggleJump.checked);
         }
 
         /* =====================================================================
@@ -1608,7 +1600,7 @@
                 outputEl.hidden = true;
                 sportModeBtn.hidden = true;
                 updateDurationDisplay(0);
-                durationMetaEl.innerHTML = "Für „" + CATEGORY_META[blockedCategory].label + "“ ist mit den gewählten Geräten und gesperrten Übungen keine Übung möglich.";
+                durationMetaEl.innerHTML = "Für „" + CATEGORY_META[blockedCategory].label + "“ ist mit den gewählten Geräten, Filtern und gesperrten Übungen keine Übung möglich.";
                 return;
             }
 
@@ -1682,9 +1674,8 @@
         window.rerollWarmupExercise = rerollWarmupExercise;
 
         function equipmentChipHtml(ex) {
-            if (!ex.equipment || ex.equipment.length === 0) return "";
-            var names = ex.equipment.map(function (code) { return EQUIPMENT_META[code].label; }).join(", ");
-            return "<span class=\"stat-chip stat-chip-equipment\">Benötigt: " + names + "</span>";
+            var names = equipmentLabelList(ex);
+            return names ? "<span class=\"stat-chip stat-chip-equipment\">Benötigt: " + names + "</span>" : "";
         }
 
         // Fasst alle Geräte zusammen, die für das aktuelle Training (Aufwärmen
@@ -1716,6 +1707,7 @@
             if (workout.aufwaermenEnabled) {
                 warmupTimeLabelEl.textContent = "ca. " + warmupMinutesEstimate(workout.exercises.length) + " Min.";
                 warmupListEl.innerHTML = workout.warmup.map(function (ex, idx) {
+                    var equipChip = equipmentChipHtml(ex);
                     return "<li>" +
                         "  <div class=\"warmup-item-head\">" +
                         "    <span><strong>" + ex.name + "</strong> – ca. 45 Sek. lockeres Tempo</span>" +
@@ -1725,6 +1717,7 @@
                         "    </div>" +
                         "  </div>" +
                         "  <div class=\"warmup-desc\">" + ex.description + "</div>" +
+                        (equipChip ? "  <div class=\"exercise-card-stats\">" + equipChip + "</div>" : "") +
                         "</li>";
                 }).join("");
             }
@@ -1983,6 +1976,14 @@
             return "Übung " + (step.exIndex + 1) + " / " + currentWorkout.exercises.length;
         }
 
+        // Geräte-Namen einer Übung als lesbare Liste ("Sportmatte, Wand zum
+        // Anlehnen") oder "" ohne Geräteanforderung - Basis für die
+        // Geräte-Anzeige im Sport-Modus (siehe renderSportStep).
+        function equipmentLabelList(ex) {
+            if (!ex.equipment || ex.equipment.length === 0) return "";
+            return ex.equipment.map(function (code) { return EQUIPMENT_META[code].label; }).join(", ");
+        }
+
         function sportTimedStepHtml(o) {
             return "" +
                 "<div class=\"sport-kicker\" style=\"color:" + o.catColor + "\">" + o.kicker + "</div>" +
@@ -1992,6 +1993,7 @@
                 "<div class=\"sport-timer\" id=\"sportTimerDisplay\">" + formatTime(sportState.remaining) + "</div>" +
                 (o.desc ? "<p class=\"sport-desc\">" + o.desc + "</p>" : "") +
                 (o.muscles ? "<p class=\"sport-muscles\">Muskeln: " + o.muscles + "</p>" : "") +
+                (o.equipment ? "<p class=\"sport-muscles\">Gerät: " + o.equipment + "</p>" : "") +
                 "<div class=\"sport-controls\">" +
                 "  <button type=\"button\" class=\"sport-btn sport-btn-primary\" id=\"sportTimerBtn\" onclick=\"sportToggleTimer()\">▶ Start</button>" +
                 "  <button type=\"button\" class=\"sport-btn sport-btn-secondary\" onclick=\"sportSkipStep()\">Überspringen</button>" +
@@ -2007,6 +2009,7 @@
                 "<div class=\"sport-reps-target\">" + o.reps + "</div>" +
                 (o.desc ? "<p class=\"sport-desc\">" + o.desc + "</p>" : "") +
                 (o.muscles ? "<p class=\"sport-muscles\">Muskeln: " + o.muscles + "</p>" : "") +
+                (o.equipment ? "<p class=\"sport-muscles\">Gerät: " + o.equipment + "</p>" : "") +
                 "<div class=\"sport-controls\">" +
                 "  <button type=\"button\" class=\"sport-btn sport-btn-primary\" onclick=\"sportSkipStep()\">" + o.buttonLabel + "</button>" +
                 "</div>" +
@@ -2064,6 +2067,7 @@
                     subInfo: "Lockeres Tempo",
                     desc: step.exercise.description,
                     muscles: step.exercise.muscles,
+                    equipment: equipmentLabelList(step.exercise),
                     catColor: CATEGORY_META.cardio.color
                 });
             } else if (step.kind === "work-time") {
@@ -2077,6 +2081,7 @@
                     subInfo: remainingSetsText(step.setIndex, step.totalSets),
                     desc: step.exercise.description,
                     muscles: step.exercise.muscles,
+                    equipment: equipmentLabelList(step.exercise),
                     catColor: metaT.color
                 });
             } else if (step.kind === "work-reps") {
@@ -2090,6 +2095,7 @@
                     reps: step.repsMin + "–" + step.repsMax + " Wiederholungen",
                     desc: step.exercise.description,
                     muscles: step.exercise.muscles,
+                    equipment: equipmentLabelList(step.exercise),
                     catColor: metaR.color,
                     buttonLabel: goesToRest ? "Satz erledigt – weiter zur Pause" : "Satz erledigt – Training abschließen",
                     hint: goesToRest ? "Kein Timer für diese Übung – nur die Pause danach lässt sich starten." : "Kein Timer für diese Übung."
@@ -2266,7 +2272,6 @@
 
         function enterSportMode() {
             if (!currentWorkout) return;
-            recordWorkoutPerformed(currentWorkout);
             ensureAudioContext();
             sportState = { steps: buildSportSteps(currentWorkout), index: 0, remaining: 0, running: false, deadline: 0, intervalId: null, lastBeepSecond: null, elapsedStart: null, elapsedIntervalId: null, elapsedTotalSec: 0 };
             sportElapsedTimerEl.hidden = true;
@@ -2320,6 +2325,8 @@
         toggleAufwaermen.addEventListener("change", generateWorkout);
         toggleCooldown.addEventListener("change", handleControlChange);
         toggleCooldown.addEventListener("change", generateWorkout);
+        toggleJump.addEventListener("change", handleControlChange);
+        toggleJump.addEventListener("change", generateWorkout);
         document.querySelectorAll(".equipment-checkbox").forEach(function (cb) {
             cb.addEventListener("change", function () {
                 saveSettings();
@@ -2351,6 +2358,12 @@
         });
         blockedShowBtn.addEventListener("click", showBlockedList);
         blockedExitBtn.addEventListener("click", hideBlockedList);
+        resetDataBtn.addEventListener("click", function () { resetConfirmEl.hidden = false; });
+        resetConfirmNoBtn.addEventListener("click", function () { resetConfirmEl.hidden = true; });
+        resetConfirmYesBtn.addEventListener("click", resetAllData);
+        resetConfirmEl.addEventListener("click", function (e) {
+            if (e.target === resetConfirmEl) resetConfirmEl.hidden = true;
+        });
 
         restoreSettings();
         updateBlockedCountBadge();

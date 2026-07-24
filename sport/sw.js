@@ -9,7 +9,7 @@
  * legt unter dem neuen Namen einen frischen Cache an, activate() räumt danach
  * alle älteren Versionen weg.
  * ========================================================================== */
-var CACHE_VERSION = 'sport-v2';
+var CACHE_VERSION = 'sport-v3';
 
 // Alle Pfade relativ zu diesem Skript (liegt in /sport/), damit sie sowohl auf
 // GitHub Pages als auch bei einem lokalen Server unter jedem Basis-Pfad
