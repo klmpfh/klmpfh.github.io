@@ -570,11 +570,15 @@
                 <input type="date" id="startDateInput">
             </div>
             <div class="input-group">
-                <label for="maxSuggestionsInput">Max. Vorschläge</label>
-                <input type="number" id="maxSuggestionsInput" min="1" max="50" value="5">
+                <label for="endDateInput">Enddatum (optional)</label>
+                <input type="date" id="endDateInput">
+            </div>
+            <div class="input-group">
+                <label for="maxSuggestionsInput">Max. Vorschläge (leer/0 = kein Limit)</label>
+                <input type="number" id="maxSuggestionsInput" min="0" max="500" value="5">
             </div>
         </div>
-        <p class="dropzone-hint">Sucht ab „Startdatum“/„Startzeit ab“ einen komplett freien Block der angegebenen Dauer (Tage + Std:Min) – auch tagesübergreifend.</p>
+        <p class="dropzone-hint">Sucht ab „Startdatum“/„Startzeit ab“ einen komplett freien Block der angegebenen Dauer (Tage + Std:Min) – auch tagesübergreifend. Die Suche stoppt, sobald die Anzahl der Vorschläge oder das Enddatum erreicht ist – mindestens eines von beiden muss angegeben sein.</p>
 
         <div class="weekday-group">
             <label>Wochentage</label>
@@ -619,7 +623,7 @@
     </section>
 
     <p class="footer-note">Hinweis: Zeitzonen in den iCal-Dateien werden vereinfacht als lokale Zeit interpretiert. Sehr komplexe Wiederholungsregeln (z.&nbsp;B. BYSETPOS) werden nicht vollständig unterstützt.</p>
-    <p class="footer-note">Version 1.7</p>
+    <p class="footer-note">Version 1.8</p>
 </div>
 
 <script>
@@ -637,6 +641,7 @@
         durationDaysInput:   document.getElementById('durationDaysInput'),
         durationInput:       document.getElementById('durationInput'),
         startDateInput:      document.getElementById('startDateInput'),
+        endDateInput:        document.getElementById('endDateInput'),
         maxSuggestionsInput: document.getElementById('maxSuggestionsInput'),
         searchBtn:           document.getElementById('searchBtn'),
         searchError:         document.getElementById('searchError'),
@@ -656,7 +661,7 @@
     dom.copyResultsBtn.addEventListener('click', copyResultsToClipboard);
 
     // ── LIVE-ZUSAMMENFASSUNG DER SUCHKRITERIEN ───────────────────────────
-    [dom.startTimeInput, dom.durationDaysInput, dom.durationInput, dom.startDateInput, dom.maxSuggestionsInput]
+    [dom.startTimeInput, dom.durationDaysInput, dom.durationInput, dom.startDateInput, dom.endDateInput, dom.maxSuggestionsInput]
         .forEach(el => el.addEventListener('input', updateSearchSummary));
     document.querySelectorAll('#weekdayCheckboxes input').forEach(cb => cb.addEventListener('change', updateSearchSummary));
 
@@ -1141,7 +1146,7 @@
 
         const startMin = parseTimeToMinutes(dom.startTimeInput.value);
         const durationMin = getTotalDurationMinutes();
-        const maxSuggestions = clampInt(parseInt(dom.maxSuggestionsInput.value, 10) || 0, 1, 50);
+        const { maxSuggestions, hasMaxSuggestions } = getMaxSuggestionsSetting();
         const selectedWeekdays = new Set(
             Array.from(document.querySelectorAll('#weekdayCheckboxes input:checked')).map(cb => parseInt(cb.value, 10))
         );
@@ -1156,9 +1161,15 @@
         const chosenStartDate = parseDateInputValue(dom.startDateInput.value);
         const searchStartDay = chosenStartDate && chosenStartDate.getTime() > startOfDay(now).getTime()
             ? chosenStartDate : startOfDay(now);
-        // Kein Wochen-Limit mehr: sucht offen ab dem Startdatum, bis genug Vorschläge gefunden sind.
-        // MAX_SEARCH_DAYS ist nur ein technisches Sicherheitsnetz gegen Endlos-Suche bei voll belegten Kalendern.
-        const lastDay = addDays(searchStartDay, MAX_SEARCH_DAYS - 1);
+        const chosenEndDate = parseDateInputValue(dom.endDateInput.value);
+
+        if (!hasMaxSuggestions && !chosenEndDate) return showError('Bitte Anzahl der Vorschläge und/oder ein Enddatum angeben.');
+        if (chosenEndDate && chosenEndDate.getTime() < searchStartDay.getTime()) return showError('Das Enddatum darf nicht vor dem Startdatum liegen.');
+
+        // Sucht offen ab dem Startdatum, bis eines der beiden Ziele erreicht ist: Anzahl Vorschläge oder Enddatum.
+        // MAX_SEARCH_DAYS ist zusätzlich ein technisches Sicherheitsnetz gegen Endlos-Suche bei voll belegten Kalendern.
+        const safetyLastDay = addDays(searchStartDay, MAX_SEARCH_DAYS - 1);
+        const lastDay = chosenEndDate && chosenEndDate.getTime() < safetyLastDay.getTime() ? chosenEndDate : safetyLastDay;
         // Fensterende kann über das letzte Suchdatum hinausreichen (mehrtägige Dauer) – Puffer einrechnen
         const rangeEnd = addMinutes(addDays(lastDay, 1), durationMin);
 
@@ -1213,6 +1224,8 @@
             durationMin: durationMin,
             weekdayLabels: weekdayOrder.filter(d => selectedWeekdays.has(d)).map(d => weekdayNames[d]),
             searchStartDate: searchStartDay,
+            searchEndDate: chosenEndDate,
+            maxSuggestions: hasMaxSuggestions ? maxSuggestions : null,
         };
 
         renderResults(suggestions, meta);
@@ -1269,9 +1282,11 @@
             '',
             `**Kalender:** ${meta.calendarNames.length ? meta.calendarNames.join(', ') : '–'}`,
             `**Startdatum:** ${formatDate(meta.searchStartDate)}`,
+            `**Enddatum:** ${meta.searchEndDate ? formatDate(meta.searchEndDate) : '–'}`,
             `**Startzeit ab:** ${meta.startTime} Uhr`,
             `**Dauer:** ${formatDurationWithDays(meta.durationMin)}`,
             `**Wochentage:** ${meta.weekdayLabels.join(', ')}`,
+            `**Max. Vorschläge:** ${meta.maxSuggestions != null ? meta.maxSuggestions : 'kein Limit'}`,
             '',
         ];
         if (suggestions.length === 0) {
@@ -1430,6 +1445,14 @@
         return days * 24 * 60 + parseDuration(dom.durationInput.value);
     }
 
+    /** Liest "Max. Vorschläge": leer oder 0 bedeutet kein Limit (maxSuggestions=Infinity, hasMaxSuggestions=false) */
+    function getMaxSuggestionsSetting() {
+        const raw = dom.maxSuggestionsInput.value.trim();
+        const parsed = raw === '' ? 0 : (parseInt(raw, 10) || 0);
+        if (parsed <= 0) return { maxSuggestions: Infinity, hasMaxSuggestions: false };
+        return { maxSuggestions: clampInt(parsed, 1, 500), hasMaxSuggestions: true };
+    }
+
     /** Minuten → "H:MM" Dauer-String */
     function formatDuration(totalMin) {
         totalMin = Math.round(totalMin);
@@ -1451,7 +1474,7 @@
     function updateSearchSummary() {
         const startTime = dom.startTimeInput.value || '–';
         const durationMin = getTotalDurationMinutes();
-        const maxSuggestions = clampInt(parseInt(dom.maxSuggestionsInput.value, 10) || 0, 1, 50);
+        const { maxSuggestions, hasMaxSuggestions } = getMaxSuggestionsSetting();
         const weekdayOrder = [1, 2, 3, 4, 5, 6, 0]; // Mo…So
         const selectedWeekdays = new Set(
             Array.from(document.querySelectorAll('#weekdayCheckboxes input:checked')).map(cb => parseInt(cb.value, 10))
@@ -1459,14 +1482,20 @@
         const weekdayLabels = weekdayOrder.filter(d => selectedWeekdays.has(d)).map(d => weekdayNames[d]);
         const chosenStartDate = parseDateInputValue(dom.startDateInput.value);
         const startDateLabel = chosenStartDate ? formatDate(chosenStartDate) : formatDate(startOfDay(new Date()));
+        const chosenEndDate = parseDateInputValue(dom.endDateInput.value);
+        const stopLabel = [
+            hasMaxSuggestions ? `${maxSuggestions} Vorschläge` : null,
+            chosenEndDate ? `Enddatum ${formatDate(chosenEndDate)}` : null,
+        ].filter(Boolean).join(' oder ') || 'kein Stopp-Kriterium angegeben';
 
         dom.searchSummary.textContent = `Sucht ab ${startDateLabel}, ${startTime} Uhr einen komplett freien Block von ${formatDurationWithDays(durationMin)}, `
             + `an ${weekdayLabels.length ? weekdayLabels.join('/') : '–'} `
-            + `(max. ${maxSuggestions} Vorschläge).`;
+            + `– stoppt bei: ${stopLabel}.`;
     }
 
     dom.startDateInput.value = toDateInputValue(new Date());
     dom.startDateInput.min = dom.startDateInput.value;
+    dom.endDateInput.min = dom.startDateInput.value;
     updateSearchSummary();
 </script>
 
