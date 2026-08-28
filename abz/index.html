@@ -186,6 +186,63 @@
             margin-right: 4px;
         }
 
+        /* ── Modus-Toggle (manuell / automatische Pflichtpausen) ── */
+        .mode-toggle {
+            position: relative;
+            display: inline-block;
+            width: 38px;
+            height: 21px;
+            flex-shrink: 0;
+        }
+
+        .mode-toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .mode-toggle-slider {
+            position: absolute;
+            inset: 0;
+            cursor: pointer;
+            background-color: var(--border-color);
+            transition: 0.2s;
+            border-radius: 21px;
+        }
+
+        .mode-toggle-slider::before {
+            position: absolute;
+            content: "";
+            height: 15px;
+            width: 15px;
+            left: 3px;
+            bottom: 3px;
+            background-color: #fff;
+            transition: 0.2s;
+            border-radius: 50%;
+        }
+
+        .mode-toggle input:checked + .mode-toggle-slider { background-color: var(--primary); }
+        .mode-toggle input:checked + .mode-toggle-slider::before { transform: translateX(17px); }
+        .mode-toggle input:focus-visible + .mode-toggle-slider { box-shadow: 0 0 0 3px var(--primary-light); }
+
+        .mode-toggle-label {
+            font-size: 13px;
+            font-weight: 600;
+            white-space: nowrap;
+            color: var(--text-muted);
+            transition: color 0.2s;
+        }
+
+        .mode-toggle-label.active {
+            color: var(--primary);
+        }
+
+        .auto-pause-hint {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
         .btn-pause-start,
         .btn-pause-stop,
         .btn-add-pause,
@@ -195,6 +252,13 @@
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
+        }
+
+        .btn-pause-start:disabled,
+        .btn-add-pause:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            pointer-events: none;
         }
 
         .btn-pause-start,
@@ -500,13 +564,25 @@
     <div class="pause-section">
         <div class="pause-controls">
             <span class="pause-controls-label">Pausen</span>
+
+            <span class="mode-toggle-label" id="autoPauseLabelManual">Manuell</span>
+            <label class="mode-toggle" title="Zwischen manueller Pauseneingabe und automatischen Pflichtpausen umschalten">
+                <input type="checkbox" id="autoPauseToggle" onchange="toggleAutoPauseMode()">
+                <span class="mode-toggle-slider"></span>
+            </label>
+            <span class="mode-toggle-label" id="autoPauseLabelAuto">Automatisch</span>
+
             <button id="pauseToggleBtn" onclick="togglePause()" class="btn-pause-start">Pause starten</button>
             <span id="runningPauseDisplay" style="display:none" class="running-pause-info">
                 <span class="running-dot"></span>
                 Läuft seit <span id="runningPauseStartLabel">--:--</span>
                 (<span id="runningPauseDuration">0</span> min)
             </span>
-            <button onclick="toggleAddPauseForm()" class="btn-add-pause">+ Eintragen</button>
+            <button id="addPauseBtn" onclick="toggleAddPauseForm()" class="btn-add-pause">+ Eintragen</button>
+        </div>
+
+        <div id="autoPauseHint" class="auto-pause-hint" style="display:none">
+            Pflichtpausen werden automatisch anhand der Startzeit berechnet: 30 min nach 6h, weitere 15 min nach 9h Arbeitszeit. Manuelle Eingabe ist in diesem Modus deaktiviert.
         </div>
 
         <div id="addPauseForm" class="add-pause-form" style="display:none">
@@ -555,7 +631,7 @@
         </div>
     </div>
 
-    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden. Letzte Aktualisierung: <span id="lastUpdate">–</span> · v<span id="versionNumber">6.8</span></div>
+    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden. Letzte Aktualisierung: <span id="lastUpdate">–</span> · v<span id="versionNumber">6.9</span></div>
 </div>
 
 <script>
@@ -565,6 +641,7 @@
     let addPauseFormVisible= false;
     let editingPauseIndex  = null;   // null = neue Pause, number = Bearbeitung
     let titleStat          = 'percent'; // welcher Stat-Wert im Seitentitel angezeigt wird
+    let autoPauseMode      = false;  // true = Pausen-Eingabe gesperrt, Pflichtpausen werden automatisch berechnet
 
     const titleStatLabels = {
         percent: 'Fortschritt',
@@ -591,6 +668,11 @@
         addPauseConfirmBtn:     document.getElementById('addPauseConfirmBtn'),
         pauseFromInput:         document.getElementById('pauseFromInput'),
         pauseToInput:           document.getElementById('pauseToInput'),
+        addPauseBtn:            document.getElementById('addPauseBtn'),
+        autoPauseToggle:        document.getElementById('autoPauseToggle'),
+        autoPauseLabelManual:   document.getElementById('autoPauseLabelManual'),
+        autoPauseLabelAuto:     document.getElementById('autoPauseLabelAuto'),
+        autoPauseHint:          document.getElementById('autoPauseHint'),
         pauseList:              document.getElementById('pauseList'),
         legalWarnings:          document.getElementById('legalWarnings'),
         statTargetTime:         document.getElementById('statTargetTime'),
@@ -618,6 +700,7 @@
             startTimeInput.value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
         }
         updateStatCardSelection();
+        updatePauseControlsAvailability();
         startTimeInput.focus();
         startTimeInput.select();
         updateTracker();
@@ -698,8 +781,14 @@
             dailyTimeInput.value = min > 0 ? formatDuration(Math.round(min / 5)) : '';
         }
 
+        const autoPauseParam = params.get('autoPause');
+        if (autoPauseParam === '1') {
+            autoPauseMode = true;
+            dom.autoPauseToggle.checked = true;
+        }
+
         const pausesParam = params.get('pauses');
-        if (pausesParam) pauses = parsePausesParam(pausesParam);
+        if (!autoPauseMode && pausesParam) pauses = parsePausesParam(pausesParam);
 
         const titleStatParam = params.get('titleStat');
         if (titleStatParam && titleStatCards[titleStatParam]) titleStat = titleStatParam;
@@ -740,12 +829,66 @@
             daily:     dailyTimeInput.value.trim(),
             weekly:    weeklyTimeInput.value.trim(),
             pauses:    serializePausesParam(),
-            titleStat: titleStat !== 'percent' ? titleStat : ''
+            titleStat: titleStat !== 'percent' ? titleStat : '',
+            autoPause: autoPauseMode ? '1' : ''
         });
         if (qs === lastUrlQuery) return;
         lastUrlQuery = qs;
         const newUrl = window.location.pathname + (qs ? '?' + qs : '');
         history.replaceState(null, '', newUrl);
+    }
+
+    // ── PAUSEN-MODUS (manuell / automatische Pflichtpausen) ─────────────────
+
+    /**
+     * Schaltet zwischen manueller Pauseneingabe und automatisch berechneten Pflichtpausen um.
+     * Beim Wechsel in den Automatik-Modus werden alle manuell eingetragenen Pausen gelöscht und
+     * eine ggf. laufende Pause verworfen – die Pflichtpausen werden ab dann live aus der Startzeit
+     * berechnet, statt in "pauses" gespeichert zu werden.
+     */
+    function toggleAutoPauseMode() {
+        autoPauseMode = dom.autoPauseToggle.checked;
+
+        if (autoPauseMode) {
+            if (runningPauseStart !== null) {
+                runningPauseStart = null;
+                dom.pauseToggleBtn.textContent = 'Pause starten';
+                dom.pauseToggleBtn.className   = 'btn-pause-start';
+                dom.runningPauseDisplay.style.display = 'none';
+            }
+            addPauseFormVisible = false;
+            editingPauseIndex   = null;
+            dom.addPauseForm.style.display = 'none';
+            pauses = [];
+        }
+
+        updatePauseControlsAvailability();
+        updateTracker();
+    }
+
+    /** Sperrt/entsperrt die manuellen Pausen-Bedienelemente je nach Modus */
+    function updatePauseControlsAvailability() {
+        dom.pauseToggleBtn.disabled = autoPauseMode;
+        dom.addPauseBtn.disabled    = autoPauseMode;
+        dom.autoPauseLabelManual.classList.toggle('active', !autoPauseMode);
+        dom.autoPauseLabelAuto.classList.toggle('active', autoPauseMode);
+        dom.autoPauseHint.style.display = autoPauseMode ? 'block' : 'none';
+    }
+
+    /**
+     * Berechnet die gesetzlichen Pflichtpausen relativ zur Startzeit: 30 min nach 6h und weitere
+     * 15 min (insgesamt 45 min) nach 9h Arbeitszeit. Ändert sich die Startzeit, verschieben sich
+     * beide Pausen automatisch mit, da sie bei jedem Update neu aus startMin berechnet werden.
+     */
+    function computeAutoPauses(startMin) {
+        const firstPause = { startMin: startMin + 360, durationMin: 30, isAuto: true };
+
+        const secondStart = computeClockTimeForNetMinutes(
+            startMin, 540, [{ start: firstPause.startMin, end: firstPause.startMin + firstPause.durationMin }]
+        );
+        const secondPause = { startMin: secondStart, durationMin: 15, isAuto: true };
+
+        return [firstPause, secondPause];
     }
 
     // ── PAUSEN-STEUERUNG ──────────────────────────────────────────────────
@@ -764,6 +907,7 @@
     }
 
     function togglePause() {
+        if (autoPauseMode) return;
         const btn     = dom.pauseToggleBtn;
         const display = dom.runningPauseDisplay;
 
@@ -795,6 +939,7 @@
     }
 
     function toggleAddPauseForm() {
+        if (autoPauseMode) return;
         editingPauseIndex   = null;
         addPauseFormVisible = !addPauseFormVisible;
         dom.addPauseForm.style.display = addPauseFormVisible ? 'flex' : 'none';
@@ -845,6 +990,8 @@
      * während der Eingabe/Bearbeitung live aktualisiert werden, bevor bestätigt wird.
      */
     function getEffectivePauses() {
+        if (autoPauseMode) return computeAutoPauses(parseTimeToMinutes(startTimeInput.value));
+
         const draft = getDraftPause();
         if (!draft) return pauses;
 
@@ -903,9 +1050,9 @@
             const endStr   = formatMinutesToTime(endMin);
             const isFuture = p.startMin > currentMinOfDay;
             const cls      = p.isDraft ? 'pause-future' : (isFuture ? 'pause-future' : 'pause-done');
-            const tag      = p.isDraft ? ' <em>(Entwurf)</em>' : (isFuture ? ' <em>(geplant)</em>' : '');
+            const tag      = p.isDraft ? ' <em>(Entwurf)</em>' : (p.isAuto ? ' <em>(Pflichtpause)</em>' : (isFuture ? ' <em>(geplant)</em>' : ''));
 
-            const actions = p.isDraft
+            const actions = (p.isDraft || p.isAuto)
                 ? ''
                 : ` <button class="pause-edit-btn" onclick="editPause(${i})" title="Bearbeiten">✎</button>`
                 + ` <button class="pause-delete-btn" onclick="deletePause(${i})" title="Entfernen">×</button>`;
@@ -936,17 +1083,19 @@
         const container = dom.legalWarnings;
         const warnings  = [];
 
-        warnMarkersAll.forEach(w => {
-            if (!w.active || w.requiredPauseMin === null) return;
-            const missing = Math.ceil(w.requiredPauseMin - elapsedPauseMin);
-            warnings.push(
-                `<div class="warning-banner">`
-                + `<span>&#9888; Bei über ${w.label} Arbeitszeit sind mindestens ${w.requiredPauseMin} min Pause vorgeschrieben. `
-                + `Es fehlen noch <strong>${missing} min</strong>.</span>`
-                + `<button type="button" class="btn-add-missing-pause" onclick="addMissingPause(${w.clockMin}, ${missing})">Pause automatisch eintragen</button>`
-                + `</div>`
-            );
-        });
+        if (!autoPauseMode) {
+            warnMarkersAll.forEach(w => {
+                if (!w.active || w.requiredPauseMin === null) return;
+                const missing = Math.ceil(w.requiredPauseMin - elapsedPauseMin);
+                warnings.push(
+                    `<div class="warning-banner">`
+                    + `<span>&#9888; Bei über ${w.label} Arbeitszeit sind mindestens ${w.requiredPauseMin} min Pause vorgeschrieben. `
+                    + `Es fehlen noch <strong>${missing} min</strong>.</span>`
+                    + `<button type="button" class="btn-add-missing-pause" onclick="addMissingPause(${w.clockMin}, ${missing})">Pause automatisch eintragen</button>`
+                    + `</div>`
+                );
+            });
+        }
 
         if (netWorkMin > 600) {
             warnings.push(`<div class="warning-banner"><span>&#9888; Die gesetzliche Höchstarbeitszeit von 10h pro Tag ist überschritten.</span></div>`);
@@ -957,7 +1106,7 @@
 
     /** Trägt die fehlende Pflichtpause automatisch ein, beginnend zum Zeitpunkt, zu dem die Warnung entstand */
     function addMissingPause(startClockMin, missingMin) {
-        if (!(missingMin > 0)) return;
+        if (autoPauseMode || !(missingMin > 0)) return;
 
         const fromMin = Math.round(startClockMin);
         const toMin   = fromMin + Math.round(missingMin);
