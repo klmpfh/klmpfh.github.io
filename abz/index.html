@@ -446,7 +446,7 @@
         /* ── Stat-Cards ── */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            grid-template-columns: repeat(6, 1fr);
             gap: 16px;
             margin-bottom: 20px;
         }
@@ -582,7 +582,7 @@
         </div>
 
         <div id="autoPauseHint" class="auto-pause-hint" style="display:none">
-            Pflichtpausen werden automatisch anhand der Startzeit berechnet: 30 min nach 6h, weitere 15 min nach 9h Arbeitszeit. Manuelle Eingabe ist in diesem Modus deaktiviert.
+            Fehlende Pflichtpausen werden automatisch ergänzt: insgesamt 30 min bei über 6h, 45 min bei über 9h Arbeitszeit. Alle manuell eingetragenen Pausen werden angerechnet – egal, wann sie liegen.
         </div>
 
         <div id="addPauseForm" class="add-pause-form" style="display:none">
@@ -618,6 +618,10 @@
             <div class="stat-label">Pausen gesamt</div>
             <div class="stat-value muted" id="statPauseTotal">–</div>
         </div>
+        <div class="stat-card" id="statCardPauseElapsed" onclick="selectTitleStat('pauseElapsed')" title="Klicken, um diesen Wert im Seitentitel anzuzeigen">
+            <div class="stat-label">Verstrichene Pausenzeit</div>
+            <div class="stat-value muted" id="statPauseElapsed">–</div>
+        </div>
         <div class="stat-card" id="statCardDiff" onclick="selectTitleStat('diff')" title="Klicken, um diesen Wert im Seitentitel anzuzeigen">
             <div class="stat-label">Rest / Überziehung</div>
             <div class="stat-value" id="statDiff">–</div>
@@ -631,7 +635,7 @@
         </div>
     </div>
 
-    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden. Letzte Aktualisierung: <span id="lastUpdate">–</span> · v<span id="versionNumber">6.9</span></div>
+    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden. Letzte Aktualisierung: <span id="lastUpdate">–</span> · v<span id="versionNumber">6.11</span></div>
 </div>
 
 <script>
@@ -641,13 +645,14 @@
     let addPauseFormVisible= false;
     let editingPauseIndex  = null;   // null = neue Pause, number = Bearbeitung
     let titleStat          = 'percent'; // welcher Stat-Wert im Seitentitel angezeigt wird
-    let autoPauseMode      = false;  // true = Pausen-Eingabe gesperrt, Pflichtpausen werden automatisch berechnet
+    let autoPauseMode      = false;  // true = fehlende Pflichtpausen werden automatisch ergänzt
 
     const titleStatLabels = {
         percent: 'Fortschritt',
         target:  'Zielzeit',
         net:     'Netto-Arbeitszeit',
         pause:   'Pausen gesamt',
+        pauseElapsed: 'Verstrichene Pausenzeit',
         diff:    'Rest / Überziehung'
     };
     const minTimelineDuration = 660; // 11h – Mindestlänge der X-Achse in Minuten, wächst bei Bedarf mit
@@ -678,6 +683,7 @@
         statTargetTime:         document.getElementById('statTargetTime'),
         statNetWork:            document.getElementById('statNetWork'),
         statPauseTotal:         document.getElementById('statPauseTotal'),
+        statPauseElapsed:       document.getElementById('statPauseElapsed'),
         statDiff:               document.getElementById('statDiff'),
         statProgress:           document.getElementById('statProgress'),
         statProgressBar:        document.getElementById('statProgressBar'),
@@ -689,6 +695,7 @@
         target:  document.getElementById('statCardTarget'),
         net:     document.getElementById('statCardNet'),
         pause:   document.getElementById('statCardPause'),
+        pauseElapsed: document.getElementById('statCardPauseElapsed'),
         diff:    document.getElementById('statCardDiff')
     };
 
@@ -727,6 +734,7 @@
 
         if (titleStat === 'net')   { document.title = `${formatDuration(ctx.netWorkMin)} h – ${label}`;  return; }
         if (titleStat === 'pause') { document.title = `${formatDuration(ctx.allPauseMin)} h – ${label}`; return; }
+        if (titleStat === 'pauseElapsed') { document.title = `${formatDuration(ctx.elapsedPauseMin)} h – ${label}`; return; }
 
         if (!ctx.hasTarget) { document.title = 'Arbeitszeit-Tracker'; return; }
 
@@ -738,6 +746,42 @@
             document.title = `${ctx.progressUncapped.toFixed(1)} % – ${label}`;
         }
     }
+
+    /**
+     * Native Zeitfelder lassen beim Blättern mit den Pfeiltasten nur die Minuten überlaufen
+     * (59 → 00 bzw. 00 → 59), ohne die Stunde mitzuziehen. Dieser Handler ergänzt den Übertrag.
+     * Muss vor den übrigen 'input'-Listenern registriert werden, damit diese bereits den korrigierten Wert sehen.
+     */
+    function enableMinuteCarry(input) {
+        let lastKey   = null;
+        let prevValue = input.value;
+
+        input.addEventListener('keydown', e => {
+            lastKey   = e.key;
+            prevValue = input.value;
+        });
+        input.addEventListener('keyup', () => { lastKey = null; });
+
+        input.addEventListener('input', () => {
+            if (lastKey !== 'ArrowUp' && lastKey !== 'ArrowDown') return;
+            if (!prevValue || !input.value) return;
+
+            const [prevH, prevM] = prevValue.split(':').map(Number);
+            const [newH,  newM]  = input.value.split(':').map(Number);
+            if (prevH !== newH) return; // Stunde wurde selbst geändert
+
+            let delta = 0;
+            if (lastKey === 'ArrowUp'   && prevM === 59 && newM === 0)  delta = 1;
+            if (lastKey === 'ArrowDown' && prevM === 0  && newM === 59) delta = -1;
+            if (delta) {
+                const h = (newH + delta + 24) % 24;
+                input.value = `${String(h).padStart(2,'0')}:${String(newM).padStart(2,'0')}`;
+            }
+            prevValue = input.value; // für gedrückt gehaltene Taste (Auto-Repeat)
+        });
+    }
+
+    [startTimeInput, dom.pauseFromInput, dom.pauseToInput].forEach(enableMinuteCarry);
 
     // Eingabe-Events
     startTimeInput.addEventListener('input', updateTracker);
@@ -788,7 +832,7 @@
         }
 
         const pausesParam = params.get('pauses');
-        if (!autoPauseMode && pausesParam) pauses = parsePausesParam(pausesParam);
+        if (pausesParam) pauses = parsePausesParam(pausesParam);
 
         const titleStatParam = params.get('titleStat');
         if (titleStatParam && titleStatCards[titleStatParam]) titleStat = titleStatParam;
@@ -841,54 +885,59 @@
     // ── PAUSEN-MODUS (manuell / automatische Pflichtpausen) ─────────────────
 
     /**
-     * Schaltet zwischen manueller Pauseneingabe und automatisch berechneten Pflichtpausen um.
-     * Beim Wechsel in den Automatik-Modus werden alle manuell eingetragenen Pausen gelöscht und
-     * eine ggf. laufende Pause verworfen – die Pflichtpausen werden ab dann live aus der Startzeit
-     * berechnet, statt in "pauses" gespeichert zu werden.
+     * Schaltet zwischen rein manueller Pauseneingabe und der automatischen Ergänzung von Pflichtpausen um.
+     * Manuelle Pausen bleiben in beiden Modi erhalten; im Automatik-Modus werden nur die noch fehlenden
+     * Pflichtpausen-Minuten zusätzlich eingeplant.
      */
     function toggleAutoPauseMode() {
         autoPauseMode = dom.autoPauseToggle.checked;
-
-        if (autoPauseMode) {
-            if (runningPauseStart !== null) {
-                runningPauseStart = null;
-                dom.pauseToggleBtn.textContent = 'Pause starten';
-                dom.pauseToggleBtn.className   = 'btn-pause-start';
-                dom.runningPauseDisplay.style.display = 'none';
-            }
-            addPauseFormVisible = false;
-            editingPauseIndex   = null;
-            dom.addPauseForm.style.display = 'none';
-            pauses = [];
-        }
-
         updatePauseControlsAvailability();
         updateTracker();
     }
 
-    /** Sperrt/entsperrt die manuellen Pausen-Bedienelemente je nach Modus */
+    /** Hebt den aktiven Modus hervor und blendet den Hinweis zum Automatik-Modus ein/aus */
     function updatePauseControlsAvailability() {
-        dom.pauseToggleBtn.disabled = autoPauseMode;
-        dom.addPauseBtn.disabled    = autoPauseMode;
         dom.autoPauseLabelManual.classList.toggle('active', !autoPauseMode);
         dom.autoPauseLabelAuto.classList.toggle('active', autoPauseMode);
         dom.autoPauseHint.style.display = autoPauseMode ? 'block' : 'none';
     }
 
     /**
-     * Berechnet die gesetzlichen Pflichtpausen relativ zur Startzeit: 30 min nach 6h und weitere
-     * 15 min (insgesamt 45 min) nach 9h Arbeitszeit. Ändert sich die Startzeit, verschieben sich
-     * beide Pausen automatisch mit, da sie bei jedem Update neu aus startMin berechnet werden.
+     * Ergänzt die Pausen des Tages auf insgesamt mindestens requiredPauseMin. Wann die vorhandenen
+     * Pausen liegen, spielt keine Rolle – es zählt nur die Gesamtsumme. Fehlende Minuten werden ab
+     * Erreichen von thresholdMin Netto-Arbeitsminuten eingeplant; dort bereits liegende Pausen werden
+     * übersprungen statt überlagert.
      */
-    function computeAutoPauses(startMin) {
-        const firstPause = { startMin: startMin + 360, durationMin: 30, isAuto: true };
+    function fillPauseDeficit(startMin, thresholdMin, requiredPauseMin, intervals) {
+        const added = [];
 
-        const secondStart = computeClockTimeForNetMinutes(
-            startMin, 540, [{ start: firstPause.startMin, end: firstPause.startMin + firstPause.durationMin }]
-        );
-        const secondPause = { startMin: secondStart, durationMin: 15, isAuto: true };
+        for (let guard = 0; guard < 10; guard++) {
+            const merged  = mergePauseIntervals(intervals, startMin);
+            const deficit = requiredPauseMin - merged.reduce((sum, iv) => sum + iv.end - iv.start, 0);
+            if (deficit <= 0) break;
 
-        return [firstPause, secondPause];
+            let t = computeClockTimeForNetMinutes(startMin, thresholdMin, intervals);
+            const current = merged.find(iv => iv.start <= t && t < iv.end);
+            if (current) t = current.end;
+
+            const next        = merged.find(iv => iv.start > t);
+            const durationMin = next ? Math.min(deficit, next.start - t) : deficit;
+            added.push({ startMin: t, durationMin, isAuto: true });
+            intervals = [...intervals, { start: t, end: t + durationMin }];
+        }
+        return added;
+    }
+
+    /**
+     * Berechnet die gesetzlichen Pflichtpausen (30 min nach 6h, insgesamt 45 min nach 9h Arbeitszeit),
+     * soweit sie nicht schon durch manuelle Pausen abgedeckt sind. Wird bei jedem Update neu berechnet,
+     * verschiebt sich also mit Startzeit und manuellen Pausen.
+     */
+    function computeAutoPauses(startMin, manualIntervals) {
+        const toInterval = p => ({ start: p.startMin, end: p.startMin + p.durationMin });
+        const first  = fillPauseDeficit(startMin, 360, 30, manualIntervals);
+        const second = fillPauseDeficit(startMin, 540, 45, [...manualIntervals, ...first.map(toInterval)]);
+        return [...first, ...second];
     }
 
     // ── PAUSEN-STEUERUNG ──────────────────────────────────────────────────
@@ -907,7 +956,6 @@
     }
 
     function togglePause() {
-        if (autoPauseMode) return;
         const btn     = dom.pauseToggleBtn;
         const display = dom.runningPauseDisplay;
 
@@ -939,7 +987,6 @@
     }
 
     function toggleAddPauseForm() {
-        if (autoPauseMode) return;
         editingPauseIndex   = null;
         addPauseFormVisible = !addPauseFormVisible;
         dom.addPauseForm.style.display = addPauseFormVisible ? 'flex' : 'none';
@@ -989,16 +1036,19 @@
      * Pausenliste inkl. der gerade im Formular eingegebenen Pause, damit Werte und Grafiken schon
      * während der Eingabe/Bearbeitung live aktualisiert werden, bevor bestätigt wird.
      */
-    function getEffectivePauses() {
-        if (autoPauseMode) return computeAutoPauses(parseTimeToMinutes(startTimeInput.value));
-
+    function getEffectivePauses(currentMinOfDay) {
         const draft = getDraftPause();
-        if (!draft) return pauses;
-
-        if (editingPauseIndex !== null) {
-            return pauses.map((p, i) => i === editingPauseIndex ? { ...draft, isDraft: true } : p);
+        let manual  = pauses;
+        if (draft) {
+            manual = editingPauseIndex !== null
+                ? pauses.map((p, i) => i === editingPauseIndex ? { ...draft, isDraft: true } : p)
+                : [...pauses, { ...draft, isDraft: true }];
         }
-        return [...pauses, { ...draft, isDraft: true }];
+        if (!autoPauseMode) return manual;
+
+        // Pflichtpausen hinten anhängen, damit die Indizes der manuellen Pausen (Bearbeiten/Löschen) gleich bleiben
+        const startMin = parseTimeToMinutes(startTimeInput.value);
+        return [...manual, ...computeAutoPauses(startMin, buildPauseIntervals(currentMinOfDay, manual))];
     }
 
     function addPauseFromForm() {
@@ -1079,14 +1129,14 @@
      * warnMarkersAll liefert je Schwelle auch die Uhrzeit (clockMin), zu der die Pflichtpause fällig
      * wurde – darüber lässt sich die fehlende Pause per Knopfdruck exakt ab diesem Zeitpunkt eintragen.
      */
-    function renderWarnings(netWorkMin, elapsedPauseMin, warnMarkersAll) {
+    function renderWarnings(netWorkMin, allPauseMin, warnMarkersAll) {
         const container = dom.legalWarnings;
         const warnings  = [];
 
         if (!autoPauseMode) {
             warnMarkersAll.forEach(w => {
                 if (!w.active || w.requiredPauseMin === null) return;
-                const missing = Math.ceil(w.requiredPauseMin - elapsedPauseMin);
+                const missing = Math.ceil(w.requiredPauseMin - allPauseMin);
                 warnings.push(
                     `<div class="warning-banner">`
                     + `<span>&#9888; Bei über ${w.label} Arbeitszeit sind mindestens ${w.requiredPauseMin} min Pause vorgeschrieben. `
@@ -1182,7 +1232,7 @@
         const targetWorkMin = parseDuration(dailyTimeInput.value); // Netto-Ziel
 
         // Pausenliste inkl. eines gerade im Formular eingegebenen Entwurfs (Live-Vorschau)
-        const effectivePauses = getEffectivePauses();
+        const effectivePauses = getEffectivePauses(currentMinOfDay);
 
         // Vergangene Zeit seit Arbeitsbeginn (Uhr-Minuten)
         let elapsedMin = currentMinOfDay - startMin;
@@ -1223,6 +1273,9 @@
         dom.statPauseTotal.textContent = formatDuration(allPauseMin) + ' h';
         dom.statPauseTotal.className   = 'stat-value muted';
 
+        dom.statPauseElapsed.textContent = formatDuration(elapsedPauseMin) + ' h';
+        dom.statPauseElapsed.className   = 'stat-value muted';
+
         const hasTarget = targetWorkMin > 0 && !!startTimeInput.value;
         let targetEndMin = null;
 
@@ -1242,7 +1295,7 @@
             dom.statProgress.className   = 'stat-value';
             dom.statProgressBar.style.width = `${progressCapped}%`;
 
-            updateTitle({ hasTarget, netWorkMin, allPauseMin, targetEndMin, remaining, progressUncapped });
+            updateTitle({ hasTarget, netWorkMin, allPauseMin, elapsedPauseMin, targetEndMin, remaining, progressUncapped });
         } else {
             dom.statTargetTime.textContent = '–';
             dom.statTargetTime.className   = 'stat-value muted';
@@ -1251,20 +1304,19 @@
             dom.statProgress.textContent   = '–';
             dom.statProgress.className     = 'stat-value muted';
             dom.statProgressBar.style.width = '0%';
-            updateTitle({ hasTarget, netWorkMin, allPauseMin });
+            updateTitle({ hasTarget, netWorkMin, allPauseMin, elapsedPauseMin });
         }
 
         // Warnschwellen (6h/9h/10h) als Uhrzeit-Marker für den Zeitstrahl, mit Bezug zum "Jetzt"-Zeiger.
-        // Pflichtpausen-Schwellen (6h/9h) werden ausgeblendet, sobald bis zu diesem Zeitpunkt bereits
-        // genug Pause genommen wurde/geplant ist – die Regel würde zu diesem Zeitpunkt dann nicht mehr greifen.
+        // Pflichtpausen-Schwellen (6h/9h) werden ausgeblendet, sobald die Pausen des Tages insgesamt
+        // (genommen + geplant) ausreichen – wann die Pause liegt, ist für die Regel unerheblich.
         const warnMarkersAll = [
-            { thresholdMin: 360, label: '6h', requiredPauseMin: 30,   active: netWorkMin > 360 && elapsedPauseMin < 30 },
-            { thresholdMin: 540, label: '9h', requiredPauseMin: 45,   active: netWorkMin > 540 && elapsedPauseMin < 45 },
+            { thresholdMin: 360, label: '6h', requiredPauseMin: 30,   active: netWorkMin > 360 && allPauseMin < 30 },
+            { thresholdMin: 540, label: '9h', requiredPauseMin: 45,   active: netWorkMin > 540 && allPauseMin < 45 },
             { thresholdMin: 600, label: '10h', requiredPauseMin: null, active: netWorkMin > 600 }
         ].map(w => {
-            const clockMin              = computeClockTimeForNetMinutes(startMin, w.thresholdMin, pauseIntervals);
-            const pauseElapsedAtMarker  = clockMin - startMin - w.thresholdMin;
-            const alreadySatisfied      = w.requiredPauseMin !== null && pauseElapsedAtMarker >= w.requiredPauseMin;
+            const clockMin         = computeClockTimeForNetMinutes(startMin, w.thresholdMin, pauseIntervals);
+            const alreadySatisfied = w.requiredPauseMin !== null && allPauseMin >= w.requiredPauseMin;
             return { clockMin, label: w.label, requiredPauseMin: w.requiredPauseMin, active: w.active, visible: !alreadySatisfied };
         });
         const warnMarkers = warnMarkersAll.filter(w => w.visible);
@@ -1280,7 +1332,7 @@
         axisMaxDuration = Math.ceil((axisMaxDuration + 15) / 60) * 60; // aufrunden + etwas Platz am rechten Rand
 
         renderPauseList(currentMinOfDay, effectivePauses, runningPauseMin);
-        renderWarnings(netWorkMin, elapsedPauseMin, warnMarkersAll);
+        renderWarnings(netWorkMin, allPauseMin, warnMarkersAll);
         drawTimeline(elapsedMin, startMin, currentMinOfDay, runningPauseMin, targetEndMin, warnMarkers, effectivePauses, axisMaxDuration);
         updateUrlParams();
 
