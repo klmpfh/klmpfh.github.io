@@ -99,8 +99,17 @@
             box-shadow: 0 0 0 3px var(--primary-light);
         }
 
-        .duration-input.invalid {
+        .duration-input.invalid,
+        .timeline-range input.invalid {
             border-color: var(--danger);
+        }
+
+        /* Zeitstrahl-Ausschnitt: kleinere Felder als die Haupteingaben */
+        .timeline-range input[type="time"] {
+            width: auto;
+            padding: 5px 10px;
+            font-size: 15px;
+            font-weight: 500;
         }
 
         /* Arbeitszeit-Eingaben */
@@ -425,6 +434,13 @@
         }
         .btn-add-missing-pause:hover { opacity: 0.85; }
 
+        /* Kleiner Hinweis unter dem Zeitstrahl, wenn Start/Ziel/Jetzt außerhalb des Ausschnitts liegen */
+        .timeline-range-warning {
+            margin-top: 8px;
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+
         /* ── Timeline ── */
         .timeline-container {
             position: relative;
@@ -445,18 +461,20 @@
 
         /* ── Stat-Cards ── */
         .stats-grid {
+            --stat-cols: 6;
             display: grid;
-            grid-template-columns: repeat(6, 1fr);
+            grid-template-columns: repeat(var(--stat-cols), 1fr);
             gap: 16px;
             margin-bottom: 20px;
+            container-type: inline-size; /* für die Schriftgröße der Werte (cqi) */
         }
 
         @media (max-width: 900px) {
-            .stats-grid { grid-template-columns: repeat(3, 1fr); }
+            .stats-grid { --stat-cols: 3; }
         }
 
         @media (max-width: 640px) {
-            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .stats-grid { --stat-cols: 2; }
         }
 
         .stat-card {
@@ -468,6 +486,12 @@
             text-align: center;
             cursor: pointer;
             transition: border-color 0.15s, background 0.15s;
+            /* Subgrid: Label-, Wert- und Balkenzeile über alle Kacheln einer Reihe gleich hoch,
+               auch wenn ein Label umbricht */
+            display: grid;
+            grid-row: span 3;
+            grid-template-rows: subgrid;
+            row-gap: 0;
         }
 
         .stat-card:hover {
@@ -486,10 +510,14 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
             margin-bottom: 8px;
+            align-self: center;
         }
 
         .stat-value {
-            font-size: 28px;
+            /* Nie umbrechen: Schrift schrumpft so weit, dass 7 Monospace-Zeichen („10:23 h“, „204.8 %“)
+               in eine Kachel passen. Kachel-Innenbreite = Spaltenbreite − 2×16px Padding − 2×2px Rand. */
+            font-size: min(28px, calc(((100cqi - (var(--stat-cols) - 1) * 16px) / var(--stat-cols) - 36px) / 4.4));
+            white-space: nowrap;
             font-weight: 700;
             font-family: monospace;
             color: var(--text-color);
@@ -498,7 +526,7 @@
 
         .stat-value.pos { color: var(--danger); }
         .stat-value.neg { color: var(--text-muted); }
-        .stat-value.muted { color: var(--text-muted); font-size: 22px; }
+        .stat-value.muted { color: var(--text-muted); }
 
         .stat-progress-bar {
             margin-top: 8px;
@@ -558,6 +586,22 @@
             </div>
             <span class="work-inputs-hint">Format: Stunden:Minuten&ensp;(z.&nbsp;B. 7:36 oder 38:00)</span>
         </div>
+
+        <div class="work-inputs-divider"></div>
+
+        <div class="input-block timeline-range">
+            <div class="linked-fields">
+                <div class="input-group">
+                    <label for="timelineFrom">Zeitstrahl von</label>
+                    <input type="time" id="timelineFrom">
+                </div>
+                <div class="input-group">
+                    <label for="timelineTo">bis</label>
+                    <input type="time" id="timelineTo">
+                </div>
+            </div>
+            <span class="work-inputs-hint">Leer = automatisch ab Startzeit</span>
+        </div>
     </div>
 
     <!-- Pausen -->
@@ -602,6 +646,10 @@
     <!-- Timeline -->
     <div class="timeline-container">
         <svg class="timeline-svg" id="timelineSvg"></svg>
+        <div id="timelineRangeWarning" class="warning-banner timeline-range-warning" style="display:none">
+            <span>&#9888; Außerhalb des sichtbaren Zeitstrahls: <strong id="timelineRangeWarningText"></strong></span>
+            <button type="button" class="btn-add-missing-pause" onclick="applyTimelineFix()">Zeitstrahl erweitern</button>
+        </div>
     </div>
 
     <!-- Ergebnisse -->
@@ -635,7 +683,7 @@
         </div>
     </div>
 
-    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden. Letzte Aktualisierung: <span id="lastUpdate">–</span> · v<span id="versionNumber">6.11</span></div>
+    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden. Letzte Aktualisierung: <span id="lastUpdate">–</span> · v<span id="versionNumber">6.12</span></div>
 </div>
 
 <script>
@@ -656,12 +704,18 @@
         diff:    'Rest / Überziehung'
     };
     const minTimelineDuration = 660; // 11h – Mindestlänge der X-Achse in Minuten, wächst bei Bedarf mit
+    // Standard-Uhrzeit-Ausschnitt der X-Achse (Felder „Zeitstrahl von/bis“). Leeres Feld → Achse
+    // beginnt bei der Startzeit bzw. wächst dynamisch (siehe minTimelineDuration).
+    const defaultTimelineFrom = '06:30';
+    const defaultTimelineTo   = '20:00';
 
     // ── DOM (einmalig auflösen statt bei jedem Update neu zu suchen) ───────
-    const startTimeInput  = document.getElementById('startTime');
-    const dailyTimeInput  = document.getElementById('dailyTime');
-    const weeklyTimeInput = document.getElementById('weeklyTime');
-    const svg             = document.getElementById('timelineSvg');
+    const startTimeInput    = document.getElementById('startTime');
+    const dailyTimeInput    = document.getElementById('dailyTime');
+    const weeklyTimeInput   = document.getElementById('weeklyTime');
+    const timelineFromInput = document.getElementById('timelineFrom');
+    const timelineToInput   = document.getElementById('timelineTo');
+    const svg               = document.getElementById('timelineSvg');
 
     const dom = {
         pauseToggleBtn:         document.getElementById('pauseToggleBtn'),
@@ -688,6 +742,8 @@
         statProgress:           document.getElementById('statProgress'),
         statProgressBar:        document.getElementById('statProgressBar'),
         lastUpdate:             document.getElementById('lastUpdate'),
+        timelineRangeWarning:     document.getElementById('timelineRangeWarning'),
+        timelineRangeWarningText: document.getElementById('timelineRangeWarningText'),
     };
 
     const titleStatCards = {
@@ -701,7 +757,10 @@
 
     // ── INITIALISIERUNG ───────────────────────────────────────────────────
     window.addEventListener('DOMContentLoaded', () => {
+        timelineFromInput.value = defaultTimelineFrom;
+        timelineToInput.value   = defaultTimelineTo;
         loadFromUrlParams();
+        validateTimelineRange();
         if (!startTimeInput.value) {
             const now = new Date();
             startTimeInput.value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
@@ -781,7 +840,7 @@
         });
     }
 
-    [startTimeInput, dom.pauseFromInput, dom.pauseToInput].forEach(enableMinuteCarry);
+    [startTimeInput, dom.pauseFromInput, dom.pauseToInput, timelineFromInput, timelineToInput].forEach(enableMinuteCarry);
 
     // Eingabe-Events
     startTimeInput.addEventListener('input', updateTracker);
@@ -803,8 +862,62 @@
         updateTracker();
     });
 
+    [timelineFromInput, timelineToInput].forEach(input => input.addEventListener('input', () => {
+        validateTimelineRange();
+        updateTracker();
+    }));
+
     function markValid(input, valid) {
         input.classList.toggle('invalid', !valid);
+    }
+
+    /** Zeitstrahl-Ausschnitt als Minuten ab Mitternacht; leeres Feld → null. „bis 23:59“ zählt als
+     *  24 Uhr, weil ein Zeitfeld kein 24:00 kennt – so erscheint auch die 24-Uhr-Markierung. */
+    function readTimelineRange() {
+        const to = timelineToInput.value ? parseTimeToMinutes(timelineToInput.value) : null;
+        return {
+            from: timelineFromInput.value ? parseTimeToMinutes(timelineFromInput.value) : null,
+            to:   to === 1439 ? 1440 : to
+        };
+    }
+
+    /** Markiert die Zeitstrahl-Felder rot, wenn „bis“ nicht nach „von“ liegt (Achse fällt dann auf automatisch zurück) */
+    function validateTimelineRange() {
+        const { from, to } = readTimelineRange();
+        const valid = from === null || to === null || to > from;
+        markValid(timelineFromInput, valid);
+        markValid(timelineToInput, valid);
+    }
+
+    /**
+     * Zeigt einen Hinweis, wenn Startzeit, Tagesziel oder aktuelle Zeit außerhalb des eingestellten
+     * Ausschnitts liegen (Werte nach Mitternacht zählen als Tagesende).
+     */
+    function updateTimelineRangeWarning(startMin, targetEndMin, nowMin) {
+        const { from, to } = readTimelineRange();
+        const outside = [];
+
+        // Leere Seite = automatisch, ungültiger Bereich = komplett automatisch → nichts kann herausfallen
+        if (startTimeInput.value && !(from !== null && to !== null && to <= from)) {
+            const check = (label, clockMin) => {
+                const m = Math.min(clockMin, 1440);
+                if ((from !== null && m < from) || (to !== null && m > to)) outside.push(label);
+            };
+            check('Startzeit', startMin);
+            if (targetEndMin !== null) check('Tagesziel', targetEndMin);
+            check('aktuelle Zeit', nowMin);
+        }
+
+        dom.timelineRangeWarning.style.display = outside.length ? '' : 'none';
+        dom.timelineRangeWarningText.textContent = outside.join(', ');
+    }
+
+    /** Setzt den Zeitstrahl auf den ganzen Tag (0–24 Uhr; „23:59“ im Feld gilt als 24 Uhr) */
+    function applyTimelineFix() {
+        timelineFromInput.value = '00:00';
+        timelineToInput.value   = '23:59';
+        validateTimelineRange();
+        updateTracker();
     }
 
     // ── URL-PARAMETER (Tages-/Wochenarbeitszeit & Pausen als Link merken) ───
@@ -836,6 +949,14 @@
 
         const titleStatParam = params.get('titleStat');
         if (titleStatParam && titleStatCards[titleStatParam]) titleStat = titleStatParam;
+
+        // "HH:MM-HH:MM"; eine leere Seite (z. B. "-20:00") bedeutet „automatisch“
+        const timelineParam = params.get('timeline');
+        if (timelineParam !== null) {
+            const [from = '', to = ''] = timelineParam.split('-');
+            timelineFromInput.value = /^\d{1,2}:\d{2}$/.test(from) ? from.padStart(5, '0') : '';
+            timelineToInput.value   = /^\d{1,2}:\d{2}$/.test(to)   ? to.padStart(5, '0')   : '';
+        }
     }
 
     /** "HH:MM-HH:MM,HH:MM-HH:MM" → [{ startMin, durationMin }] */
@@ -869,12 +990,16 @@
     let lastUrlQuery = null;
 
     function updateUrlParams() {
+        const timelineFrom      = timelineFromInput.value;
+        const timelineTo        = timelineToInput.value;
+        const isDefaultTimeline = timelineFrom === defaultTimelineFrom && timelineTo === defaultTimelineTo;
         const qs = buildQueryString({
             daily:     dailyTimeInput.value.trim(),
             weekly:    weeklyTimeInput.value.trim(),
             pauses:    serializePausesParam(),
             titleStat: titleStat !== 'percent' ? titleStat : '',
-            autoPause: autoPauseMode ? '1' : ''
+            autoPause: autoPauseMode ? '1' : '',
+            timeline:  isDefaultTimeline ? '' : `${timelineFrom}-${timelineTo}`
         });
         if (qs === lastUrlQuery) return;
         lastUrlQuery = qs;
@@ -1334,6 +1459,7 @@
         renderPauseList(currentMinOfDay, effectivePauses, runningPauseMin);
         renderWarnings(netWorkMin, allPauseMin, warnMarkersAll);
         drawTimeline(elapsedMin, startMin, currentMinOfDay, runningPauseMin, targetEndMin, warnMarkers, effectivePauses, axisMaxDuration);
+        updateTimelineRangeWarning(startMin, targetEndMin, startMin + elapsedMin);
         updateUrlParams();
 
         dom.lastUpdate.textContent =
@@ -1360,8 +1486,16 @@
         const barY         = 40;
         const barHeight    = 24;
 
+        // Sichtbarer Achsenbereich, relativ zur Startzeit (alle Aufrufer von getX rechnen in Minuten ab Start)
+        const range      = readTimelineRange();
+        let axisStartMin = (range.from ?? startMinOfDay) - startMinOfDay;
+        let axisEndMin   = (range.to ?? startMinOfDay + maxDuration) - startMinOfDay;
+        if (axisEndMin <= axisStartMin) { axisStartMin = 0; axisEndMin = maxDuration; } // ungültig → automatisch
+        const axisSpan     = axisEndMin - axisStartMin;
+        const inAxis       = m => m >= axisStartMin && m <= axisEndMin;
+
         function getX(minutes) {
-            return paddingLeft + (Math.min(Math.max(minutes, 0), maxDuration) / maxDuration) * chartWidth;
+            return paddingLeft + ((Math.min(Math.max(minutes, axisStartMin), axisEndMin) - axisStartMin) / axisSpan) * chartWidth;
         }
 
         svg.innerHTML = '';
@@ -1370,11 +1504,12 @@
         svg.appendChild(svgEl('rect', { x: paddingLeft, y: barY, width: chartWidth, height: barHeight, fill: border, rx: 4 }));
 
         // 2. Fortschrittsbalken (verstrichene Uhr-Zeit)
+        const startX   = getX(0);
         const elapsedX = getX(elapsedMin);
-        if (elapsedX > paddingLeft) {
+        if (elapsedX > startX) {
             svg.appendChild(svgEl('rect', {
-                x: paddingLeft, y: barY + 2,
-                width: Math.min(elapsedX - paddingLeft, chartWidth),
+                x: startX, y: barY + 2,
+                width: elapsedX - startX,
                 height: barHeight - 4,
                 fill: themeColor('--theme-success'), opacity: 0.85, rx: 2
             }));
@@ -1383,8 +1518,8 @@
         // 3. Pausenblöcke
         pausesList.forEach(p => {
             const offsetMin = p.startMin - startMinOfDay;
-            if (offsetMin > maxDuration || offsetMin + p.durationMin < 0) return;
-            const pX1      = getX(Math.max(0, offsetMin));
+            if (offsetMin > axisEndMin || offsetMin + p.durationMin < axisStartMin) return;
+            const pX1      = getX(offsetMin);
             const pX2      = getX(offsetMin + p.durationMin);
             const isFuture = p.startMin > currentMinOfDay;
             svg.appendChild(svgEl('rect', {
@@ -1408,18 +1543,22 @@
             }
         }
 
-        // 4. X-Achse
-        const maxHours = Math.floor(maxDuration / 60);
-        for (let h = 0; h <= maxHours; h++) {
-            const tX  = getX(h * 60);
+        // 4. X-Achse (volle Uhrzeit-Stunden; Beschriftung wird bei wenig Platz ausgedünnt)
+        const firstHour  = Math.ceil((startMinOfDay + axisStartMin) / 60);
+        const lastHour   = Math.floor((startMinOfDay + axisEndMin) / 60);
+        const pxPerHour  = chartWidth * 60 / axisSpan;
+        const labelEvery = pxPerHour >= 38 ? 1 : pxPerHour >= 19 ? 2 : 3;
+        for (let h = firstHour; h <= lastHour; h++) {
+            const tX = getX(h * 60 - startMinOfDay);
             svg.appendChild(svgEl('line', { x1: tX, y1: barY - 5, x2: tX, y2: barY, stroke: border, 'stroke-width': 1.5 }));
+            if (h % labelEvery !== 0) continue;
             const txt = svgEl('text', { x: tX, y: barY - 9, 'text-anchor': 'middle', 'font-size': '11px', fill: textMuted, 'font-weight': 500 });
-            txt.textContent = `${h}h`;
+            txt.textContent = `${h}:00`;
             svg.appendChild(txt);
         }
 
         // 5. Zielmarker (nur wenn Tagesziel eingegeben)
-        if (targetEndMin !== null && startMinOfDay > 0) {
+        if (targetEndMin !== null && startMinOfDay > 0 && inAxis(targetEndMin - startMinOfDay)) {
             const offsetMin = targetEndMin - startMinOfDay;
             const mX        = getX(offsetMin);
             const labelTime = formatMinutesToTime(targetEndMin);
@@ -1442,36 +1581,40 @@
         if (startMinOfDay > 0 && warnMarkers) {
             warnMarkers.forEach(w => {
                 const offsetMin = w.clockMin - startMinOfDay;
-                if (offsetMin < 0 || offsetMin > maxDuration) return;
+                if (!inAxis(offsetMin)) return;
                 const wX    = getX(offsetMin);
-                const color = w.active ? warningColor : border;
+                // Noch nicht überschritten: gleiche Warnfarbe, aber gestrichelt und etwas zurückgenommen
+                const color   = warningColor;
+                const opacity = w.active ? 1 : 0.75;
 
                 svg.appendChild(svgEl('line', {
                     x1: wX, y1: barY - 18, x2: wX, y2: barY,
-                    stroke: color, 'stroke-width': w.active ? 2 : 1.5,
-                    'stroke-dasharray': w.active ? '0' : '2,2'
+                    stroke: color, 'stroke-width': 2, opacity,
+                    'stroke-dasharray': w.active ? '0' : '3,2'
                 }));
-                svg.appendChild(svgEl('circle', { cx: wX, cy: barY - 18, r: 2.5, fill: color }));
+                svg.appendChild(svgEl('circle', { cx: wX, cy: barY - 18, r: 3, fill: color, opacity }));
 
                 const wTxt = svgEl('text', {
-                    x: wX, y: barY - 22, 'text-anchor': 'middle', 'font-size': '9px',
-                    'font-weight': w.active ? 700 : 500, fill: color
+                    x: wX, y: barY - 23, 'text-anchor': 'middle', 'font-size': '10px',
+                    'font-weight': w.active ? 800 : 700, fill: color, opacity
                 });
                 wTxt.textContent = w.label;
                 svg.appendChild(wTxt);
             });
         }
 
-        // 7. „Jetzt"-Marker
-        if (elapsedMin >= 0 && elapsedMin <= maxDuration && startMinOfDay > 0) {
+        // 7. „Jetzt"-Marker – Label unterhalb des Balkens (unter der Tagesziel-Zeile), damit es die
+        //    Warnschwellen-Marker oberhalb des Balkens nicht verdeckt
+        if (elapsedMin >= 0 && inAxis(elapsedMin) && startMinOfDay > 0) {
             const nowX       = getX(elapsedMin);
             const nowTimeStr = formatMinutesToTime(startMinOfDay + elapsedMin);
+            const nowLabelY  = barY + barHeight + 32;
 
-            svg.appendChild(svgEl('line', { x1: nowX, y1: barY - 12, x2: nowX, y2: barY + barHeight + 8, stroke: accent, 'stroke-width': 2.5 }));
+            svg.appendChild(svgEl('line', { x1: nowX, y1: barY - 4, x2: nowX, y2: nowLabelY, stroke: accent, 'stroke-width': 2.5 }));
 
-            svg.appendChild(svgEl('rect', { x: nowX - 36, y: barY - 26, width: 72, height: 14, fill: accent, rx: 4 }));
+            svg.appendChild(svgEl('rect', { x: nowX - 36, y: nowLabelY, width: 72, height: 14, fill: accent, rx: 4 }));
 
-            const nowTxt = svgEl('text', { x: nowX, y: barY - 16, 'text-anchor': 'middle', 'font-size': '10px', 'font-weight': 'bold', fill: '#ffffff' });
+            const nowTxt = svgEl('text', { x: nowX, y: nowLabelY + 10, 'text-anchor': 'middle', 'font-size': '10px', 'font-weight': 'bold', fill: '#ffffff' });
             nowTxt.textContent = `Jetzt: ${nowTimeStr}`;
             svg.appendChild(nowTxt);
         }
