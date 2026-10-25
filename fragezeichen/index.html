@@ -18,6 +18,8 @@
             min-height: 100vh;
             padding: calc(var(--theme-nav-height) + 20px) 16px 20px;
             text-align: center;
+            /* weggewischte Cover fliegen seitlich raus, ohne horizontalen Scrollbalken */
+            overflow-x: clip;
         }
 
         .container {
@@ -30,11 +32,85 @@
             box-shadow: var(--theme-shadow);
         }
 
-        #result {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
+        /* Cover-Stapel: alle Cover liegen in derselben Grid-Zelle übereinander,
+           das vorderste mittig, die nächsten schauen rechts hervor. Der Stapel
+           reicht bis an den Rahmen (negativer Rand gleicht den Innenabstand aus) */
+        .deck {
+            container-type: inline-size;
+            display: grid;
+            justify-items: center;
+            margin: 0 -24px 14px;
+        }
+
+        .album-card {
+            /* Covergröße und wie weit der Stapel rechts neben dem vordersten
+               Cover höchstens reicht, beides passend zur Rahmenbreite */
+            --cover: min(220px, 50cqw);
+            --spread: min(var(--cover) * 0.8, (100cqw - var(--cover)) / 2 - 4px);
+            grid-area: 1 / 1;
+            position: relative;
+            width: var(--cover);
+            height: var(--cover);
+            border-radius: 10px;
+            overflow: hidden;
+            background-color: var(--theme-border);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            transition: transform 0.3s ease, opacity 0.3s ease, filter 0.3s ease;
+            touch-action: pan-y;
+            user-select: none;
+            -webkit-user-select: none;
+            cursor: grab;
+        }
+
+        .album-card img {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .album-card .skeleton {
+            position: absolute;
+            inset: 0;
+        }
+
+        /* Hintere Cover: kleiner, nach rechts versetzt und immer dunkler */
+        .album-card[data-depth="1"] {
+            transform: translateX(calc(var(--cover) * 0.07 + var(--spread) * 0.35)) scale(0.86);
+            filter: brightness(0.75);
+        }
+
+        .album-card[data-depth="2"] {
+            transform: translateX(calc(var(--cover) * 0.13 + var(--spread) * 0.6)) scale(0.74);
+            filter: brightness(0.55);
+        }
+
+        .album-card[data-depth="3"] {
+            transform: translateX(calc(var(--cover) * 0.18 + var(--spread) * 0.81)) scale(0.64);
+            filter: brightness(0.4);
+        }
+
+        .album-card[data-depth="4"] {
+            transform: translateX(calc(var(--cover) * 0.225 + var(--spread))) scale(0.55);
+            filter: brightness(0.28);
+        }
+
+        /* Startposition für neu hinten eingereihte Cover */
+        .album-card[data-depth="5"] {
+            transform: translateX(calc(var(--cover) * 0.26 + var(--spread) * 1.2)) scale(0.48);
+            filter: brightness(0.15);
+            opacity: 0;
+        }
+
+        .album-card.dragging {
+            transition: none;
+            cursor: grabbing;
+        }
+
+        .album-card.leaving {
+            opacity: 0;
+            pointer-events: none;
+            transition: transform 0.4s ease-in, opacity 0.4s ease-in;
         }
 
         .spotify-link {
@@ -95,13 +171,10 @@
             opacity: 0.7;
         }
 
-        .album-cover {
-            width: 220px;
-            height: 220px;
-            border-radius: 10px;
-            object-fit: cover;
-            margin-bottom: 14px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        .album-info {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         .album-title {
@@ -114,10 +187,6 @@
         .skeleton {
             background-color: var(--theme-border);
             animation: skeleton-pulse 1.2s ease-in-out infinite;
-        }
-
-        .skeleton.album-cover {
-            box-shadow: none;
         }
 
         .skeleton-title {
@@ -145,6 +214,11 @@
             .fade-in {
                 animation: none;
             }
+
+            .album-card,
+            .album-card.leaving {
+                transition: none;
+            }
         }
 
         .duration-note.duration-highlight {
@@ -163,9 +237,9 @@
     <script src="../assets/js/nav.js"></script>
 
     <div class="container">
-        <div id="result">
-        </div>
-        <button type="button" class="new-album-btn" id="newAlbumBtn">Neues Album</button>
+        <div class="deck" id="deck"></div>
+        <div class="album-info" id="albumInfo"></div>
+        <button type="button" class="new-album-btn" id="newAlbumBtn">Nächstes Album</button>
     </div>
 
     <footer class="update-note">Alben-Liste zuletzt aktualisiert: 25.10.2026</footer>
@@ -563,7 +637,8 @@ Spuk von Welbeck Abbey", "… und die geheimen Steine", "Die drei
             { url: "https://open.spotify.com/embed/album/7pkVk9UgZBBcc2D2ySHaRM", min: 92 }, // und die singende Schlange (Neufassung)
         ];
 
-        const resultDiv = document.getElementById('result');
+        const deck = document.getElementById('deck');
+        const albumInfo = document.getElementById('albumInfo');
         const newAlbumBtn = document.getElementById('newAlbumBtn');
 
         const spotifyLogoSvg = `<svg class="spotify-logo" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
@@ -583,14 +658,20 @@ Spuk von Welbeck Abbey", "… und die geheimen Steine", "Die drei
             const j = Math.floor(Math.random() * (i + 1));
             [shuffledAlbums[i], shuffledAlbums[j]] = [shuffledAlbums[j], shuffledAlbums[i]];
         }
-        let currentIndex = -1;
-        let latestRequestId = 0;
+        let nextIndex = 0;
 
-        function showNextAlbum() {
+        // Sichtbare Cover, vorderstes zuerst
+        const STACK_SIZE = 5;
+        const cards = [];
+
+        function takeNextAlbum() {
             // Nächsten Eintrag nehmen, am Ende wieder von vorn
-            currentIndex = (currentIndex + 1) % shuffledAlbums.length;
-            const selectedAlbum = shuffledAlbums[currentIndex];
+            const album = shuffledAlbums[nextIndex];
+            nextIndex = (nextIndex + 1) % shuffledAlbums.length;
+            return album;
+        }
 
+        function createCard(selectedAlbum) {
             // Embed-URL → Album-ID → direkter Spotify-Link
             const albumId = selectedAlbum.url.split('/album/')[1];
             const spotifyUrl = `https://open.spotify.com/album/${albumId}`;
@@ -598,52 +679,148 @@ Spuk von Welbeck Abbey", "… und die geheimen Steine", "Die drei
             const isUnusualLength = selectedAlbum.min > 90 || selectedAlbum.min < 20;
             const durationClass = isUnusualLength ? 'duration-note duration-highlight' : 'duration-note';
 
-            // Sofort anzeigen: Platzhalter für Cover und Titel, Dauer und Link sind schon bekannt
-            const requestId = ++latestRequestId;
-            resultDiv.innerHTML = `
-                <div class="album-cover skeleton"></div>
-                <span class="skeleton skeleton-title"></span>
-                <p class="${durationClass}">${durationText}</p>
-                <a class="spotify-link" href="${spotifyUrl}" target="_blank" rel="noopener">
-                    ${spotifyLogoSvg}
-                    In Spotify öffnen
-                </a>
-            `;
-            const coverPlaceholder = resultDiv.querySelector('.album-cover');
-            const titlePlaceholder = resultDiv.querySelector('.skeleton-title');
+            // Sofort anzeigen: Platzhalter fürs Cover, Titel kommt per oEmbed nach
+            const el = document.createElement('div');
+            el.className = 'album-card';
+            el.innerHTML = '<div class="skeleton"></div>';
+            const card = { el, spotifyUrl, durationText, durationClass, title: null };
 
             // Albumtitel und Coverbild über oEmbed laden
             fetch(`https://open.spotify.com/oembed?url=${spotifyUrl}`)
                 .then(r => r.json())
                 .then(data => {
                     const img = new Image();
-                    img.className = 'album-cover fade-in';
+                    img.className = 'fade-in';
                     img.alt = data.title;
+                    img.draggable = false;
                     img.src = data.thumbnail_url;
                     // Erst einblenden, wenn das Bild fertig geladen ist
                     return img.decode().catch(() => {}).then(() => ({ data, img }));
                 })
                 .then(({ data, img }) => {
-                    // Inzwischen wurde schon das nächste Album angefordert
-                    if (requestId !== latestRequestId) return;
-
-                    const title = document.createElement('p');
-                    title.className = 'album-title fade-in';
-                    title.textContent = data.title;
-
-                    coverPlaceholder.replaceWith(img);
-                    titlePlaceholder.replaceWith(title);
+                    el.replaceChildren(img);
+                    card.title = data.title;
                 })
                 .catch(() => {
                     // Fallback ohne Bild/Titel
-                    if (requestId !== latestRequestId) return;
-                    coverPlaceholder.remove();
-                    titlePlaceholder.remove();
+                    el.replaceChildren();
+                    card.title = '';
+                })
+                .then(() => {
+                    // Titel nachtragen, falls dieses Album schon vorn liegt
+                    if (cards[0] === card) showInfo(card);
                 });
+
+            return card;
         }
 
-        newAlbumBtn.addEventListener('click', showNextAlbum);
-        showNextAlbum();
+        // Titel, Dauer und Spotify-Link des vordersten Albums unter dem Stapel
+        function showInfo(card) {
+            albumInfo.innerHTML = `
+                ${card.title === null ? '<span class="skeleton skeleton-title"></span>' : ''}
+                <p class="${card.durationClass}">${card.durationText}</p>
+                <a class="spotify-link" href="${card.spotifyUrl}" target="_blank" rel="noopener">
+                    ${spotifyLogoSvg}
+                    In Spotify öffnen
+                </a>
+            `;
+            if (card.title) {
+                const title = document.createElement('p');
+                title.className = 'album-title fade-in';
+                title.textContent = card.title;
+                albumInfo.prepend(title);
+            }
+        }
+
+        function layoutCards() {
+            cards.forEach((card, depth) => {
+                card.el.dataset.depth = depth;
+                card.el.style.zIndex = STACK_SIZE - depth;
+                // Nur das vorderste Cover lässt sich wegwischen
+                card.el.inert = depth > 0;
+            });
+            showInfo(cards[0]);
+        }
+
+        function addCardAtBack(animate) {
+            const card = createCard(takeNextAlbum());
+            if (animate) {
+                // Unsichtbar ganz hinten starten, damit das Cover nach vorn gleitet
+                card.el.dataset.depth = STACK_SIZE;
+                deck.appendChild(card.el);
+                card.el.getBoundingClientRect();
+            } else {
+                deck.appendChild(card.el);
+            }
+            cards.push(card);
+        }
+
+        // Vorderstes Cover zur Seite rausfliegen lassen (-1 = links, 1 = rechts)
+        function dismissFront(direction) {
+            const el = cards.shift().el;
+            if (drag && drag.card === el) drag = null;
+            el.classList.remove('dragging');
+            el.classList.add('leaving');
+            el.style.zIndex = STACK_SIZE + 1;
+            el.style.transform = `translateX(${direction * 200}%) rotate(${direction * 25}deg)`;
+            setTimeout(() => el.remove(), 400);
+
+            addCardAtBack(true);
+            layoutCards();
+        }
+
+        // Wischen mit Finger oder Maus
+        let drag = null;
+
+        deck.addEventListener('pointerdown', e => {
+            const card = cards[0].el;
+            if (e.button !== 0 || !card.contains(e.target)) return;
+            drag = { card, id: e.pointerId, startX: e.clientX, dx: 0, active: false, lastX: e.clientX, lastT: e.timeStamp, vx: 0 };
+        });
+
+        deck.addEventListener('pointermove', e => {
+            if (!drag || e.pointerId !== drag.id) return;
+            const dx = e.clientX - drag.startX;
+            if (!drag.active) {
+                // Kleine Bewegungen zählen noch nicht als Wischen
+                if (Math.abs(dx) < 8) return;
+                drag.active = true;
+                drag.card.classList.add('dragging');
+                drag.card.setPointerCapture(e.pointerId);
+            }
+            const dt = e.timeStamp - drag.lastT;
+            if (dt > 0) drag.vx = (e.clientX - drag.lastX) / dt;
+            drag.lastX = e.clientX;
+            drag.lastT = e.timeStamp;
+            drag.dx = dx;
+            drag.card.style.transform = `translateX(${dx}px) rotate(${dx / 20}deg)`;
+        });
+
+        function endDrag(e) {
+            if (!drag || e.pointerId !== drag.id) return;
+            const { card, active, dx, vx } = drag;
+            drag = null;
+            if (!active) return;
+
+            // Weit genug gezogen oder schnell genug geschubst?
+            const farEnough = Math.abs(dx) > card.offsetWidth * 0.3;
+            const flicked = Math.abs(vx) > 0.5 && Math.sign(vx) === Math.sign(dx);
+            if (e.type === 'pointerup' && (farEnough || flicked)) {
+                dismissFront(Math.sign(dx));
+            } else {
+                card.classList.remove('dragging');
+                card.style.transform = '';
+            }
+        }
+
+        deck.addEventListener('pointerup', endDrag);
+        deck.addEventListener('pointercancel', endDrag);
+        deck.addEventListener('dragstart', e => e.preventDefault());
+
+        newAlbumBtn.addEventListener('click', () => dismissFront(-1));
+
+        for (let i = 0; i < STACK_SIZE; i++) addCardAtBack(false);
+        layoutCards();
     </script>
 </body>
 
