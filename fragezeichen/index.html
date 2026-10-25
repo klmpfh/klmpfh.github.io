@@ -95,6 +95,58 @@
             opacity: 0.7;
         }
 
+        .album-cover {
+            width: 220px;
+            height: 220px;
+            border-radius: 10px;
+            object-fit: cover;
+            margin-bottom: 14px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .album-title {
+            margin: 0 0 4px;
+            font-size: 1rem;
+            font-weight: bold;
+        }
+
+        /* Platzhalter, solange Cover und Titel laden */
+        .skeleton {
+            background-color: var(--theme-border);
+            animation: skeleton-pulse 1.2s ease-in-out infinite;
+        }
+
+        .skeleton.album-cover {
+            box-shadow: none;
+        }
+
+        .skeleton-title {
+            display: block;
+            width: 60%;
+            height: 1.2em;
+            margin: 0 auto 4px;
+            border-radius: 6px;
+        }
+
+        .fade-in {
+            animation: fade-in 0.25s ease-out;
+        }
+
+        @keyframes skeleton-pulse {
+            50% { opacity: 0.5; }
+        }
+
+        @keyframes fade-in {
+            from { opacity: 0; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .skeleton,
+            .fade-in {
+                animation: none;
+            }
+        }
+
         .duration-note.duration-highlight {
             display: inline-block;
             font-weight: bold;
@@ -116,7 +168,7 @@
         <button type="button" class="new-album-btn" id="newAlbumBtn">Neues Album</button>
     </div>
 
-    <footer class="update-note">Alben-Liste zuletzt aktualisiert: 24.07.2026</footer>
+    <footer class="update-note">Alben-Liste zuletzt aktualisiert: 25.10.2026</footer>
 
     <script>
         /* PROMPT ZUM AKTUALISIEREN DIESER LISTE (in einen neuen Chat kopieren):
@@ -153,9 +205,13 @@ Ausgaben, Filme (keine Hörspiel-Alben).
 auch wenn es sich um echte mehrstimmige Hörspiele handelt.
 
 VORGEHEN:
-1. Aktuelle IDs aus albumLinks extrahieren (z. B. per grep auf
-"embed/album/"), damit klar ist, was schon enthalten ist und
-Duplikate vermieden werden.
+1. Bereits enthaltene Folgen aus den Kommentaren hinter den
+Einträgen ablesen (jeder Eintrag trägt den exakten Spotify-Titel
+als `// <Titel>`-Kommentar, z. B. "// 001/und der Super-Papagei"
+oder "// Folge 240: und die schwarze Rose"). Daraus ergibt sich,
+was fehlt - die IDs müssen NICHT erneut einzeln bei Spotify
+abgefragt werden. Zusätzlich per grep auf "embed/album/" auf
+doppelte IDs prüfen.
 2. Neue Folgen/Specials recherchieren, z. B. über die deutsche
 Wikipedia-Seite "Liste der Die-drei-???-Folgen" oder die
 offizielle Spotify-Playlist "Die drei ??? - Die drei
@@ -183,10 +239,12 @@ Das ist deutlich zuverlässiger als ein Zusammenfassungs-Tool die
 Trackliste "vorlesen" zu lassen, da bei 30-40+ Kapiteln pro Album
 sonst reale Gefahr besteht, dass Werte falsch transkribiert oder
 Tracks stillschweigend ausgelassen werden.
-5. Neuen Eintrag im gleichen Format ergänzen:
-{ url: "https://open.spotify.com/embed/album/<ID>", min: <Minuten> },
-optional mit `, approx: true` und einem `// <Titel/Hinweis>`-
-Kommentar bei Sonderveröffentlichungen.
+5. Neuen Eintrag im gleichen Format ergänzen, IMMER mit dem
+exakten oEmbed-Titel aus Schritt 3 als Kommentar:
+{ url: "https://open.spotify.com/embed/album/<ID>", min: <Minuten> }, // <Titel>
+optional mit `, approx: true`. Bei Sonderveröffentlichungen darf
+der Kommentar statt des Spotify-Titels eine sprechendere
+Beschreibung tragen (z. B. "Adventskalender: O du finstere").
 6. Kandidaten, die geprüft, aber NICHT aufgenommen wurden (weil
 sie unter eine Ausschlussregel fallen oder auf Spotify nicht
 auffindbar sind), unten in der Liste "BEREITS GEPRÜFT" ergänzen,
@@ -216,247 +274,264 @@ kein Spotify-Album gefunden (nur Apple Music/USB-Stick-Release).
 Karpatenhund" (4MoN1GbGjfl1LjRsV14BAh), "Toteninsel"
 (2YWVtCaQLAUYyJrjCgw6qG): Original-Hörspiele zum Kinofilm,
 per Ausschlussregel bewusst nicht aufgenommen (siehe oben).
+
+Ergänzt am 25.10.2026:
+- "… und der dunkle Taipan" (Live-Tour 2019/2020): Tour-Mitschnitt
+exklusiv bei Apple Music, kein Spotify-Album.
+- "… und der Super-Papagei 2004 Live": nur als DVD erschienen.
+(Die Studio-Neufassung "Super-Papagei 2004" ist in der Liste.)
+- "Worte nur Worte" (Andreas Fröhlich, Jens Wawrczeck): Song,
+kein Hörspiel.
+- "… und der seltsame Wecker 2009 – Live and Ticking": kein
+Spotify-Album gefunden.
+- Folge 242 "und das weiße Auge": am 25.10.2026 noch nicht auf
+Spotify erschienen (nur Release-Party angekündigt) - beim
+nächsten Lauf erneut prüfen.
+- Fan-Hörspiele/inoffizielle Specials (Lauscherlounge, "… und der
+Spuk von Welbeck Abbey", "… und die geheimen Steine", "Die drei
+??? im Kosmos" usw.): keine offiziellen EUROPA-Alben.
          */
         const albumLinks = [
-            { url: "https://open.spotify.com/embed/album/4N9tvSjWfZXx3eHKblYEWQ", min: 53 },
-            { url: "https://open.spotify.com/embed/album/0xldqK4Ocdt8dwQSxUzt6x", min: 46 },
-            { url: "https://open.spotify.com/embed/album/61OtrnMm1lqoMgMRb1aw7g", min: 46 },
-            { url: "https://open.spotify.com/embed/album/2w902iYtkf0ipmTImyLlsL", min: 45 },
-            { url: "https://open.spotify.com/embed/album/5YWM39RnabpxekZuHriTam", min: 49 },
-            { url: "https://open.spotify.com/embed/album/54eP8BYMR270sTqklv83V0", min: 47 },
-            { url: "https://open.spotify.com/embed/album/3nGyW4ETDrDpInYEAQCyYS", min: 45 },
-            { url: "https://open.spotify.com/embed/album/6MRsf5IcfqJIogaNqtESnh", min: 53 },
-            { url: "https://open.spotify.com/embed/album/0aNqdp5ayuUNsOdUwu8x0b", min: 47 },
-            { url: "https://open.spotify.com/embed/album/4h75QQIxW1etThTuw6vWzg", min: 51 },
-            { url: "https://open.spotify.com/embed/album/07EhJ6uxWcQQWKeXJ1e8Lb", min: 48 },
-            { url: "https://open.spotify.com/embed/album/0bSrvyOjOzFoFJfx3uaFgk", min: 46 },
-            { url: "https://open.spotify.com/embed/album/2AZ7zFBophWEIuBPjAG60I", min: 44 },
-            { url: "https://open.spotify.com/embed/album/3O5STjjugoL5cNKfeRuBiU", min: 43 },
-            { url: "https://open.spotify.com/embed/album/2dQYcaTRh5qEYk2oH7WoBC", min: 40 },
-            { url: "https://open.spotify.com/embed/album/16dOhg07DVqoSxlS7ToLM5", min: 43 },
-            { url: "https://open.spotify.com/embed/album/0CMsNalUakIcv6znyVLALr", min: 42 },
-            { url: "https://open.spotify.com/embed/album/1yqICFWBL4l7fJkrFWvfWL", min: 43 },
-            { url: "https://open.spotify.com/embed/album/3JqJ2zIt3UzKug7onmbmAo", min: 45 },
-            { url: "https://open.spotify.com/embed/album/5ilbdbGu5eQRUIsbslyiLe", min: 47 },
-            { url: "https://open.spotify.com/embed/album/2koZEkq7vQnHjMP73gVXCo", min: 42 },
-            { url: "https://open.spotify.com/embed/album/7i50aK2wKvszWNnay4DtxP", min: 44 },
-            { url: "https://open.spotify.com/embed/album/67qFOAxbhNRHEIeOjQ9Zkp", min: 43 },
-            { url: "https://open.spotify.com/embed/album/211IEWHi59nUsHx8li8G9r", min: 42 },
-            { url: "https://open.spotify.com/embed/album/6RXr8BmKNSK9Zk11k0I7Dl", min: 46 },
-            { url: "https://open.spotify.com/embed/album/2NSreywe8UbWo7BJVY3Spk", min: 44 },
-            { url: "https://open.spotify.com/embed/album/2AisAUu4deLpNi6g6qlTLC", min: 52 },
-            { url: "https://open.spotify.com/embed/album/7Dbd2rya9glmBLVxclcU4d", min: 48 },
-            { url: "https://open.spotify.com/embed/album/0zV9pnaXLuogDr6prsvb4M", min: 42 },
-            { url: "https://open.spotify.com/embed/album/0tPetsUWuZIC0E85x6eVN5", min: 50 },
-            { url: "https://open.spotify.com/embed/album/7K3VEzD1rm0dgUGBi1i5PW", min: 44 },
-            { url: "https://open.spotify.com/embed/album/1imKVIfJIM0vKNymevqKjP", min: 44 },
-            { url: "https://open.spotify.com/embed/album/2L18qTB1EfS4FuBk2M6QwV", min: 44 },
-            { url: "https://open.spotify.com/embed/album/2REEfC6tVMiYv1eKMlGiOX", min: 55 },
-            { url: "https://open.spotify.com/embed/album/4R24oyyqxGkczNpqWGCXBZ", min: 48 },
-            { url: "https://open.spotify.com/embed/album/6R4gnRHXKgw2cxneWgTiEL", min: 55 },
-            { url: "https://open.spotify.com/embed/album/6d3Pavm0enVICdOvBEqxYA", min: 43 },
-            { url: "https://open.spotify.com/embed/album/0AKPkUh4ElyZNipc0lZoiR", min: 48 },
-            { url: "https://open.spotify.com/embed/album/2IIw1KESZrJQBFdZQAWcKY", min: 47 },
-            { url: "https://open.spotify.com/embed/album/5KUXX8H2LNsuik46M5XLx0", min: 54 },
-            { url: "https://open.spotify.com/embed/album/24bba3w45LGGm7ps3qonkc", min: 48 },
-            { url: "https://open.spotify.com/embed/album/48QVzskevXtA0KpJjXzvb1", min: 51 },
-            { url: "https://open.spotify.com/embed/album/6JNNLdq9ELeKENK3RmxLWQ", min: 50 },
-            { url: "https://open.spotify.com/embed/album/39mWWzaUZp0AXyN9Vnp4od", min: 47 },
-            { url: "https://open.spotify.com/embed/album/6YX4i7aMCYmn20zvAFM3lG", min: 48 },
-            { url: "https://open.spotify.com/embed/album/3iWNsrEs9D0FFlKFfscdvL", min: 47 },
-            { url: "https://open.spotify.com/embed/album/5IRxm1lo35PttzU8YLslZy", min: 48 },
-            { url: "https://open.spotify.com/embed/album/7t2SteAH5OnLLC1ghTAmka", min: 45 },
-            { url: "https://open.spotify.com/embed/album/6DKfjDIB1BSYRGAi2YJYm3", min: 57 },
-            { url: "https://open.spotify.com/embed/album/71kiy6INV3LzsCddpTZoHf", min: 55 },
-            { url: "https://open.spotify.com/embed/album/3pXJh2A9gYzNt22rEIE5q7", min: 54 },
-            { url: "https://open.spotify.com/embed/album/0F9ebKwTd5RNZZOu49lWuF", min: 53 },
-            { url: "https://open.spotify.com/embed/album/1Fg15cBLFliy6Kr60QqRan", min: 51 },
-            { url: "https://open.spotify.com/embed/album/4oH2GUWlSSsSgVkxyPVHX1", min: 51 },
-            { url: "https://open.spotify.com/embed/album/3fotka2Hbq0N7V9KKWIDdw", min: 49 },
-            { url: "https://open.spotify.com/embed/album/5W6dRiaeSVE7zUBYHbepak", min: 43 },
-            { url: "https://open.spotify.com/embed/album/6DWykdlgf60Mq02hPAGYVD", min: 45 },
-            { url: "https://open.spotify.com/embed/album/2qcA1EqAoUsqxXqIivY6Zc", min: 44 },
-            { url: "https://open.spotify.com/embed/album/7cBoiWgh1bTMZmCwJE0eMu", min: 47 },
-            { url: "https://open.spotify.com/embed/album/26M4ktHp3isOX6XJazAxPn", min: 59 },
-            { url: "https://open.spotify.com/embed/album/0biXUv1uGUaVsPcw8nAZCY", min: 59 },
-            { url: "https://open.spotify.com/embed/album/5GPTZKrD7eaCp9p6VOBuIN", min: 67 },
-            { url: "https://open.spotify.com/embed/album/0tmMvsGyWRzVckCYgkvve3", min: 66 },
-            { url: "https://open.spotify.com/embed/album/62z7yW4RKhhuAp0RklmNvc", min: 60 },
-            { url: "https://open.spotify.com/embed/album/6qj4LD0zotutkIgEg9OvDj", min: 59 },
-            { url: "https://open.spotify.com/embed/album/7Hjk98j1FSrHV5IHWmeeFh", min: 63 },
-            { url: "https://open.spotify.com/embed/album/21pUsEhxssm6fvumGFmi35", min: 60 },
-            { url: "https://open.spotify.com/embed/album/2erJcBofKBO6GFMqDPppsU", min: 66 },
-            { url: "https://open.spotify.com/embed/album/4mlQEwk6I0XuksZCYTtatz", min: 63 },
-            { url: "https://open.spotify.com/embed/album/6EEN6onzbHIOxnwUkGfKhv", min: 67 },
-            { url: "https://open.spotify.com/embed/album/2GQjkF0ceIse6jVZkUuAQc", min: 58 },
-            { url: "https://open.spotify.com/embed/album/1K8kXLhNnHSdPvtUwf74DE", min: 67 },
-            { url: "https://open.spotify.com/embed/album/69VLqtWA1bpguYRCFRAxQl", min: 74 },
-            { url: "https://open.spotify.com/embed/album/2IqfdlQamN3vCWN3CKLEVI", min: 56 },
-            { url: "https://open.spotify.com/embed/album/6RDPGc2budsdTw1lj8f2O5", min: 70 },
-            { url: "https://open.spotify.com/embed/album/3CMN8Y4kjoG4sFwlOEpfsV", min: 59 },
-            { url: "https://open.spotify.com/embed/album/6t7Y1H4dUM0d4JycenVskN", min: 57 },
-            { url: "https://open.spotify.com/embed/album/1rDYlXZy6vN4wqqQ6buqOr", min: 77 },
-            { url: "https://open.spotify.com/embed/album/4izXuApLzBWtWHrFqgcrxL", min: 59 },
-            { url: "https://open.spotify.com/embed/album/2s5u6hCaMpTIvZtBRvQzha", min: 50 },
-            { url: "https://open.spotify.com/embed/album/7iysTnwaaFrPPWAuUyyi0c", min: 70 },
-            { url: "https://open.spotify.com/embed/album/3yofHdHiOLtVZlxWCZ4XBB", min: 59 },
-            { url: "https://open.spotify.com/embed/album/3bhsXwKIDwVK5LTkDCICp0", min: 60 },
-            { url: "https://open.spotify.com/embed/album/2eeodcwD9HXpcA2rvoFkIq", min: 59 },
-            { url: "https://open.spotify.com/embed/album/4uF9MjchYgq5jjPi5x5YZy", min: 58 },
-            { url: "https://open.spotify.com/embed/album/1KpWkUQaj5ECJsrb8SrPl4", min: 55 },
-            { url: "https://open.spotify.com/embed/album/3CZCwdMpj2jnjI43ZlnY5T", min: 75 },
-            { url: "https://open.spotify.com/embed/album/3TcIn19pVz5LXE8UleuLuX", min: 60 },
-            { url: "https://open.spotify.com/embed/album/2dlgtHB8z7ZhSl1fsSb0Ic", min: 59 },
-            { url: "https://open.spotify.com/embed/album/0Jh7gzQaOscoFndb3raq2l", min: 60 },
-            { url: "https://open.spotify.com/embed/album/7yMRFgR8FRyWwiLHzQQa2B", min: 59 },
-            { url: "https://open.spotify.com/embed/album/7a9rwqPkVdU4FC2cWFudVO", min: 60 },
-            { url: "https://open.spotify.com/embed/album/3UHj03eU7OnDuMVCTLbmcj", min: 54 },
-            { url: "https://open.spotify.com/embed/album/4KEZWleMTT8lDaQDLgozFc", min: 60 },
-            { url: "https://open.spotify.com/embed/album/5ub4r9Q0YVMrWuOEesu6dR", min: 53 },
-            { url: "https://open.spotify.com/embed/album/2bfJa4PRKVb7as86HZv8Df", min: 68 },
-            { url: "https://open.spotify.com/embed/album/4C4o7tHpT20QrdsvmI70uI", min: 63 },
-            { url: "https://open.spotify.com/embed/album/3haGZZ8x7PyaGxiqcLmLf9", min: 76 },
-            { url: "https://open.spotify.com/embed/album/6zwBnyiy9Hy9TAser0DOuL", min: 138, approx: true },
-            { url: "https://open.spotify.com/embed/album/1DZAe0qMw8Pq9EPoX6gETA", min: 72 },
-            { url: "https://open.spotify.com/embed/album/3NYWEuwAPt4PIJ4OeNxmzO", min: 59 },
-            { url: "https://open.spotify.com/embed/album/4ADdmpObDUmBdvyJ9oNz5o", min: 64 },
-            { url: "https://open.spotify.com/embed/album/6joRNVLN69v3eSnxM86BSM", min: 69 },
-            { url: "https://open.spotify.com/embed/album/6Mi4Smq7Fn8qNOg6Xnf0In", min: 76 },
-            { url: "https://open.spotify.com/embed/album/4eX1wH67TDcYPZ1ZsjtPb6", min: 71 },
-            { url: "https://open.spotify.com/embed/album/3kBby5GJMI4U97XljKcPFD", min: 64 },
-            { url: "https://open.spotify.com/embed/album/3v4W4AFaI8uO7J88ojaSkS", min: 67 },
-            { url: "https://open.spotify.com/embed/album/4RZllDAKF3DeDz6jZJFXTa", min: 67 },
-            { url: "https://open.spotify.com/embed/album/1OBHPhBUih26oQTqxLvJTQ", min: 55 },
-            { url: "https://open.spotify.com/embed/album/7b9OiVsktCZyldiAnjkVDx", min: 65 },
-            { url: "https://open.spotify.com/embed/album/0WBhXS0uAYuL1sYb6vjYeS", min: 59 },
-            { url: "https://open.spotify.com/embed/album/3bFvjy9IyWd7GrzN2dr0Hi", min: 60 },
-            { url: "https://open.spotify.com/embed/album/5L2KCw21QT3JKg1KKuqSeF", min: 69 },
-            { url: "https://open.spotify.com/embed/album/5Hafee7JOUqNVqtsrCtrTZ", min: 70 },
-            { url: "https://open.spotify.com/embed/album/3piMnopGsrEAKd1EZxsU3i", min: 62 },
-            { url: "https://open.spotify.com/embed/album/3rxr4SLE2EG0EAlpSeI99o", min: 61 },
-            { url: "https://open.spotify.com/embed/album/1GKXpMQRKEyZI8pL62VUIP", min: 67 },
-            { url: "https://open.spotify.com/embed/album/7rPDg8NlFJ1a2HMTQvVaB2", min: 68 },
-            { url: "https://open.spotify.com/embed/album/6fVTJQKJBku1yaOmZOnfwg", min: 59 },
-            { url: "https://open.spotify.com/embed/album/6d21lwV9Imn3ObWUyV1UN2", min: 63 },
-            { url: "https://open.spotify.com/embed/album/68NWcgqeCQMZ3QcPJXBhzH", min: 58 },
-            { url: "https://open.spotify.com/embed/album/3HgetGSMzg6bGM6b67YZcj", min: 61 },
-            { url: "https://open.spotify.com/embed/album/0LoesJ9VnJPrlvIDz4u4Xt", min: 67 },
-            { url: "https://open.spotify.com/embed/album/0sIRyuExi7jBQmOpHyyY78", min: 174, approx: true },
-            { url: "https://open.spotify.com/embed/album/0AnyLaLPx339iGaxjqVfob", min: 67 },
-            { url: "https://open.spotify.com/embed/album/0mp5HVWlYinEYa7Y4Q2vau", min: 73 },
-            { url: "https://open.spotify.com/embed/album/3XXYXmCEe185oHxigCRo97", min: 74 },
-            { url: "https://open.spotify.com/embed/album/1lD4RdnibVS7QhtZqCal9E", min: 79 },
-            { url: "https://open.spotify.com/embed/album/5l5CFSjzSdhbflqmplcTFX", min: 69 },
-            { url: "https://open.spotify.com/embed/album/4eorcDi9eRfsi7X0A91Z7u", min: 71 },
-            { url: "https://open.spotify.com/embed/album/23wcElHGWpunC23ggr4PcW", min: 63 },
-            { url: "https://open.spotify.com/embed/album/1juMQy6yZVmk9Za6HeiicB", min: 58 },
-            { url: "https://open.spotify.com/embed/album/1Cta130Rwp5vH1ddfAChbU", min: 67 },
-            { url: "https://open.spotify.com/embed/album/0TmWLedytkxVuP9b5Hqeqq", min: 71 },
-            { url: "https://open.spotify.com/embed/album/5HiWGQmaCRaxdaon49Iw9S", min: 69 },
-            { url: "https://open.spotify.com/embed/album/3m7fR2wOkytZHq9m4QeBkB", min: 78 },
-            { url: "https://open.spotify.com/embed/album/79enDMGQWH7LQ5weNB96g7", min: 67 },
-            { url: "https://open.spotify.com/embed/album/6RJf8I60kNhnYxlnw7eTGv", min: 65 },
-            { url: "https://open.spotify.com/embed/album/3HxAtK23R2gFkW000mdaFT", min: 78 },
-            { url: "https://open.spotify.com/embed/album/6gxj68DOHRSVlEM4xzwtRy", min: 60 },
-            { url: "https://open.spotify.com/embed/album/71moidSHTwJsc2N70axEce", min: 58 },
-            { url: "https://open.spotify.com/embed/album/4Y7Pxv7pzLmKVJowmBwOkd", min: 61 },
-            { url: "https://open.spotify.com/embed/album/2RxTF6MhAVOtudVNOyHTQz", min: 71 },
-            { url: "https://open.spotify.com/embed/album/6TjzBTmeDakBgh5NOGj1BC", min: 62 },
-            { url: "https://open.spotify.com/embed/album/3D9Jf4mdOBoeyrKpffYBvy", min: 57 },
-            { url: "https://open.spotify.com/embed/album/35aU9bfmxPGdjiRA4JMuFd", min: 63 },
-            { url: "https://open.spotify.com/embed/album/2uOsf31oenHRd4DVxCSjn9", min: 67 },
-            { url: "https://open.spotify.com/embed/album/7K7dfMc3VwHOKtENI1BWTD", min: 62 },
-            { url: "https://open.spotify.com/embed/album/6cPgVsZ6TPyVIP9BHP5ty5", min: 168, approx: true },
-            { url: "https://open.spotify.com/embed/album/3u0OSCwiOblOhm4dKjwLN5", min: 66 },
-            { url: "https://open.spotify.com/embed/album/5iNeANVy4supl8HowB9V2h", min: 57 },
-            { url: "https://open.spotify.com/embed/album/7nxSEeJiQwI34VwnWT83C9", min: 54 },
-            { url: "https://open.spotify.com/embed/album/3uggg8gNlh1kpBxLeOfFTV", min: 71 },
-            { url: "https://open.spotify.com/embed/album/623V90QowsF4WSqV3cHGKf", min: 68 },
-            { url: "https://open.spotify.com/embed/album/78wUIvkGT2CdWW0ngeEy8V", min: 73 },
-            { url: "https://open.spotify.com/embed/album/0pdXEEgKjfh4H0aZg4IOTS", min: 74 },
-            { url: "https://open.spotify.com/embed/album/3uFt95otJjaxH8o40tPtIS", min: 57 },
-            { url: "https://open.spotify.com/embed/album/4rCAnDrNJ96srnBEoA0ISj", min: 66 },
-            { url: "https://open.spotify.com/embed/album/2F6VxgWbGCUpTU9ux6Dtbi", min: 64 },
-            { url: "https://open.spotify.com/embed/album/1GEzdjI5N25iuGjvypRscs", min: 71 },
-            { url: "https://open.spotify.com/embed/album/7beppYTqtHAEPKoXyodssF", min: 73 },
-            { url: "https://open.spotify.com/embed/album/4fv0pPN7ZjbUiejSTxTPZh", min: 75 },
-            { url: "https://open.spotify.com/embed/album/3An657Q0wkVp4nIDg2zpcB", min: 69 },
-            { url: "https://open.spotify.com/embed/album/4izJKxYT4fTwIZjoXNgkX7", min: 70 },
-            { url: "https://open.spotify.com/embed/album/427kScPIeUSfoNKCNercMC", min: 68 },
-            { url: "https://open.spotify.com/embed/album/7kskBahbrQWCOiaXKuoPjE", min: 72 },
-            { url: "https://open.spotify.com/embed/album/77aawQqgLQZxPb9kwSg0JR", min: 78 },
-            { url: "https://open.spotify.com/embed/album/5PEHeYcUhz1Aq02ZB1pUgJ", min: 82 },
-            { url: "https://open.spotify.com/embed/album/62CKj2RCiWDDUtBWTn4KxQ", min: 80 },
-            { url: "https://open.spotify.com/embed/album/6YbaUGc6ZeR1YnDFGQJV8F", min: 68 },
-            { url: "https://open.spotify.com/embed/album/6Anfub4AoVHg9bhJ7js0L0", min: 73 },
-            { url: "https://open.spotify.com/embed/album/2ALDCHCHdawewN1sduWVQQ", min: 70 },
-            { url: "https://open.spotify.com/embed/album/5RoL0jdWMoJ8KRFVOeFYtX", min: 64 },
-            { url: "https://open.spotify.com/embed/album/4uggmrJ3Xpm1e2tcz6laze", min: 153, approx: true },
-            { url: "https://open.spotify.com/embed/album/4qbxSVpr3NxRjdIVC411ue", min: 68 },
-            { url: "https://open.spotify.com/embed/album/0w6Khy7kpqTXrEDITf0rZ0", min: 69 },
-            { url: "https://open.spotify.com/embed/album/3w5glP0mzKfTanzXpAjN27", min: 66 },
-            { url: "https://open.spotify.com/embed/album/4IZ7Lsm5le7HJPtaGLCrjO", min: 72 },
-            { url: "https://open.spotify.com/embed/album/6tioH9PNiZbmUT54MsiX5k", min: 78 },
-            { url: "https://open.spotify.com/embed/album/18xyskqkEGnVfVFhznkFIK", min: 74 },
-            { url: "https://open.spotify.com/embed/album/4zCPToY7AoTqvOKf4HRqAN", min: 76 },
-            { url: "https://open.spotify.com/embed/album/1qhlRmclvYWkrYkLnFxFZN", min: 76 },
-            { url: "https://open.spotify.com/embed/album/5B7w9vkfh979tEyzwkLk9k", min: 70 },
-            { url: "https://open.spotify.com/embed/album/7eHh5PAxQBt5KBWzd3a10G", min: 61 },
-            { url: "https://open.spotify.com/embed/album/5kevid18ttcAPK1vk0kLtc", min: 73 },
-            { url: "https://open.spotify.com/embed/album/6uj8JeIgluMibSu8Divkbh", min: 67 },
-            { url: "https://open.spotify.com/embed/album/22soWryC08ctyMNb6NrMGD", min: 80 },
-            { url: "https://open.spotify.com/embed/album/02MXdFaVMz0qQJjmivjI8g", min: 65 },
-            { url: "https://open.spotify.com/embed/album/100ZHoBX994GlckxjoGpma", min: 64 },
-            { url: "https://open.spotify.com/embed/album/2ICtKWqLqMBTzi7UeByhKd", min: 71 },
-            { url: "https://open.spotify.com/embed/album/1qag2AiFcxXU1UaIgrDFff", min: 68 },
-            { url: "https://open.spotify.com/embed/album/4m6VlVOWfrUVhWWrueMo7p", min: 70 },
-            { url: "https://open.spotify.com/embed/album/2oKngJQA5TdxF5QcP3uZEf", min: 77 },
-            { url: "https://open.spotify.com/embed/album/3pbXIzVk7CA5VM2ltxu9TN", min: 75 },
-            { url: "https://open.spotify.com/embed/album/39a7bHWZyWPxwukCHPrTly", min: 79 },
-            { url: "https://open.spotify.com/embed/album/0GRoTtX1wI16M7GSnnN96R", min: 70 },
-            { url: "https://open.spotify.com/embed/album/4piiNuehCc4VjN8NBIcnRt", min: 69 },
-            { url: "https://open.spotify.com/embed/album/7bTKP2hU0LRks1bXN1R7ko", min: 77 },
-            { url: "https://open.spotify.com/embed/album/09Ckx1JLgPsQHHGuSIt2j3", min: 179, approx: true },
-            { url: "https://open.spotify.com/embed/album/4FxNfDSXqAg8N1D8NBtvZ5", min: 81 },
-            { url: "https://open.spotify.com/embed/album/4Exxckn0GwbhnGl6N4um2N", min: 79 },
-            { url: "https://open.spotify.com/embed/album/79Drf49yNdGLBzzHMGGmBz", min: 79 },
-            { url: "https://open.spotify.com/embed/album/1yMMjH3tDN9GyXiADzTkL9", min: 71 },
-            { url: "https://open.spotify.com/embed/album/2Sw9FBHOoT6fBhYxHsRFxq", min: 74 },
-            { url: "https://open.spotify.com/embed/album/7khAMIQlYBmW7mI9cphDhJ", min: 65 },
-            { url: "https://open.spotify.com/embed/album/6BxvBG51szGmlg5x3F1rHj", min: 64 },
-            { url: "https://open.spotify.com/embed/album/6WgRUQY49NRG6JT6dJ4xEq", min: 73 },
-            { url: "https://open.spotify.com/embed/album/0q4FbI22wSMrzgWh5vgHi9", min: 62 },
-            { url: "https://open.spotify.com/embed/album/3ieWqOL150wJOcft7iZHKZ", min: 63 },
-            { url: "https://open.spotify.com/embed/album/7pZotNNAYOkeHNvJRKzYRk", min: 74 },
-            { url: "https://open.spotify.com/embed/album/2zHMeFNQQxKOmUgmppOjIM", min: 75 },
-            { url: "https://open.spotify.com/embed/album/4BZfSV9maCil4l4yftT74F", min: 75 },
-            { url: "https://open.spotify.com/embed/album/1cJ3fNx6K47p4eDFqhnvsA", min: 68 },
-            { url: "https://open.spotify.com/embed/album/76pYNMMVZTiuNy3IoXcavU", min: 68 },
-            { url: "https://open.spotify.com/embed/album/2BkEUZY7Da7bqlUjmMA2Cq", min: 67 },
-            { url: "https://open.spotify.com/embed/album/1WlRnNunbHpnRTTVkxMRnd", min: 78 },
-            { url: "https://open.spotify.com/embed/album/2WwOKZLpFWrvw3O9CISod1", min: 75 },
-            { url: "https://open.spotify.com/embed/album/6ewdyVIW2LurJhYGU0UBAa", min: 72 },
-            { url: "https://open.spotify.com/embed/album/01i4iyB40EU7Qgd6EgKoZt", min: 76 },
-            { url: "https://open.spotify.com/embed/album/1KpVSqapKAUAtAepWWxPWs", min: 68 },
-            { url: "https://open.spotify.com/embed/album/3o2Gwvg8lqLNRnlV1v1s5K", min: 79 },
-            { url: "https://open.spotify.com/embed/album/451jKBwuSNrNgLlqEAZfra", min: 83 },
-            { url: "https://open.spotify.com/embed/album/7JhdaReI98XYFrzb3jJPFa", min: 75 },
-            { url: "https://open.spotify.com/embed/album/0FuC7q4bJG41g1naKBx4ot", min: 181 },
-            { url: "https://open.spotify.com/embed/album/3Sv5tE8PcAlGY6Ys2ISQXF", min: 85 },
-            { url: "https://open.spotify.com/embed/album/2CMXywsh8wVXXCmr2bLTZ6", min: 66 },
-            { url: "https://open.spotify.com/embed/album/6sNAlohza1ZTWVMGhFTGJW", min: 81 },
-            { url: "https://open.spotify.com/embed/album/6SMOmIWODrO1gND2YPpjHf", min: 81 },
-            { url: "https://open.spotify.com/embed/album/154I9rUwPuFHj6snU4amYg", min: 72 },
-            { url: "https://open.spotify.com/embed/album/6isiJbL3hh7e60KigIgKuY", min: 79 },
-            { url: "https://open.spotify.com/embed/album/1Qnn3AAN3Nquv7GlNk41YQ", min: 78 },
-            { url: "https://open.spotify.com/embed/album/0qZ0R61AqoD2i8GnzUk91C", min: 71 },
-            { url: "https://open.spotify.com/embed/album/4sQsFeHojdbFPB07vSg3Rd", min: 84 },
-            { url: "https://open.spotify.com/embed/album/031exGT0P6IWBYY6faqoLV", min: 84 },
-            { url: "https://open.spotify.com/embed/album/5yCEzMfmMnSG97SXDFGjR8", min: 82 },
-            { url: "https://open.spotify.com/embed/album/1IkEurD7s47M9ukevi0bWA", min: 81 },
-            { url: "https://open.spotify.com/embed/album/00Pxqrupz6xjkI0vd4Otxb", min: 82 },
-            { url: "https://open.spotify.com/embed/album/2mh0BDhRAJFa7clABwut3L", min: 81 }, // 239
-            { url: "https://open.spotify.com/embed/album/55djiROmSQZWDVzzUwyKFc", min: 72 }, // 240
+            { url: "https://open.spotify.com/embed/album/4N9tvSjWfZXx3eHKblYEWQ", min: 53 }, // 001/und der Super-Papagei
+            { url: "https://open.spotify.com/embed/album/0xldqK4Ocdt8dwQSxUzt6x", min: 46 }, // 002/und der Phantomsee
+            { url: "https://open.spotify.com/embed/album/61OtrnMm1lqoMgMRb1aw7g", min: 46 }, // 003/und der Karpatenhund
+            { url: "https://open.spotify.com/embed/album/2w902iYtkf0ipmTImyLlsL", min: 45 }, // 004/und die schwarze Katze
+            { url: "https://open.spotify.com/embed/album/5YWM39RnabpxekZuHriTam", min: 49 }, // 005/und der Fluch des Rubins
+            { url: "https://open.spotify.com/embed/album/54eP8BYMR270sTqklv83V0", min: 47 }, // 006/und der sprechende Totenkopf
+            { url: "https://open.spotify.com/embed/album/3nGyW4ETDrDpInYEAQCyYS", min: 45 }, // 007/und der unheimliche Drache
+            { url: "https://open.spotify.com/embed/album/6MRsf5IcfqJIogaNqtESnh", min: 53 }, // 008/und der grüne Geist
+            { url: "https://open.spotify.com/embed/album/0aNqdp5ayuUNsOdUwu8x0b", min: 47 }, // 009/und die rätselhaften Bilder
+            { url: "https://open.spotify.com/embed/album/4h75QQIxW1etThTuw6vWzg", min: 51 }, // 010/und die flüsternde Mumie
+            { url: "https://open.spotify.com/embed/album/07EhJ6uxWcQQWKeXJ1e8Lb", min: 48 }, // 011/und das Gespensterschloss
+            { url: "https://open.spotify.com/embed/album/0bSrvyOjOzFoFJfx3uaFgk", min: 46 }, // 012/und der seltsame Wecker
+            { url: "https://open.spotify.com/embed/album/2AZ7zFBophWEIuBPjAG60I", min: 44 }, // 013/und der lachende Schatten
+            { url: "https://open.spotify.com/embed/album/3O5STjjugoL5cNKfeRuBiU", min: 43 }, // 014/und das Bergmonster
+            { url: "https://open.spotify.com/embed/album/2dQYcaTRh5qEYk2oH7WoBC", min: 40 }, // 015/und der rasende Löwe
+            { url: "https://open.spotify.com/embed/album/16dOhg07DVqoSxlS7ToLM5", min: 43 }, // 016/und der Zauberspiegel
+            { url: "https://open.spotify.com/embed/album/0CMsNalUakIcv6znyVLALr", min: 42 }, // 017/und die gefährliche Erbschaft
+            { url: "https://open.spotify.com/embed/album/1yqICFWBL4l7fJkrFWvfWL", min: 43 }, // 018/und die Geisterinsel
+            { url: "https://open.spotify.com/embed/album/3JqJ2zIt3UzKug7onmbmAo", min: 45 }, // 019/und der Teufelsberg
+            { url: "https://open.spotify.com/embed/album/5ilbdbGu5eQRUIsbslyiLe", min: 47 }, // 020/und die flammende Spur
+            { url: "https://open.spotify.com/embed/album/2koZEkq7vQnHjMP73gVXCo", min: 42 }, // 021/und der tanzende Teufel
+            { url: "https://open.spotify.com/embed/album/7i50aK2wKvszWNnay4DtxP", min: 44 }, // 022/und der verschwundene Schatz
+            { url: "https://open.spotify.com/embed/album/67qFOAxbhNRHEIeOjQ9Zkp", min: 43 }, // 023/und das Aztekenschwert
+            { url: "https://open.spotify.com/embed/album/211IEWHi59nUsHx8li8G9r", min: 42 }, // 024/und die silberne Spinne
+            { url: "https://open.spotify.com/embed/album/6RXr8BmKNSK9Zk11k0I7Dl", min: 46 }, // 025/und die singende Schlange
+            { url: "https://open.spotify.com/embed/album/2NSreywe8UbWo7BJVY3Spk", min: 44 }, // 026/und die Silbermine
+            { url: "https://open.spotify.com/embed/album/2AisAUu4deLpNi6g6qlTLC", min: 52 }, // 027/und der magische Kreis
+            { url: "https://open.spotify.com/embed/album/7Dbd2rya9glmBLVxclcU4d", min: 48 }, // 028/und der Doppelgänger
+            { url: "https://open.spotify.com/embed/album/0zV9pnaXLuogDr6prsvb4M", min: 42 }, // 030/und das Riff der Haie
+            { url: "https://open.spotify.com/embed/album/0tPetsUWuZIC0E85x6eVN5", min: 50 }, // 031/und das Narbengesicht
+            { url: "https://open.spotify.com/embed/album/7K3VEzD1rm0dgUGBi1i5PW", min: 44 }, // 032/und der Ameisenmensch
+            { url: "https://open.spotify.com/embed/album/1imKVIfJIM0vKNymevqKjP", min: 44 }, // 033/und die bedrohte Ranch
+            { url: "https://open.spotify.com/embed/album/2L18qTB1EfS4FuBk2M6QwV", min: 44 }, // 034/und der rote Pirat
+            { url: "https://open.spotify.com/embed/album/2REEfC6tVMiYv1eKMlGiOX", min: 55 }, // 035/und der Höhlenmensch
+            { url: "https://open.spotify.com/embed/album/4R24oyyqxGkczNpqWGCXBZ", min: 48 }, // 036/und der Super-Wal
+            { url: "https://open.spotify.com/embed/album/6R4gnRHXKgw2cxneWgTiEL", min: 55 }, // 037/und der heimliche Hehler
+            { url: "https://open.spotify.com/embed/album/6d3Pavm0enVICdOvBEqxYA", min: 43 }, // 038/und der unsichtbare Gegner
+            { url: "https://open.spotify.com/embed/album/0AKPkUh4ElyZNipc0lZoiR", min: 48 }, // 039/und die Perlenvögel
+            { url: "https://open.spotify.com/embed/album/2IIw1KESZrJQBFdZQAWcKY", min: 47 }, // 040/und der Automarder
+            { url: "https://open.spotify.com/embed/album/5KUXX8H2LNsuik46M5XLx0", min: 54 }, // 041/und das Volk der Winde
+            { url: "https://open.spotify.com/embed/album/24bba3w45LGGm7ps3qonkc", min: 48 }, // 042/und der weinende Sarg
+            { url: "https://open.spotify.com/embed/album/48QVzskevXtA0KpJjXzvb1", min: 51 }, // 043/und der höllische Werwolf
+            { url: "https://open.spotify.com/embed/album/6JNNLdq9ELeKENK3RmxLWQ", min: 50 }, // 044/und der gestohlene Preis
+            { url: "https://open.spotify.com/embed/album/39mWWzaUZp0AXyN9Vnp4od", min: 47 }, // 045/und das Gold der Wikinger
+            { url: "https://open.spotify.com/embed/album/6YX4i7aMCYmn20zvAFM3lG", min: 48 }, // 046/und der schrullige Millionär
+            { url: "https://open.spotify.com/embed/album/3iWNsrEs9D0FFlKFfscdvL", min: 47 }, // 047/und der giftige Gockel
+            { url: "https://open.spotify.com/embed/album/5IRxm1lo35PttzU8YLslZy", min: 48 }, // 048/und die gefährlichen Fässer
+            { url: "https://open.spotify.com/embed/album/7t2SteAH5OnLLC1ghTAmka", min: 45 }, // 049/und die Comic-Diebe
+            { url: "https://open.spotify.com/embed/album/6DKfjDIB1BSYRGAi2YJYm3", min: 57 }, // 050/und der verschwundene Filmstar
+            { url: "https://open.spotify.com/embed/album/71kiy6INV3LzsCddpTZoHf", min: 55 }, // 051/und der riskante Ritt
+            { url: "https://open.spotify.com/embed/album/3pXJh2A9gYzNt22rEIE5q7", min: 54 }, // 052/und die Musikpiraten
+            { url: "https://open.spotify.com/embed/album/0F9ebKwTd5RNZZOu49lWuF", min: 53 }, // 053/und die Automafia
+            { url: "https://open.spotify.com/embed/album/1Fg15cBLFliy6Kr60QqRan", min: 51 }, // 054/Gefahr im Verzug
+            { url: "https://open.spotify.com/embed/album/4oH2GUWlSSsSgVkxyPVHX1", min: 51 }, // 055/Gekaufte Spieler
+            { url: "https://open.spotify.com/embed/album/3fotka2Hbq0N7V9KKWIDdw", min: 49 }, // 056/Angriff der Computer-Viren
+            { url: "https://open.spotify.com/embed/album/5W6dRiaeSVE7zUBYHbepak", min: 43 }, // 057/Tatort Zirkus
+            { url: "https://open.spotify.com/embed/album/6DWykdlgf60Mq02hPAGYVD", min: 45 }, // 058/und der verrückte Maler
+            { url: "https://open.spotify.com/embed/album/2qcA1EqAoUsqxXqIivY6Zc", min: 44 }, // 059/Giftiges Wasser
+            { url: "https://open.spotify.com/embed/album/7cBoiWgh1bTMZmCwJE0eMu", min: 47 }, // 060/Dopingmixer
+            { url: "https://open.spotify.com/embed/album/26M4ktHp3isOX6XJazAxPn", min: 59 }, // 061/und die Rache des Tigers
+            { url: "https://open.spotify.com/embed/album/0biXUv1uGUaVsPcw8nAZCY", min: 59 }, // 062/Spuk im Hotel
+            { url: "https://open.spotify.com/embed/album/5GPTZKrD7eaCp9p6VOBuIN", min: 67 }, // 063/Fußball-Gangster
+            { url: "https://open.spotify.com/embed/album/0tmMvsGyWRzVckCYgkvve3", min: 66 }, // 064/Geisterstadt
+            { url: "https://open.spotify.com/embed/album/62z7yW4RKhhuAp0RklmNvc", min: 60 }, // 065/Diamantenschmuggel
+            { url: "https://open.spotify.com/embed/album/6qj4LD0zotutkIgEg9OvDj", min: 59 }, // 066/und die Schattenmänner
+            { url: "https://open.spotify.com/embed/album/7Hjk98j1FSrHV5IHWmeeFh", min: 63 }, // 067/und das Geheimnis der Särge
+            { url: "https://open.spotify.com/embed/album/21pUsEhxssm6fvumGFmi35", min: 60 }, // 068/und der Schatz im Bergsee
+            { url: "https://open.spotify.com/embed/album/2erJcBofKBO6GFMqDPppsU", min: 66 }, // 069/Späte Rache
+            { url: "https://open.spotify.com/embed/album/4mlQEwk6I0XuksZCYTtatz", min: 63 }, // 070/Schüsse aus dem Dunkel
+            { url: "https://open.spotify.com/embed/album/6EEN6onzbHIOxnwUkGfKhv", min: 67 }, // 071/Die verschwundene Seglerin
+            { url: "https://open.spotify.com/embed/album/2GQjkF0ceIse6jVZkUuAQc", min: 58 }, // 072/Dreckiger Deal
+            { url: "https://open.spotify.com/embed/album/1K8kXLhNnHSdPvtUwf74DE", min: 67 }, // 073/Poltergeist
+            { url: "https://open.spotify.com/embed/album/69VLqtWA1bpguYRCFRAxQl", min: 74 }, // 074/und das brennende Schwert
+            { url: "https://open.spotify.com/embed/album/2IqfdlQamN3vCWN3CKLEVI", min: 56 }, // 075/Die Spur des Raben
+            { url: "https://open.spotify.com/embed/album/6RDPGc2budsdTw1lj8f2O5", min: 70 }, // 076/Stimmen aus dem Nichts
+            { url: "https://open.spotify.com/embed/album/3CMN8Y4kjoG4sFwlOEpfsV", min: 59 }, // 077/Pistenteufel
+            { url: "https://open.spotify.com/embed/album/6t7Y1H4dUM0d4JycenVskN", min: 57 }, // 078/Das leere Grab
+            { url: "https://open.spotify.com/embed/album/1rDYlXZy6vN4wqqQ6buqOr", min: 77 }, // 079/Im Bann des Voodoo
+            { url: "https://open.spotify.com/embed/album/4izXuApLzBWtWHrFqgcrxL", min: 59 }, // 080/Geheimakte Ufo
+            { url: "https://open.spotify.com/embed/album/2s5u6hCaMpTIvZtBRvQzha", min: 50 }, // 081/Verdeckte Fouls
+            { url: "https://open.spotify.com/embed/album/7iysTnwaaFrPPWAuUyyi0c", min: 70 }, // 082/Die Karten des Bösen
+            { url: "https://open.spotify.com/embed/album/3yofHdHiOLtVZlxWCZ4XBB", min: 59 }, // 083/Meuterei auf hoher See
+            { url: "https://open.spotify.com/embed/album/3bhsXwKIDwVK5LTkDCICp0", min: 60 }, // 084/Musik des Teufels
+            { url: "https://open.spotify.com/embed/album/2eeodcwD9HXpcA2rvoFkIq", min: 59 }, // 085/Feuerturm
+            { url: "https://open.spotify.com/embed/album/4uF9MjchYgq5jjPi5x5YZy", min: 58 }, // 086/Nacht in Angst
+            { url: "https://open.spotify.com/embed/album/1KpWkUQaj5ECJsrb8SrPl4", min: 55 }, // 087/Wolfsgesicht
+            { url: "https://open.spotify.com/embed/album/3CZCwdMpj2jnjI43ZlnY5T", min: 75 }, // 088/Vampir im Internet
+            { url: "https://open.spotify.com/embed/album/3TcIn19pVz5LXE8UleuLuX", min: 60 }, // 089/Tödliche Spur
+            { url: "https://open.spotify.com/embed/album/2dlgtHB8z7ZhSl1fsSb0Ic", min: 59 }, // 090/Der Feuerteufel
+            { url: "https://open.spotify.com/embed/album/0Jh7gzQaOscoFndb3raq2l", min: 60 }, // 091/Labyrinth der Götter
+            { url: "https://open.spotify.com/embed/album/7yMRFgR8FRyWwiLHzQQa2B", min: 59 }, // 092/Todesflug
+            { url: "https://open.spotify.com/embed/album/7a9rwqPkVdU4FC2cWFudVO", min: 60 }, // 093/und das Geisterschiff
+            { url: "https://open.spotify.com/embed/album/3UHj03eU7OnDuMVCTLbmcj", min: 54 }, // 094/Das schwarze Monster
+            { url: "https://open.spotify.com/embed/album/4KEZWleMTT8lDaQDLgozFc", min: 60 }, // 095/Botschaft von Geisterhand
+            { url: "https://open.spotify.com/embed/album/5ub4r9Q0YVMrWuOEesu6dR", min: 53 }, // 096/und der rote Rächer
+            { url: "https://open.spotify.com/embed/album/2bfJa4PRKVb7as86HZv8Df", min: 68 }, // 097/Insektenstachel
+            { url: "https://open.spotify.com/embed/album/4C4o7tHpT20QrdsvmI70uI", min: 63 }, // 098/Tal des Schreckens
+            { url: "https://open.spotify.com/embed/album/3haGZZ8x7PyaGxiqcLmLf9", min: 76 }, // 099/Rufmord
+            { url: "https://open.spotify.com/embed/album/6zwBnyiy9Hy9TAser0DOuL", min: 138, approx: true }, // 100/Toteninsel
+            { url: "https://open.spotify.com/embed/album/1DZAe0qMw8Pq9EPoX6gETA", min: 72 }, // 101/und das Hexen-Handy
+            { url: "https://open.spotify.com/embed/album/3NYWEuwAPt4PIJ4OeNxmzO", min: 59 }, // 102/Doppelte Täuschung
+            { url: "https://open.spotify.com/embed/album/4ADdmpObDUmBdvyJ9oNz5o", min: 64 }, // 103/Das Erbe des Meisterdiebes
+            { url: "https://open.spotify.com/embed/album/6joRNVLN69v3eSnxM86BSM", min: 69 }, // 104/Gift per e-mail
+            { url: "https://open.spotify.com/embed/album/6Mi4Smq7Fn8qNOg6Xnf0In", min: 76 }, // 105/Der Nebelberg
+            { url: "https://open.spotify.com/embed/album/4eX1wH67TDcYPZ1ZsjtPb6", min: 71 }, // 106/Der Mann ohne Kopf
+            { url: "https://open.spotify.com/embed/album/3kBby5GJMI4U97XljKcPFD", min: 64 }, // 107/und der Schatz der Mönche
+            { url: "https://open.spotify.com/embed/album/3v4W4AFaI8uO7J88ojaSkS", min: 67 }, // 108/Die sieben Tore
+            { url: "https://open.spotify.com/embed/album/4RZllDAKF3DeDz6jZJFXTa", min: 67 }, // 109/Gefährliches Quiz
+            { url: "https://open.spotify.com/embed/album/1OBHPhBUih26oQTqxLvJTQ", min: 55 }, // 110/Panik im Park
+            { url: "https://open.spotify.com/embed/album/7b9OiVsktCZyldiAnjkVDx", min: 65 }, // 111/Die Höhle des Grauens
+            { url: "https://open.spotify.com/embed/album/0WBhXS0uAYuL1sYb6vjYeS", min: 59 }, // 112/Schlucht der Dämonen
+            { url: "https://open.spotify.com/embed/album/3bFvjy9IyWd7GrzN2dr0Hi", min: 60 }, // 113/Das Auge des Drachen
+            { url: "https://open.spotify.com/embed/album/5L2KCw21QT3JKg1KKuqSeF", min: 69 }, // 114/Die Villa der Toten
+            { url: "https://open.spotify.com/embed/album/5Hafee7JOUqNVqtsrCtrTZ", min: 70 }, // 115/Auf tödlichem Kurs
+            { url: "https://open.spotify.com/embed/album/3piMnopGsrEAKd1EZxsU3i", min: 62 }, // 116/Codename: Cobra
+            { url: "https://open.spotify.com/embed/album/3rxr4SLE2EG0EAlpSeI99o", min: 61 }, // 117/Der finstere Rivale
+            { url: "https://open.spotify.com/embed/album/1GKXpMQRKEyZI8pL62VUIP", min: 67 }, // 118/Das düstere Vermächtnis
+            { url: "https://open.spotify.com/embed/album/7rPDg8NlFJ1a2HMTQvVaB2", min: 68 }, // 119/Der geheime Schlüssel
+            { url: "https://open.spotify.com/embed/album/6fVTJQKJBku1yaOmZOnfwg", min: 59 }, // 120/Der schwarze Skorpion
+            { url: "https://open.spotify.com/embed/album/6d21lwV9Imn3ObWUyV1UN2", min: 63 }, // 121/Spur ins Nichts
+            { url: "https://open.spotify.com/embed/album/68NWcgqeCQMZ3QcPJXBhzH", min: 58 }, // 122/und der Geisterzug
+            { url: "https://open.spotify.com/embed/album/3HgetGSMzg6bGM6b67YZcj", min: 61 }, // 123/Fußballfieber
+            { url: "https://open.spotify.com/embed/album/0LoesJ9VnJPrlvIDz4u4Xt", min: 67 }, // 124/Geister-Canyon
+            { url: "https://open.spotify.com/embed/album/0sIRyuExi7jBQmOpHyyY78", min: 174, approx: true }, // 125/Feuermond
+            { url: "https://open.spotify.com/embed/album/0AnyLaLPx339iGaxjqVfob", min: 67 }, // 126/Schrecken aus dem Moor
+            { url: "https://open.spotify.com/embed/album/0mp5HVWlYinEYa7Y4Q2vau", min: 73 }, // 127/Schwarze Madonna
+            { url: "https://open.spotify.com/embed/album/3XXYXmCEe185oHxigCRo97", min: 74 }, // 128/Schatten über Hollywood
+            { url: "https://open.spotify.com/embed/album/1lD4RdnibVS7QhtZqCal9E", min: 79 }, // 129/SMS aus dem Grab
+            { url: "https://open.spotify.com/embed/album/5l5CFSjzSdhbflqmplcTFX", min: 69 }, // 130/Der Fluch des Drachen
+            { url: "https://open.spotify.com/embed/album/4eorcDi9eRfsi7X0A91Z7u", min: 71 }, // 131/Haus des Schreckens
+            { url: "https://open.spotify.com/embed/album/23wcElHGWpunC23ggr4PcW", min: 63 }, // 132/Spuk im Netz
+            { url: "https://open.spotify.com/embed/album/1juMQy6yZVmk9Za6HeiicB", min: 58 }, // 133/Fels der Dämonen
+            { url: "https://open.spotify.com/embed/album/1Cta130Rwp5vH1ddfAChbU", min: 67 }, // 134/Der tote Mönch
+            { url: "https://open.spotify.com/embed/album/0TmWLedytkxVuP9b5Hqeqq", min: 71 }, // 135/Fluch des Piraten
+            { url: "https://open.spotify.com/embed/album/5HiWGQmaCRaxdaon49Iw9S", min: 69 }, // 136/und das versunkene Dorf
+            { url: "https://open.spotify.com/embed/album/3m7fR2wOkytZHq9m4QeBkB", min: 78 }, // 137/Pfad der Angst
+            { url: "https://open.spotify.com/embed/album/79enDMGQWH7LQ5weNB96g7", min: 67 }, // 138/Die geheime Treppe
+            { url: "https://open.spotify.com/embed/album/6RJf8I60kNhnYxlnw7eTGv", min: 65 }, // 139/Das Geheimnis der Diva
+            { url: "https://open.spotify.com/embed/album/3HxAtK23R2gFkW000mdaFT", min: 78 }, // 140/Stadt der Vampire
+            { url: "https://open.spotify.com/embed/album/6gxj68DOHRSVlEM4xzwtRy", min: 60 }, // 141/und die Fußball-Falle
+            { url: "https://open.spotify.com/embed/album/71moidSHTwJsc2N70axEce", min: 58 }, // 142/Tödliches Eis
+            { url: "https://open.spotify.com/embed/album/4Y7Pxv7pzLmKVJowmBwOkd", min: 61 }, // 143/und die Poker-Hölle
+            { url: "https://open.spotify.com/embed/album/2RxTF6MhAVOtudVNOyHTQz", min: 71 }, // 144/Zwillinge der Finsternis
+            { url: "https://open.spotify.com/embed/album/6TjzBTmeDakBgh5NOGj1BC", min: 62 }, // 145/Die Rache der Samurai
+            { url: "https://open.spotify.com/embed/album/3D9Jf4mdOBoeyrKpffYBvy", min: 57 }, // 146/Der Biss der Bestie
+            { url: "https://open.spotify.com/embed/album/35aU9bfmxPGdjiRA4JMuFd", min: 63 }, // 147/Grusel auf Campbell Castle
+            { url: "https://open.spotify.com/embed/album/2uOsf31oenHRd4DVxCSjn9", min: 67 }, // 148/und die feurige Flut
+            { url: "https://open.spotify.com/embed/album/7K7dfMc3VwHOKtENI1BWTD", min: 62 }, // 149/Der namenlose Gegner
+            { url: "https://open.spotify.com/embed/album/6cPgVsZ6TPyVIP9BHP5ty5", min: 168, approx: true }, // 150/Geisterbucht
+            { url: "https://open.spotify.com/embed/album/3u0OSCwiOblOhm4dKjwLN5", min: 66 }, // 151/Schwarze Sonne
+            { url: "https://open.spotify.com/embed/album/5iNeANVy4supl8HowB9V2h", min: 57 }, // 152/Skateboardfieber
+            { url: "https://open.spotify.com/embed/album/7nxSEeJiQwI34VwnWT83C9", min: 54 }, // 153/und das Fußballphantom
+            { url: "https://open.spotify.com/embed/album/3uggg8gNlh1kpBxLeOfFTV", min: 71 }, // 154/Botschaft aus der Unterwelt
+            { url: "https://open.spotify.com/embed/album/623V90QowsF4WSqV3cHGKf", min: 68 }, // 155/und der Meister des Todes
+            { url: "https://open.spotify.com/embed/album/78wUIvkGT2CdWW0ngeEy8V", min: 73 }, // 156/Im Netz des Drachen
+            { url: "https://open.spotify.com/embed/album/0pdXEEgKjfh4H0aZg4IOTS", min: 74 }, // 157/Im Zeichen der Schlangen
+            { url: "https://open.spotify.com/embed/album/3uFt95otJjaxH8o40tPtIS", min: 57 }, // 158/und der Feuergeist
+            { url: "https://open.spotify.com/embed/album/4rCAnDrNJ96srnBEoA0ISj", min: 66 }, // 159/Nacht der Tiger
+            { url: "https://open.spotify.com/embed/album/2F6VxgWbGCUpTU9ux6Dtbi", min: 64 }, // 160/Geheimnisvolle Botschaften
+            { url: "https://open.spotify.com/embed/album/1GEzdjI5N25iuGjvypRscs", min: 71 }, // 161/Die blutenden Bilder
+            { url: "https://open.spotify.com/embed/album/7beppYTqtHAEPKoXyodssF", min: 73 }, // 162/und der schreiende Nebel
+            { url: "https://open.spotify.com/embed/album/4fv0pPN7ZjbUiejSTxTPZh", min: 75 }, // 163/und der verschollene Pilot
+            { url: "https://open.spotify.com/embed/album/3An657Q0wkVp4nIDg2zpcB", min: 69 }, // 164/Fußball-Teufel
+            { url: "https://open.spotify.com/embed/album/4izJKxYT4fTwIZjoXNgkX7", min: 70 }, // 165/Im Schatten des Giganten
+            { url: "https://open.spotify.com/embed/album/427kScPIeUSfoNKCNercMC", min: 68 }, // 166/und die brennende Stadt
+            { url: "https://open.spotify.com/embed/album/7kskBahbrQWCOiaXKuoPjE", min: 72 }, // 167/und das blaue Biest
+            { url: "https://open.spotify.com/embed/album/77aawQqgLQZxPb9kwSg0JR", min: 78 }, // 168/GPS-Gangster
+            { url: "https://open.spotify.com/embed/album/5PEHeYcUhz1Aq02ZB1pUgJ", min: 82 }, // 169/Die Spur des Spielers
+            { url: "https://open.spotify.com/embed/album/62CKj2RCiWDDUtBWTn4KxQ", min: 80 }, // 170/Straße des Grauens
+            { url: "https://open.spotify.com/embed/album/6YbaUGc6ZeR1YnDFGQJV8F", min: 68 }, // 171/und das Phantom aus dem Meer
+            { url: "https://open.spotify.com/embed/album/6Anfub4AoVHg9bhJ7js0L0", min: 73 }, // 172/und der Eisenmann
+            { url: "https://open.spotify.com/embed/album/2ALDCHCHdawewN1sduWVQQ", min: 70 }, // 173/Dämon der Rache
+            { url: "https://open.spotify.com/embed/album/5RoL0jdWMoJ8KRFVOeFYtX", min: 64 }, // 174/und das Tuch der Toten
+            { url: "https://open.spotify.com/embed/album/4uggmrJ3Xpm1e2tcz6laze", min: 153, approx: true }, // 175/Schattenwelt
+            { url: "https://open.spotify.com/embed/album/4qbxSVpr3NxRjdIVC411ue", min: 68 }, // 176/und der gestohlene Sieg
+            { url: "https://open.spotify.com/embed/album/0w6Khy7kpqTXrEDITf0rZ0", min: 69 }, // 177/Der Geist des Goldgräbers
+            { url: "https://open.spotify.com/embed/album/3w5glP0mzKfTanzXpAjN27", min: 66 }, // 178/Der gefiederte Schrecken
+            { url: "https://open.spotify.com/embed/album/4IZ7Lsm5le7HJPtaGLCrjO", min: 72 }, // 179/Die Rache des Untoten
+            { url: "https://open.spotify.com/embed/album/6tioH9PNiZbmUT54MsiX5k", min: 78 }, // 180/und die flüsternden Puppen
+            { url: "https://open.spotify.com/embed/album/18xyskqkEGnVfVFhznkFIK", min: 74 }, // 181/Das Kabinett des Zauberers
+            { url: "https://open.spotify.com/embed/album/4zCPToY7AoTqvOKf4HRqAN", min: 76 }, // 182/Im Haus des Henkers
+            { url: "https://open.spotify.com/embed/album/1qhlRmclvYWkrYkLnFxFZN", min: 76 }, // 183/und der letzte Song
+            { url: "https://open.spotify.com/embed/album/5B7w9vkfh979tEyzwkLk9k", min: 70 }, // 184/und der Hexengarten
+            { url: "https://open.spotify.com/embed/album/7eHh5PAxQBt5KBWzd3a10G", min: 61 }, // 185/und der Mann ohne Augen
+            { url: "https://open.spotify.com/embed/album/5kevid18ttcAPK1vk0kLtc", min: 73 }, // 186/Insel des Vergessens
+            { url: "https://open.spotify.com/embed/album/6uj8JeIgluMibSu8Divkbh", min: 67 }, // 187/und das silberne Amulett
+            { url: "https://open.spotify.com/embed/album/22soWryC08ctyMNb6NrMGD", min: 80 }, // 188/Signale aus dem Jenseits
+            { url: "https://open.spotify.com/embed/album/02MXdFaVMz0qQJjmivjI8g", min: 65 }, // 189/und der unsichtbare Passagier
+            { url: "https://open.spotify.com/embed/album/100ZHoBX994GlckxjoGpma", min: 64 }, // 190/und die Kammer der Rätsel
+            { url: "https://open.spotify.com/embed/album/2ICtKWqLqMBTzi7UeByhKd", min: 71 }, // 191/Verbrechen im Nichts
+            { url: "https://open.spotify.com/embed/album/1qag2AiFcxXU1UaIgrDFff", min: 68 }, // 192/im Bann des Drachen
+            { url: "https://open.spotify.com/embed/album/4m6VlVOWfrUVhWWrueMo7p", min: 70 }, // 193/Schrecken aus der Tiefe
+            { url: "https://open.spotify.com/embed/album/2oKngJQA5TdxF5QcP3uZEf", min: 77 }, // 194/und die Zeitreisende
+            { url: "https://open.spotify.com/embed/album/3pbXIzVk7CA5VM2ltxu9TN", min: 75 }, // 195/Im Reich der Ungeheuer
+            { url: "https://open.spotify.com/embed/album/39a7bHWZyWPxwukCHPrTly", min: 79 }, // 196/Geheimnis des Bauchredners
+            { url: "https://open.spotify.com/embed/album/0GRoTtX1wI16M7GSnnN96R", min: 70 }, // 197/Im Auge des Sturms
+            { url: "https://open.spotify.com/embed/album/4piiNuehCc4VjN8NBIcnRt", min: 69 }, // 198/Die Legende der Gaukler
+            { url: "https://open.spotify.com/embed/album/7bTKP2hU0LRks1bXN1R7ko", min: 77 }, // 199/und der grüne Kobold
+            { url: "https://open.spotify.com/embed/album/09Ckx1JLgPsQHHGuSIt2j3", min: 179, approx: true }, // 200/Feuriges Auge
+            { url: "https://open.spotify.com/embed/album/4FxNfDSXqAg8N1D8NBtvZ5", min: 81 }, // 201/Höhenangst
+            { url: "https://open.spotify.com/embed/album/4Exxckn0GwbhnGl6N4um2N", min: 79 }, // 202/Das weiße Grab
+            { url: "https://open.spotify.com/embed/album/79Drf49yNdGLBzzHMGGmBz", min: 79 }, // 203/Tauchgang ins Ungewisse
+            { url: "https://open.spotify.com/embed/album/1yMMjH3tDN9GyXiADzTkL9", min: 71 }, // 204/Der dunkle Wächter
+            { url: "https://open.spotify.com/embed/album/2Sw9FBHOoT6fBhYxHsRFxq", min: 74 }, // 205/Das rätselhafte Erbe
+            { url: "https://open.spotify.com/embed/album/7khAMIQlYBmW7mI9cphDhJ", min: 65 }, // 206/und der Mottenmann
+            { url: "https://open.spotify.com/embed/album/6BxvBG51szGmlg5x3F1rHj", min: 64 }, // 207/Die falschen Detektive
+            { url: "https://open.spotify.com/embed/album/6WgRUQY49NRG6JT6dJ4xEq", min: 73 }, // 208/Kelch des Schicksals
+            { url: "https://open.spotify.com/embed/album/0q4FbI22wSMrzgWh5vgHi9", min: 62 }, // Folge 209: Kreaturen der Nacht
+            { url: "https://open.spotify.com/embed/album/3ieWqOL150wJOcft7iZHKZ", min: 63 }, // Folge 210: und die schweigende Grotte
+            { url: "https://open.spotify.com/embed/album/7pZotNNAYOkeHNvJRKzYRk", min: 74 }, // Folge 211: und der Jadekönig
+            { url: "https://open.spotify.com/embed/album/2zHMeFNQQxKOmUgmppOjIM", min: 75 }, // Folge 212: und der weiße Leopard
+            { url: "https://open.spotify.com/embed/album/4BZfSV9maCil4l4yftT74F", min: 75 }, // Folge 213: Der Fluch der Medusa
+            { url: "https://open.spotify.com/embed/album/1cJ3fNx6K47p4eDFqhnvsA", min: 68 }, // Folge 214: und der Geisterbunker
+            { url: "https://open.spotify.com/embed/album/76pYNMMVZTiuNy3IoXcavU", min: 68 }, // Folge 215: und die verlorene Zeit
+            { url: "https://open.spotify.com/embed/album/2BkEUZY7Da7bqlUjmMA2Cq", min: 67 }, // Folge 216: Die Schwingen des Unheils
+            { url: "https://open.spotify.com/embed/album/1WlRnNunbHpnRTTVkxMRnd", min: 78 }, // Folge 217: und der Kristallschädel
+            { url: "https://open.spotify.com/embed/album/2WwOKZLpFWrvw3O9CISod1", min: 75 }, // Folge 218: Im Netz der Lügen
+            { url: "https://open.spotify.com/embed/album/6ewdyVIW2LurJhYGU0UBAa", min: 72 }, // Folge 219: und die Teufelsklippe
+            { url: "https://open.spotify.com/embed/album/01i4iyB40EU7Qgd6EgKoZt", min: 76 }, // Folge 220: Im Wald der Gefahren
+            { url: "https://open.spotify.com/embed/album/1KpVSqapKAUAtAepWWxPWs", min: 68 }, // Folge 221: Manuskript des Satans
+            { url: "https://open.spotify.com/embed/album/3o2Gwvg8lqLNRnlV1v1s5K", min: 79 }, // Folge 222: und die Gesetzlosen
+            { url: "https://open.spotify.com/embed/album/451jKBwuSNrNgLlqEAZfra", min: 83 }, // Folge 223: und der Knochenmann
+            { url: "https://open.spotify.com/embed/album/7JhdaReI98XYFrzb3jJPFa", min: 75 }, // Folge 224: Die Yacht des Verrats
+            { url: "https://open.spotify.com/embed/album/0FuC7q4bJG41g1naKBx4ot", min: 181 }, // Folge 225: und der Puppenmacher
+            { url: "https://open.spotify.com/embed/album/3Sv5tE8PcAlGY6Ys2ISQXF", min: 85 }, // Folge 226: Die Spur der Toten
+            { url: "https://open.spotify.com/embed/album/2CMXywsh8wVXXCmr2bLTZ6", min: 66 }, // Folge 227: Melodie der Rache
+            { url: "https://open.spotify.com/embed/album/6sNAlohza1ZTWVMGhFTGJW", min: 81 }, // Folge 228: Der Ruf der Krähen
+            { url: "https://open.spotify.com/embed/album/6SMOmIWODrO1gND2YPpjHf", min: 81 }, // Folge 229: Drehbuch der Täuschung
+            { url: "https://open.spotify.com/embed/album/154I9rUwPuFHj6snU4amYg", min: 72 }, // Folge 230: Der Tag der Toten
+            { url: "https://open.spotify.com/embed/album/6isiJbL3hh7e60KigIgKuY", min: 79 }, // Folge 231: und der Dreiäugige Schakal
+            { url: "https://open.spotify.com/embed/album/1Qnn3AAN3Nquv7GlNk41YQ", min: 78 }, // Folge 232: Die Stadt aus Gold
+            { url: "https://open.spotify.com/embed/album/0qZ0R61AqoD2i8GnzUk91C", min: 71 }, // Folge 233: Die Nacht der Gewitter
+            { url: "https://open.spotify.com/embed/album/4sQsFeHojdbFPB07vSg3Rd", min: 84 }, // Folge 234: und der lebende Tresor
+            { url: "https://open.spotify.com/embed/album/031exGT0P6IWBYY6faqoLV", min: 84 }, // Folge 235: und das Fantasmofon
+            { url: "https://open.spotify.com/embed/album/5yCEzMfmMnSG97SXDFGjR8", min: 82 }, // Folge 236: Im Bann des Barrakudas
+            { url: "https://open.spotify.com/embed/album/1IkEurD7s47M9ukevi0bWA", min: 81 }, // Folge 237: und der rote Büffel
+            { url: "https://open.spotify.com/embed/album/00Pxqrupz6xjkI0vd4Otxb", min: 82 }, // Folge 238: Falsche Schuld
+            { url: "https://open.spotify.com/embed/album/2mh0BDhRAJFa7clABwut3L", min: 81 }, // Folge 239: Das Geheimnis der sieben Palmen
+            { url: "https://open.spotify.com/embed/album/55djiROmSQZWDVzzUwyKFc", min: 72 }, // Folge 240: und die schwarze Rose
+            { url: "https://open.spotify.com/embed/album/3yMvUfGBieqtsmwQ35lCoA", min: 81 }, // Folge 241: Meister des Lichts
 
             // Sonderveröffentlichungen (Kurzgeschichten, Adventskalender, Live-Mitschnitte,
             // Neufassungen, Top Secret Editions, Midi-Bände, Graphic-Novel-Hörspiele, ...)
@@ -502,10 +577,19 @@ per Ausschlussregel bewusst nicht aufgenommen (siehe oben).
             return (approx ? '≈ ' : '') + text;
         }
 
-        function showRandomAlbum() {
-            // Zufälligen Index wählen
-            const randomIndex = Math.floor(Math.random() * albumLinks.length);
-            const selectedAlbum = albumLinks[randomIndex];
+        // Liste beim Laden einmal mischen (Fisher-Yates)
+        const shuffledAlbums = albumLinks.slice();
+        for (let i = shuffledAlbums.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffledAlbums[i], shuffledAlbums[j]] = [shuffledAlbums[j], shuffledAlbums[i]];
+        }
+        let currentIndex = -1;
+        let latestRequestId = 0;
+
+        function showNextAlbum() {
+            // Nächsten Eintrag nehmen, am Ende wieder von vorn
+            currentIndex = (currentIndex + 1) % shuffledAlbums.length;
+            const selectedAlbum = shuffledAlbums[currentIndex];
 
             // Embed-URL → Album-ID → direkter Spotify-Link
             const albumId = selectedAlbum.url.split('/album/')[1];
@@ -514,34 +598,52 @@ per Ausschlussregel bewusst nicht aufgenommen (siehe oben).
             const isUnusualLength = selectedAlbum.min > 90 || selectedAlbum.min < 20;
             const durationClass = isUnusualLength ? 'duration-note duration-highlight' : 'duration-note';
 
+            // Sofort anzeigen: Platzhalter für Cover und Titel, Dauer und Link sind schon bekannt
+            const requestId = ++latestRequestId;
+            resultDiv.innerHTML = `
+                <div class="album-cover skeleton"></div>
+                <span class="skeleton skeleton-title"></span>
+                <p class="${durationClass}">${durationText}</p>
+                <a class="spotify-link" href="${spotifyUrl}" target="_blank" rel="noopener">
+                    ${spotifyLogoSvg}
+                    In Spotify öffnen
+                </a>
+            `;
+            const coverPlaceholder = resultDiv.querySelector('.album-cover');
+            const titlePlaceholder = resultDiv.querySelector('.skeleton-title');
+
             // Albumtitel und Coverbild über oEmbed laden
             fetch(`https://open.spotify.com/oembed?url=${spotifyUrl}`)
                 .then(r => r.json())
                 .then(data => {
-                    resultDiv.innerHTML = `
-                        <img src="${data.thumbnail_url}" alt="${data.title}" style="width:220px;height:220px;border-radius:10px;object-fit:cover;margin-bottom:14px;box-shadow:0 4px 20px rgba(0,0,0,0.5);">
-                        <p style="margin:0 0 4px;font-size:1rem;font-weight:bold;">${data.title}</p>
-                        <p class="${durationClass}">${durationText}</p>
-                        <a class="spotify-link" href="${spotifyUrl}" target="_blank" rel="noopener">
-                            ${spotifyLogoSvg}
-                            In Spotify öffnen
-                        </a>
-                    `;
+                    const img = new Image();
+                    img.className = 'album-cover fade-in';
+                    img.alt = data.title;
+                    img.src = data.thumbnail_url;
+                    // Erst einblenden, wenn das Bild fertig geladen ist
+                    return img.decode().catch(() => {}).then(() => ({ data, img }));
+                })
+                .then(({ data, img }) => {
+                    // Inzwischen wurde schon das nächste Album angefordert
+                    if (requestId !== latestRequestId) return;
+
+                    const title = document.createElement('p');
+                    title.className = 'album-title fade-in';
+                    title.textContent = data.title;
+
+                    coverPlaceholder.replaceWith(img);
+                    titlePlaceholder.replaceWith(title);
                 })
                 .catch(() => {
                     // Fallback ohne Bild/Titel
-                    resultDiv.innerHTML = `
-                        <p class="${durationClass}">${durationText}</p>
-                        <a class="spotify-link" href="${spotifyUrl}" target="_blank" rel="noopener">
-                            ${spotifyLogoSvg}
-                            In Spotify öffnen
-                        </a>
-                    `;
+                    if (requestId !== latestRequestId) return;
+                    coverPlaceholder.remove();
+                    titlePlaceholder.remove();
                 });
         }
 
-        newAlbumBtn.addEventListener('click', showRandomAlbum);
-        showRandomAlbum();
+        newAlbumBtn.addEventListener('click', showNextAlbum);
+        showNextAlbum();
     </script>
 </body>
 
