@@ -167,6 +167,45 @@
             color: var(--text-muted);
         }
 
+        /* Mehrere Arbeitszeiten (Tag ⇄ Woche je Zeile) */
+        .work-time-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        /* Spaltenbeschriftung nur in der ersten Zeile sichtbar (Inputs haben zusätzlich aria-label).
+           Unsichtbar statt ausgeblendet, damit die Spalten – und damit ☆/× – in allen Zeilen gleich breit sind;
+           Höhe 0 und negativer Rand heben Beschriftung und Flex-Gap in der Höhe auf. */
+        .work-time-row + .work-time-row label {
+            visibility: hidden;
+            height: 0;
+            margin-bottom: -5px;
+        }
+
+        .work-time-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 20px;
+            line-height: 1;
+            padding: 0 2px 10px;
+            cursor: pointer;
+        }
+        .work-time-btn:hover { color: var(--primary); }
+        .work-time-relevant-btn.active { color: var(--primary); }
+        .work-time-delete-btn:hover { color: var(--danger); }
+
+        /* Bei nur einer Arbeitszeit gibt es nichts zu markieren oder zu löschen */
+        .work-time-row:only-child .work-time-btn { display: none; }
+
+        .work-time-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
         /* ── Pausen-Bereich ── */
         .pause-section {
             background: var(--highlight-bg);
@@ -461,7 +500,7 @@
 
         /* ── Stat-Cards ── */
         .stats-grid {
-            --stat-cols: 6;
+            --stat-cols: 4;
             display: grid;
             grid-template-columns: repeat(var(--stat-cols), 1fr);
             gap: 16px;
@@ -469,13 +508,18 @@
             container-type: inline-size; /* für die Schriftgröße der Werte (cqi) */
         }
 
-        @media (max-width: 900px) {
-            .stats-grid { --stat-cols: 3; }
+        /* Gemeinsame Werte (unabhängig von der Arbeitszeit) über den Zeilen je Arbeitszeit */
+        .stats-shared {
+            --stat-cols: 3;
+            margin-bottom: 16px;
         }
 
         @media (max-width: 640px) {
             .stats-grid { --stat-cols: 2; }
         }
+
+        /* Zeilen-Wrapper je Arbeitszeit; die Kacheln bleiben direkte Grid-Elemente */
+        .stat-row { display: contents; }
 
         .stat-card {
             background: var(--highlight-bg);
@@ -501,6 +545,11 @@
         .stat-card.selected {
             border-color: var(--primary);
             background: var(--primary-light);
+        }
+
+        /* Arbeitszeit-Kachel der relevanten Zeile */
+        .stat-card.relevant {
+            border-color: var(--primary);
         }
 
         .stat-label {
@@ -573,18 +622,11 @@
         <div class="work-inputs-divider"></div>
 
         <div class="input-block">
-            <div class="linked-fields">
-                <div class="input-group">
-                    <label for="dailyTime">Tagesarbeitszeit</label>
-                    <input type="text" id="dailyTime" class="duration-input" placeholder="H:MM" maxlength="6">
-                </div>
-                <div class="link-indicator" title="Die Felder sind verknüpft (Woche ÷ 5 = Tag)">⇄</div>
-                <div class="input-group">
-                    <label for="weeklyTime">Wochenarbeitszeit</label>
-                    <input type="text" id="weeklyTime" class="duration-input" placeholder="H:MM" maxlength="6">
-                </div>
+            <div class="work-time-list" id="workTimeList"></div>
+            <div class="work-time-actions">
+                <button type="button" class="btn-add-pause" onclick="addWorkTimeRowAndFocus()">+ Arbeitszeit</button>
+                <span class="work-inputs-hint">Format: Stunden:Minuten&ensp;(z.&nbsp;B. 7:36 oder 38:00)</span>
             </div>
-            <span class="work-inputs-hint">Format: Stunden:Minuten&ensp;(z.&nbsp;B. 7:36 oder 38:00)</span>
         </div>
 
         <div class="work-inputs-divider"></div>
@@ -653,11 +695,7 @@
     </div>
 
     <!-- Ergebnisse -->
-    <div class="stats-grid">
-        <div class="stat-card" id="statCardTarget" onclick="selectTitleStat('target')" title="Klicken, um diesen Wert im Seitentitel anzuzeigen">
-            <div class="stat-label">Zielzeit</div>
-            <div class="stat-value muted" id="statTargetTime">–</div>
-        </div>
+    <div class="stats-grid stats-shared">
         <div class="stat-card" id="statCardNet" onclick="selectTitleStat('net')" title="Klicken, um diesen Wert im Seitentitel anzuzeigen">
             <div class="stat-label">Netto-Arbeitszeit</div>
             <div class="stat-value" id="statNetWork">–</div>
@@ -670,20 +708,12 @@
             <div class="stat-label">Verstrichene Pausenzeit</div>
             <div class="stat-value muted" id="statPauseElapsed">–</div>
         </div>
-        <div class="stat-card" id="statCardDiff" onclick="selectTitleStat('diff')" title="Klicken, um diesen Wert im Seitentitel anzuzeigen">
-            <div class="stat-label">Rest / Überziehung</div>
-            <div class="stat-value" id="statDiff">–</div>
-        </div>
-        <div class="stat-card" id="statCardProgress" onclick="selectTitleStat('percent')" title="Klicken, um diesen Wert im Seitentitel anzuzeigen">
-            <div class="stat-label">Fortschritt</div>
-            <div class="stat-value" id="statProgress">–</div>
-            <div class="stat-progress-bar">
-                <div class="stat-progress-fill" id="statProgressBar"></div>
-            </div>
-        </div>
     </div>
 
-    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden. Letzte Aktualisierung: <span id="lastUpdate">–</span> · v<span id="versionNumber">6.12</span></div>
+    <!-- Je Arbeitszeit eine Zeile: Arbeitszeit, Zielzeit, Rest / Überziehung, Fortschritt (siehe renderTargetStats) -->
+    <div class="stats-grid" id="targetStats"></div>
+
+    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden. Letzte Aktualisierung: <span id="lastUpdate">–</span> · v<span id="versionNumber">6.13</span></div>
 </div>
 
 <script>
@@ -694,6 +724,9 @@
     let editingPauseIndex  = null;   // null = neue Pause, number = Bearbeitung
     let titleStat          = 'percent'; // welcher Stat-Wert im Seitentitel angezeigt wird
     let autoPauseMode      = false;  // true = fehlende Pflichtpausen werden automatisch ergänzt
+    let workTimeRows       = [];     // [{ el, dailyInput, weeklyInput, relevantBtn }] – eingegebene Arbeitszeiten
+    let workTimeRowUid     = 0;      // fortlaufend für eindeutige Feld-IDs
+    let relevantIndex      = 0;      // Zeile in workTimeRows, deren Werte im Seitentitel stehen
 
     const titleStatLabels = {
         percent: 'Fortschritt',
@@ -711,8 +744,6 @@
 
     // ── DOM (einmalig auflösen statt bei jedem Update neu zu suchen) ───────
     const startTimeInput    = document.getElementById('startTime');
-    const dailyTimeInput    = document.getElementById('dailyTime');
-    const weeklyTimeInput   = document.getElementById('weeklyTime');
     const timelineFromInput = document.getElementById('timelineFrom');
     const timelineToInput   = document.getElementById('timelineTo');
     const svg               = document.getElementById('timelineSvg');
@@ -734,25 +765,21 @@
         autoPauseHint:          document.getElementById('autoPauseHint'),
         pauseList:              document.getElementById('pauseList'),
         legalWarnings:          document.getElementById('legalWarnings'),
-        statTargetTime:         document.getElementById('statTargetTime'),
+        workTimeList:           document.getElementById('workTimeList'),
         statNetWork:            document.getElementById('statNetWork'),
         statPauseTotal:         document.getElementById('statPauseTotal'),
         statPauseElapsed:       document.getElementById('statPauseElapsed'),
-        statDiff:               document.getElementById('statDiff'),
-        statProgress:           document.getElementById('statProgress'),
-        statProgressBar:        document.getElementById('statProgressBar'),
+        targetStats:            document.getElementById('targetStats'),
         lastUpdate:             document.getElementById('lastUpdate'),
         timelineRangeWarning:     document.getElementById('timelineRangeWarning'),
         timelineRangeWarningText: document.getElementById('timelineRangeWarningText'),
     };
 
+    // Kacheln der gemeinsamen Werte; die Kacheln je Arbeitszeit entstehen dynamisch (renderTargetStats)
     const titleStatCards = {
-        percent: document.getElementById('statCardProgress'),
-        target:  document.getElementById('statCardTarget'),
         net:     document.getElementById('statCardNet'),
         pause:   document.getElementById('statCardPause'),
-        pauseElapsed: document.getElementById('statCardPauseElapsed'),
-        diff:    document.getElementById('statCardDiff')
+        pauseElapsed: document.getElementById('statCardPauseElapsed')
     };
 
     // ── INITIALISIERUNG ───────────────────────────────────────────────────
@@ -760,12 +787,12 @@
         timelineFromInput.value = defaultTimelineFrom;
         timelineToInput.value   = defaultTimelineTo;
         loadFromUrlParams();
+        if (!workTimeRows.length) addWorkTimeRow();
         validateTimelineRange();
         if (!startTimeInput.value) {
             const now = new Date();
             startTimeInput.value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
         }
-        updateStatCardSelection();
         updatePauseControlsAvailability();
         startTimeInput.focus();
         startTimeInput.select();
@@ -773,21 +800,33 @@
         setInterval(updateTracker, 10000);
     });
 
-    /** Wird beim Klick auf eine Statistik-Kachel aufgerufen und legt fest, was im Seitentitel steht */
-    function selectTitleStat(stat) {
+    /**
+     * Wird beim Klick auf eine Statistik-Kachel aufgerufen und legt fest, was im Seitentitel steht.
+     * Kacheln einer Arbeitszeit-Zeile übergeben ihren Zeilenindex und machen diese Zeile zugleich relevant.
+     */
+    function selectTitleStat(stat, index = null) {
         titleStat = stat;
-        updateStatCardSelection();
+        if (index !== null) relevantIndex = index;
+        updateWorkTimeRelevantButtons();
         updateTracker();
     }
 
-    /** Markiert die aktuell für den Titel gewählte Kachel visuell */
+    /** Markiert eine Arbeitszeit als relevant, ohne die Art des Titel-Werts zu ändern */
+    function selectRelevantWorkTime(index) {
+        if (index === null || index < 0) return;
+        relevantIndex = index;
+        updateWorkTimeRelevantButtons();
+        updateTracker();
+    }
+
+    /** Markiert die aktuell für den Titel gewählte Kachel der gemeinsamen Werte visuell */
     function updateStatCardSelection() {
         Object.entries(titleStatCards).forEach(([stat, el]) => {
             el.classList.toggle('selected', stat === titleStat);
         });
     }
 
-    /** Setzt den Seitentitel gemäß der gewählten Statistik-Kachel */
+    /** Setzt den Seitentitel gemäß der gewählten Statistik-Kachel (Zielwerte der relevanten Arbeitszeit) */
     function updateTitle(ctx) {
         const label = titleStatLabels[titleStat];
 
@@ -795,14 +834,17 @@
         if (titleStat === 'pause') { document.title = `${formatDuration(ctx.allPauseMin)} h – ${label}`; return; }
         if (titleStat === 'pauseElapsed') { document.title = `${formatDuration(ctx.elapsedPauseMin)} h – ${label}`; return; }
 
-        if (!ctx.hasTarget) { document.title = 'Arbeitszeit-Tracker'; return; }
+        const t = ctx.relevantTarget;
+        if (!t || t.targetEndMin === undefined) { document.title = 'Arbeitszeit-Tracker'; return; }
 
+        // Bei mehreren Arbeitszeiten dazuschreiben, auf welche sich der Wert bezieht
+        const suffix = ctx.multipleTargets ? ` (${t.label})` : '';
         if (titleStat === 'target') {
-            document.title = `${formatMinutesToTime(ctx.targetEndMin)} – ${label}`;
+            document.title = `${formatMinutesToTime(t.targetEndMin)} – ${label}${suffix}`;
         } else if (titleStat === 'diff') {
-            document.title = `${formatDifference(ctx.remaining)} – ${label}`;
+            document.title = `${formatDifference(t.remaining)} – ${label}${suffix}`;
         } else {
-            document.title = `${ctx.progressUncapped.toFixed(1)} % – ${label}`;
+            document.title = `${t.progressUncapped.toFixed(1)} % – ${label}${suffix}`;
         }
     }
 
@@ -848,20 +890,6 @@
     dom.pauseFromInput.addEventListener('input', updateTracker);
     dom.pauseToInput.addEventListener('input', updateTracker);
 
-    dailyTimeInput.addEventListener('input', () => {
-        const min = parseDuration(dailyTimeInput.value);
-        weeklyTimeInput.value = min > 0 ? formatDuration(min * 5) : '';
-        markValid(dailyTimeInput, min > 0 || !dailyTimeInput.value.trim());
-        updateTracker();
-    });
-
-    weeklyTimeInput.addEventListener('input', () => {
-        const min = parseDuration(weeklyTimeInput.value);
-        dailyTimeInput.value = min > 0 ? formatDuration(Math.round(min / 5)) : '';
-        markValid(weeklyTimeInput, min > 0 || !weeklyTimeInput.value.trim());
-        updateTracker();
-    });
-
     [timelineFromInput, timelineToInput].forEach(input => input.addEventListener('input', () => {
         validateTimelineRange();
         updateTracker();
@@ -869,6 +897,150 @@
 
     function markValid(input, valid) {
         input.classList.toggle('invalid', !valid);
+    }
+
+    // ── ARBEITSZEITEN (mehrere Tages-/Wochenarbeitszeiten) ─────────────────
+    // Startzeit, Pausen und Zeitstrahl-Ausschnitt gelten für alle; je Arbeitszeit ergeben sich nur
+    // eigene Zielwerte (Zielzeit, Rest, Fortschritt).
+
+    /** Fügt eine Eingabezeile hinzu (Tag ⇄ Woche verknüpft, Woche ÷ 5 = Tag) */
+    function addWorkTimeRow(daily = '', weekly = '') {
+        const uid = workTimeRowUid++;
+        const el  = document.createElement('div');
+        el.className = 'linked-fields work-time-row';
+        el.innerHTML =
+              `<div class="input-group">`
+            + `<label for="dailyTime${uid}">Tagesarbeitszeit</label>`
+            + `<input type="text" id="dailyTime${uid}" class="duration-input" placeholder="H:MM" maxlength="6" aria-label="Tagesarbeitszeit">`
+            + `</div>`
+            + `<div class="link-indicator" title="Die Felder sind verknüpft (Woche ÷ 5 = Tag)">⇄</div>`
+            + `<div class="input-group">`
+            + `<label for="weeklyTime${uid}">Wochenarbeitszeit</label>`
+            + `<input type="text" id="weeklyTime${uid}" class="duration-input" placeholder="H:MM" maxlength="6" aria-label="Wochenarbeitszeit">`
+            + `</div>`
+            + `<button type="button" class="work-time-btn work-time-relevant-btn" title="Als relevant markieren (Werte im Seitentitel)">☆</button>`
+            + `<button type="button" class="work-time-btn work-time-delete-btn" title="Arbeitszeit entfernen">×</button>`;
+        dom.workTimeList.appendChild(el);
+
+        const row = {
+            el,
+            dailyInput:  el.querySelector(`#dailyTime${uid}`),
+            weeklyInput: el.querySelector(`#weeklyTime${uid}`),
+            relevantBtn: el.querySelector('.work-time-relevant-btn')
+        };
+        row.dailyInput.value  = daily;
+        row.weeklyInput.value = weekly;
+
+        row.dailyInput.addEventListener('input', () => {
+            const min = parseDuration(row.dailyInput.value);
+            row.weeklyInput.value = min > 0 ? formatDuration(min * 5) : '';
+            markValid(row.dailyInput, min > 0 || !row.dailyInput.value.trim());
+            updateTracker();
+        });
+
+        row.weeklyInput.addEventListener('input', () => {
+            const min = parseDuration(row.weeklyInput.value);
+            row.dailyInput.value = min > 0 ? formatDuration(Math.round(min / 5)) : '';
+            markValid(row.weeklyInput, min > 0 || !row.weeklyInput.value.trim());
+            updateTracker();
+        });
+
+        row.relevantBtn.addEventListener('click', () => selectRelevantWorkTime(workTimeRows.indexOf(row)));
+        el.querySelector('.work-time-delete-btn').addEventListener('click', () => deleteWorkTimeRow(workTimeRows.indexOf(row)));
+
+        workTimeRows.push(row);
+        updateWorkTimeRelevantButtons();
+        return row;
+    }
+
+    /** „+ Arbeitszeit“: neue leere Zeile, Cursor direkt ins Tagesfeld */
+    function addWorkTimeRowAndFocus() {
+        addWorkTimeRow().dailyInput.focus();
+    }
+
+    /** Entfernt eine Zeile (mindestens eine bleibt); war sie relevant, wird die erste relevant */
+    function deleteWorkTimeRow(index) {
+        if (workTimeRows.length <= 1 || index < 0) return;
+        const [row] = workTimeRows.splice(index, 1);
+        row.el.remove();
+        if (relevantIndex === index)    relevantIndex = 0;
+        else if (relevantIndex > index) relevantIndex--;
+        updateWorkTimeRelevantButtons();
+        updateTracker();
+    }
+
+    /** Stern an der Eingabezeile: ★ = relevant, ☆ = nicht relevant */
+    function updateWorkTimeRelevantButtons() {
+        workTimeRows.forEach((row, i) => {
+            const active = i === relevantIndex;
+            row.relevantBtn.classList.toggle('active', active);
+            row.relevantBtn.textContent = active ? '★' : '☆';
+            row.relevantBtn.setAttribute('aria-pressed', String(active));
+        });
+    }
+
+    /** Gültige Arbeitszeiten als { index, min, label }; index = Zeile in workTimeRows, label = Tageswert */
+    function getWorkTargets() {
+        return workTimeRows
+            .map((row, index) => ({ index, min: parseDuration(row.dailyInput.value) }))
+            .filter(t => t.min > 0)
+            .map(t => ({ ...t, label: `${formatDuration(t.min)} h` }));
+    }
+
+    // ── WERTE JE ARBEITSZEIT ──────────────────────────────────────────────
+    // Struktur nur neu aufbauen, wenn sich Anzahl/Werte der Arbeitszeiten ändern, sonst nur Zahlen
+    // aktualisieren (vermeidet Flackern und verlorenen Hover beim 10-Sekunden-Takt).
+    let targetStatsSignature = null;
+
+    function targetStatRowHtml(index) {
+        const card = (stat, label, extra = '') =>
+              `<div class="stat-card" data-stat="${stat}" onclick="selectTitleStat('${stat}', ${index})" title="Klicken, um diesen Wert im Seitentitel anzuzeigen">`
+            + `<div class="stat-label">${label}</div><div class="stat-value muted">–</div>${extra}</div>`;
+        return `<div class="stat-row">`
+            + `<div class="stat-card" data-stat="worktime" onclick="selectRelevantWorkTime(${index})" title="Klicken, um diese Arbeitszeit als relevant zu markieren">`
+            + `<div class="stat-label">Arbeitszeit</div><div class="stat-value">–</div></div>`
+            + card('target', 'Zielzeit')
+            + card('diff', 'Rest / Überziehung')
+            + card('percent', 'Fortschritt', '<div class="stat-progress-bar"><div class="stat-progress-fill"></div></div>')
+            + `</div>`;
+    }
+
+    /** Eine Zeile je gültiger Arbeitszeit; ohne gültige Arbeitszeit eine Platzhalterzeile mit „–“ */
+    function renderTargetStats(targets, relevantTarget) {
+        const rows      = targets.length ? targets : [null];
+        const signature = rows.map(t => t ? `${t.index}:${t.min}` : '–').join('|');
+        if (signature !== targetStatsSignature) {
+            targetStatsSignature = signature;
+            dom.targetStats.innerHTML = rows.map(t => targetStatRowHtml(t ? t.index : null)).join('');
+        }
+
+        rows.forEach((t, r) => {
+            const rowEl      = dom.targetStats.children[r];
+            const card       = stat => rowEl.querySelector(`[data-stat="${stat}"]`);
+            const setValue   = (stat, text, cls) => {
+                const el = card(stat).querySelector('.stat-value');
+                el.textContent = text;
+                el.className   = 'stat-value' + (cls ? ' ' + cls : '');
+            };
+            const isRelevant = t === relevantTarget; // Platzhalterzeile: beide null
+            const hasValues  = !!t && t.targetEndMin !== undefined;
+
+            const workTimeCard = card('worktime');
+            workTimeCard.classList.toggle('relevant', isRelevant && !!t);
+            workTimeCard.querySelector('.stat-label').textContent = isRelevant && targets.length > 1 ? '★ Arbeitszeit' : 'Arbeitszeit';
+            setValue('worktime', t ? t.label : '–', t ? '' : 'muted');
+
+            if (hasValues) {
+                setValue('target',  formatMinutesToTime(t.targetEndMin), '');
+                setValue('diff',    formatDifference(t.remaining), t.remaining >= 0 ? 'pos' : 'neg');
+                setValue('percent', `${t.progressUncapped.toFixed(1)} %`, '');
+            } else {
+                ['target', 'diff', 'percent'].forEach(stat => setValue(stat, '–', 'muted'));
+            }
+            rowEl.querySelector('.stat-progress-fill').style.width = hasValues ? `${Math.min(100, t.progressUncapped)}%` : '0%';
+
+            ['target', 'diff', 'percent'].forEach(stat => card(stat).classList.toggle('selected', isRelevant && titleStat === stat));
+        });
     }
 
     /** Zeitstrahl-Ausschnitt als Minuten ab Mitternacht; leeres Feld → null. „bis 23:59“ zählt als
@@ -890,10 +1062,11 @@
     }
 
     /**
-     * Zeigt einen Hinweis, wenn Startzeit, Tagesziel oder aktuelle Zeit außerhalb des eingestellten
-     * Ausschnitts liegen (Werte nach Mitternacht zählen als Tagesende).
+     * Zeigt einen Hinweis, wenn Startzeit, eines der Tagesziele oder aktuelle Zeit außerhalb des
+     * eingestellten Ausschnitts liegen (Werte nach Mitternacht zählen als Tagesende).
+     * targetEnds: [{ label, endMin }]
      */
-    function updateTimelineRangeWarning(startMin, targetEndMin, nowMin) {
+    function updateTimelineRangeWarning(startMin, targetEnds, nowMin) {
         const { from, to } = readTimelineRange();
         const outside = [];
 
@@ -904,7 +1077,7 @@
                 if ((from !== null && m < from) || (to !== null && m > to)) outside.push(label);
             };
             check('Startzeit', startMin);
-            if (targetEndMin !== null) check('Tagesziel', targetEndMin);
+            targetEnds.forEach(t => check(t.label, t.endMin));
             check('aktuelle Zeit', nowMin);
         }
 
@@ -925,17 +1098,26 @@
     /** Liest daily/weekly/pauses aus den GET-Parametern und befüllt die Felder */
     function loadFromUrlParams() {
         const params = new URLSearchParams(window.location.search);
-        const daily  = params.get('daily');
-        const weekly = params.get('weekly');
 
-        if (daily) {
-            dailyTimeInput.value = daily;
-            const min = parseDuration(daily);
-            weeklyTimeInput.value = min > 0 ? formatDuration(min * 5) : '';
-        } else if (weekly) {
-            weeklyTimeInput.value = weekly;
-            const min = parseDuration(weekly);
-            dailyTimeInput.value = min > 0 ? formatDuration(Math.round(min / 5)) : '';
+        // daily/weekly: kommagetrennt, eine Position je Arbeitszeit (alte Links mit nur einem Wert bleiben gültig)
+        const dailyList  = (params.get('daily')  || '').split(',');
+        const weeklyList = (params.get('weekly') || '').split(',');
+        for (let i = 0; i < Math.max(dailyList.length, weeklyList.length); i++) {
+            const daily  = (dailyList[i]  || '').trim();
+            const weekly = (weeklyList[i] || '').trim();
+            if (daily) {
+                const min = parseDuration(daily);
+                addWorkTimeRow(daily, min > 0 ? formatDuration(min * 5) : '');
+            } else if (weekly) {
+                const min = parseDuration(weekly);
+                addWorkTimeRow(min > 0 ? formatDuration(Math.round(min / 5)) : '', weekly);
+            }
+        }
+
+        const relevantParam = parseInt(params.get('relevant'), 10);
+        if (relevantParam > 0 && relevantParam < workTimeRows.length) {
+            relevantIndex = relevantParam;
+            updateWorkTimeRelevantButtons();
         }
 
         const autoPauseParam = params.get('autoPause');
@@ -948,7 +1130,7 @@
         if (pausesParam) pauses = parsePausesParam(pausesParam);
 
         const titleStatParam = params.get('titleStat');
-        if (titleStatParam && titleStatCards[titleStatParam]) titleStat = titleStatParam;
+        if (titleStatParam && titleStatLabels[titleStatParam]) titleStat = titleStatParam;
 
         // "HH:MM-HH:MM"; eine leere Seite (z. B. "-20:00") bedeutet „automatisch“
         const timelineParam = params.get('timeline');
@@ -993,9 +1175,13 @@
         const timelineFrom      = timelineFromInput.value;
         const timelineTo        = timelineToInput.value;
         const isDefaultTimeline = timelineFrom === defaultTimelineFrom && timelineTo === defaultTimelineTo;
+        // Nur gültige Arbeitszeiten, normalisiert auf H:MM (ein Komma im Feld, z. B. „7,5“, würde sonst die Liste trennen)
+        const targets     = getWorkTargets();
+        const relevantPos = targets.findIndex(t => t.index === relevantIndex);
         const qs = buildQueryString({
-            daily:     dailyTimeInput.value.trim(),
-            weekly:    weeklyTimeInput.value.trim(),
+            daily:     targets.map(t => formatDuration(t.min)).join(','),
+            weekly:    targets.map(t => formatDuration(t.min * 5)).join(','),
+            relevant:  relevantPos > 0 ? String(relevantPos) : '',
             pauses:    serializePausesParam(),
             titleStat: titleStat !== 'percent' ? titleStat : '',
             autoPause: autoPauseMode ? '1' : '',
@@ -1353,8 +1539,8 @@
         const now             = new Date();
         const currentMinOfDay = now.getHours() * 60 + now.getMinutes();
 
-        const startMin      = parseTimeToMinutes(startTimeInput.value);
-        const targetWorkMin = parseDuration(dailyTimeInput.value); // Netto-Ziel
+        const startMin = parseTimeToMinutes(startTimeInput.value);
+        const hasStart = !!startTimeInput.value;
 
         // Pausenliste inkl. eines gerade im Formular eingegebenen Entwurfs (Live-Vorschau)
         const effectivePauses = getEffectivePauses(currentMinOfDay);
@@ -1401,36 +1587,21 @@
         dom.statPauseElapsed.textContent = formatDuration(elapsedPauseMin) + ' h';
         dom.statPauseElapsed.className   = 'stat-value muted';
 
-        const hasTarget = targetWorkMin > 0 && !!startTimeInput.value;
-        let targetEndMin = null;
+        // Zielwerte je Arbeitszeit (Netto-Ziel = Tagesarbeitszeit); ohne Startzeit keine Zielwerte.
+        // Pausen gelten für alle Arbeitszeiten gleich – Pausen nach einer Zielzeit verschieben diese nicht.
+        const targets = getWorkTargets().map(t => hasStart ? {
+            ...t,
+            targetEndMin:     computeClockTimeForNetMinutes(startMin, t.min, pauseIntervals),
+            remaining:        netWorkMin - t.min,
+            progressUncapped: Math.max(0, (netWorkMin / t.min) * 100)
+        } : t);
+        // Relevante Zeile leer/ungültig → erste gültige Arbeitszeit
+        const relevantTarget  = targets.find(t => t.index === relevantIndex) ?? targets[0] ?? null;
+        const resolvedTargets = targets.filter(t => t.targetEndMin !== undefined);
 
-        if (hasTarget) {
-            targetEndMin            = computeClockTimeForNetMinutes(startMin, targetWorkMin, pauseIntervals);
-            const remaining         = netWorkMin - targetWorkMin;
-            const progressUncapped  = Math.max(0, (netWorkMin / targetWorkMin) * 100);
-            const progressCapped    = Math.min(100, progressUncapped);
-
-            dom.statTargetTime.textContent = formatMinutesToTime(targetEndMin);
-            dom.statTargetTime.className   = 'stat-value';
-
-            dom.statDiff.textContent = formatDifference(remaining);
-            dom.statDiff.className   = 'stat-value ' + (remaining >= 0 ? 'pos' : 'neg');
-
-            dom.statProgress.textContent = `${progressUncapped.toFixed(1)} %`;
-            dom.statProgress.className   = 'stat-value';
-            dom.statProgressBar.style.width = `${progressCapped}%`;
-
-            updateTitle({ hasTarget, netWorkMin, allPauseMin, elapsedPauseMin, targetEndMin, remaining, progressUncapped });
-        } else {
-            dom.statTargetTime.textContent = '–';
-            dom.statTargetTime.className   = 'stat-value muted';
-            dom.statDiff.textContent       = '–';
-            dom.statDiff.className         = 'stat-value muted';
-            dom.statProgress.textContent   = '–';
-            dom.statProgress.className     = 'stat-value muted';
-            dom.statProgressBar.style.width = '0%';
-            updateTitle({ hasTarget, netWorkMin, allPauseMin, elapsedPauseMin });
-        }
+        renderTargetStats(targets, relevantTarget);
+        updateStatCardSelection();
+        updateTitle({ netWorkMin, allPauseMin, elapsedPauseMin, relevantTarget, multipleTargets: targets.length > 1 });
 
         // Warnschwellen (6h/9h/10h) als Uhrzeit-Marker für den Zeitstrahl, mit Bezug zum "Jetzt"-Zeiger.
         // Pflichtpausen-Schwellen (6h/9h) werden ausgeblendet, sobald die Pausen des Tages insgesamt
@@ -1450,16 +1621,24 @@
         // und geplante Pausen immer sichtbar sind, statt bei einer fixen Länge abgeschnitten zu werden.
         const tenHourClockMin = computeClockTimeForNetMinutes(startMin, 600, pauseIntervals);
         let axisMaxDuration = Math.max(minTimelineDuration, elapsedMin, tenHourClockMin - startMin);
-        if (hasTarget) axisMaxDuration = Math.max(axisMaxDuration, targetEndMin - startMin);
+        resolvedTargets.forEach(t => {
+            axisMaxDuration = Math.max(axisMaxDuration, t.targetEndMin - startMin);
+        });
         effectivePauses.forEach(p => {
             axisMaxDuration = Math.max(axisMaxDuration, p.startMin + p.durationMin - startMin);
         });
         axisMaxDuration = Math.ceil((axisMaxDuration + 15) / 60) * 60; // aufrunden + etwas Platz am rechten Rand
 
+        const targetMarkers = resolvedTargets.map(t => ({ endMin: t.targetEndMin, relevant: t === relevantTarget }));
+        const targetEnds    = resolvedTargets.map(t => ({
+            label:  resolvedTargets.length > 1 ? `Tagesziel ${t.label}` : 'Tagesziel',
+            endMin: t.targetEndMin
+        }));
+
         renderPauseList(currentMinOfDay, effectivePauses, runningPauseMin);
         renderWarnings(netWorkMin, allPauseMin, warnMarkersAll);
-        drawTimeline(elapsedMin, startMin, currentMinOfDay, runningPauseMin, targetEndMin, warnMarkers, effectivePauses, axisMaxDuration);
-        updateTimelineRangeWarning(startMin, targetEndMin, startMin + elapsedMin);
+        drawTimeline(elapsedMin, startMin, currentMinOfDay, runningPauseMin, targetMarkers, warnMarkers, effectivePauses, axisMaxDuration);
+        updateTimelineRangeWarning(startMin, targetEnds, startMin + elapsedMin);
         updateUrlParams();
 
         dom.lastUpdate.textContent =
@@ -1473,7 +1652,8 @@
         return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
     }
 
-    function drawTimeline(elapsedMin, startMinOfDay, currentMinOfDay, runningPauseMin, targetEndMin, warnMarkers, pausesList, maxDuration) {
+    /** targetMarkers: [{ endMin, relevant }] – eine Zielzeit je Arbeitszeit */
+    function drawTimeline(elapsedMin, startMinOfDay, currentMinOfDay, runningPauseMin, targetMarkers, warnMarkers, pausesList, maxDuration) {
         const accent       = themeColor('--theme-accent');
         const accentStrong = themeColor('--theme-accent-strong');
         const border       = themeColor('--theme-border');
@@ -1557,24 +1737,45 @@
             svg.appendChild(txt);
         }
 
-        // 5. Zielmarker (nur wenn Tagesziel eingegeben)
-        if (targetEndMin !== null && startMinOfDay > 0 && inAxis(targetEndMin - startMinOfDay)) {
-            const offsetMin = targetEndMin - startMinOfDay;
-            const mX        = getX(offsetMin);
-            const labelTime = formatMinutesToTime(targetEndMin);
-            const fullText  = `Tagesziel (${labelTime})`;
-            const levelY    = barY + barHeight + 20;
+        // 5. Zielmarker je Arbeitszeit: die relevante voll beschriftet, weitere dezent nur mit Uhrzeit.
+        //    Beschriftungen, die sich mit einer bereits platzierten überschneiden würden, entfallen (Linie bleibt).
+        if (startMinOfDay > 0) {
+            const levelY  = barY + barHeight + 20;
+            const markers = targetMarkers
+                .filter(t => inAxis(t.endMin - startMinOfDay))
+                .map(t => {
+                    const mX      = getX(t.endMin - startMinOfDay);
+                    const time    = formatMinutesToTime(t.endMin);
+                    const text    = t.relevant ? `Tagesziel (${time})` : time;
+                    const approxW = text.length * 6 + 10;
+                    return { ...t, mX, text, approxW, x1: mX - approxW / 2, x2: mX + approxW / 2 };
+                })
+                .sort((a, b) => b.relevant - a.relevant); // relevante Beschriftung zuerst platzieren
 
-            svg.appendChild(svgEl('line', { x1: mX, y1: barY - 2, x2: mX, y2: levelY - 8, stroke: accent, 'stroke-width': 2, 'stroke-dasharray': '3,2' }));
-            svg.appendChild(svgEl('circle', { cx: mX, cy: levelY - 9, r: 3, fill: accent }));
+            const placed = [];
+            markers.forEach(m => {
+                m.showLabel = !placed.some(p => m.x1 < p.x2 + 4 && p.x1 < m.x2 + 4);
+                if (m.showLabel) placed.push(m);
+            });
 
-            const approxW = fullText.length * 6 + 10;
-            const bgRect  = svgEl('rect', { x: mX - approxW / 2, y: levelY - 8, width: approxW, height: 14, class: 'label-bg' });
-            svg.appendChild(bgRect);
+            // Weitere zuerst zeichnen, damit die relevante obenauf liegt
+            [...markers].reverse().forEach(m => {
+                const opacity = m.relevant ? 1 : 0.6;
+                svg.appendChild(svgEl('line', {
+                    x1: m.mX, y1: barY - 2, x2: m.mX, y2: levelY - 8, stroke: accent, opacity,
+                    'stroke-width': m.relevant ? 2 : 1.5, 'stroke-dasharray': m.relevant ? '3,2' : '2,3'
+                }));
+                svg.appendChild(svgEl('circle', { cx: m.mX, cy: levelY - 9, r: m.relevant ? 3 : 2.5, fill: accent, opacity }));
+                if (!m.showLabel) return;
 
-            const lTxt = svgEl('text', { x: mX, y: levelY + 3, 'text-anchor': 'middle', 'font-size': '11px', 'font-weight': 600, fill: accentStrong });
-            lTxt.textContent = fullText;
-            svg.appendChild(lTxt);
+                svg.appendChild(svgEl('rect', { x: m.x1, y: levelY - 8, width: m.approxW, height: 14, class: 'label-bg' }));
+                const lTxt = svgEl('text', {
+                    x: m.mX, y: levelY + 3, 'text-anchor': 'middle', 'font-size': m.relevant ? '11px' : '10px',
+                    'font-weight': 600, fill: accentStrong, opacity: m.relevant ? 1 : 0.8
+                });
+                lTxt.textContent = m.text;
+                svg.appendChild(lTxt);
+            });
         }
 
         // 6. Warnschwellen-Marker (zeigen, wann eine Pausen-Warnung entsteht – Bezug zum „Jetzt"-Zeiger)
