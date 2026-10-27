@@ -279,8 +279,8 @@
 
         .weekday-chip:has(input:checked) {
             border-color: var(--primary);
-            background: var(--primary-light);
-            color: var(--primary);
+            background: var(--primary);
+            color: #fff;
         }
 
         .weekday-chip input {
@@ -353,6 +353,94 @@
             font-size: 13px;
         }
 
+        .result-item.selectable {
+            padding: 0;
+            border-width: 2px;
+            transition: border-color 0.15s, background 0.15s;
+        }
+
+        .result-item.selectable:has(input:not(:checked)) {
+            border-color: var(--text-muted);
+            background: var(--container-bg);
+        }
+
+        .result-label {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 11px 15px;
+            cursor: pointer;
+            flex-wrap: wrap;
+            font-size: inherit;
+            font-weight: inherit;
+            color: inherit;
+            text-transform: none;
+            letter-spacing: normal;
+        }
+
+        .result-label input {
+            width: 17px;
+            height: 17px;
+            accent-color: var(--primary);
+            cursor: pointer;
+        }
+
+        .result-label .result-duration {
+            margin-left: auto;
+        }
+
+        /* ── Export ── */
+        .export-grid {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            gap: 14px 20px;
+            margin-bottom: 14px;
+        }
+
+        .export-grid .input-group {
+            flex: 1;
+            min-width: 220px;
+        }
+
+        .text-input {
+            padding: 9px 12px;
+            font-size: 15px;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-color);
+            background-color: var(--container-bg);
+            outline: none;
+            width: 100%;
+            transition: border-color 0.2s;
+        }
+
+        .export-series {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 400;
+            text-transform: none;
+            letter-spacing: normal;
+            color: var(--text-color);
+            margin-bottom: 4px;
+            cursor: pointer;
+        }
+
+        .export-series input { margin-top: 2px; }
+
+        .export-series:has(input:disabled) {
+            color: var(--text-muted);
+            cursor: default;
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.45;
+            cursor: default;
+        }
+
         .footer-note {
             font-size: 12px;
             color: var(--text-muted);
@@ -382,8 +470,8 @@
             padding: 7px 14px;
             font-size: 12px;
             font-weight: 600;
-            color: var(--primary);
-            background: var(--primary-light);
+            color: #fff;
+            background: var(--primary);
             border: 1px solid var(--primary);
             border-radius: 6px;
             cursor: pointer;
@@ -392,6 +480,11 @@
         }
 
         .btn-copy:hover { opacity: 0.85; }
+
+        .btn-copy:disabled {
+            opacity: 0.45;
+            cursor: default;
+        }
 
         .search-summary {
             font-size: 12px;
@@ -608,7 +701,7 @@
 
         <div id="heatmapSection" class="heatmap-section" style="display:none">
             <h2>Heatmap</h2>
-            <p class="dropzone-hint">Zeigt den Zeitraum, in dem Treffer liegen – je dunkler, desto mehr Treffer an diesem Tag. Der heutige Tag ist umrandet, sofern er im angezeigten Zeitraum liegt.</p>
+            <p class="dropzone-hint">Zeigt den Zeitraum, in dem die ausgewählten Treffer liegen – je dunkler, desto mehr Treffer an diesem Tag. Der heutige Tag ist umrandet, sofern er im angezeigten Zeitraum liegt.</p>
             <div id="heatmapContainer" class="heatmap-container"></div>
             <div class="heatmap-legend">
                 <span>Weniger</span>
@@ -622,15 +715,34 @@
         </div>
     </section>
 
+    <section class="card" id="exportSection" style="display:none">
+        <h2>4. Als iCal reservieren</h2>
+        <p class="dropzone-hint" style="margin-bottom:14px">Lädt alle oben angehakten Vorschläge als .ics-Datei herunter, z.&nbsp;B. um sie als Reservierung oder Blocker in den eigenen Kalender zu importieren. Die Termine werden als „belegt“ gespeichert.</p>
+        <div class="export-grid">
+            <div class="input-group">
+                <label for="exportNameInput">Name der Termine</label>
+                <input type="text" id="exportNameInput" class="text-input" value="Reserviert" maxlength="200">
+            </div>
+        </div>
+        <label class="export-series">
+            <input type="checkbox" id="exportSeriesInput" checked>
+            <span>Als Serientermin speichern – nicht ausgewählte Tage werden als Ausnahmen hinterlegt, so lassen sich später alle Termine auf einmal löschen. <span id="exportSeriesHint"></span></span>
+        </label>
+        <p id="exportSummary" class="search-summary" style="margin-top:10px"></p>
+        <button id="exportIcsBtn" class="btn-primary" type="button">Ausgewählte als iCal herunterladen</button>
+    </section>
+
     <p class="footer-note">Hinweis: Zeitzonen in den iCal-Dateien werden vereinfacht als lokale Zeit interpretiert. Sehr komplexe Wiederholungsregeln (z.&nbsp;B. BYSETPOS) werden nicht vollständig unterstützt.</p>
-    <p class="footer-note">Version 1.8</p>
+    <p class="footer-note">Version 1.9</p>
 </div>
 
 <script>
     // ── ZUSTAND ───────────────────────────────────────────────────────────
     let calendars = [];       // [{ id, name, calendarName, events, error }]
     let calendarIdSeq = 0;
-    let lastResultsMarkdown = ''; // zuletzt erzeugter Markdown-Text für den Kopieren-Button
+    let lastResultsMeta = null;   // Suchparameter der letzten Suche (für den Kopieren-Button)
+    let lastSuggestions = [];     // zuletzt gefundene Vorschläge (für den iCal-Export)
+    let lastSearchStartDate = null; // Startdatum der letzten Suche (Beginn der Heatmap)
     const MAX_SEARCH_DAYS = 365; // Sicherheitsnetz für die offene Suche (kein Wochen-Limit mehr)
 
     const dom = {
@@ -655,10 +767,18 @@
         csvPasteInput:       document.getElementById('csvPasteInput'),
         addCsvBtn:           document.getElementById('addCsvBtn'),
         csvPasteError:       document.getElementById('csvPasteError'),
+        exportSection:       document.getElementById('exportSection'),
+        exportNameInput:     document.getElementById('exportNameInput'),
+        exportSeriesInput:   document.getElementById('exportSeriesInput'),
+        exportSeriesHint:    document.getElementById('exportSeriesHint'),
+        exportSummary:       document.getElementById('exportSummary'),
+        exportIcsBtn:        document.getElementById('exportIcsBtn'),
     };
 
     dom.searchBtn.addEventListener('click', runSearch);
     dom.copyResultsBtn.addEventListener('click', copyResultsToClipboard);
+    dom.resultsList.addEventListener('change', updateSelectionViews);
+    dom.exportIcsBtn.addEventListener('click', downloadSelectedAsIcs);
 
     // ── LIVE-ZUSAMMENFASSUNG DER SUCHKRITERIEN ───────────────────────────
     [dom.startTimeInput, dom.durationDaysInput, dom.durationInput, dom.startDateInput, dom.endDateInput, dom.maxSuggestionsInput]
@@ -1256,23 +1376,184 @@
 
     function renderResults(suggestions, meta) {
         dom.resultsSection.style.display = '';
-        lastResultsMarkdown = buildResultsMarkdown(suggestions, meta);
+        lastResultsMeta = meta;
+
+        lastSuggestions = suggestions;
+        lastSearchStartDate = meta.searchStartDate;
 
         if (suggestions.length === 0) {
             dom.resultsSummary.textContent = 'Keine passenden freien Termine im gewählten Zeitraum gefunden.';
             dom.resultsList.innerHTML = '';
+            dom.exportSection.style.display = 'none';
+            dom.copyResultsBtn.disabled = true;
             renderHeatmap([], meta.searchStartDate);
             return;
         }
         dom.resultsSummary.textContent = `${suggestions.length} freie${suggestions.length === 1 ? 'r' : ''} Termin${suggestions.length === 1 ? '' : 'e'} gefunden.`;
-        dom.resultsList.innerHTML = suggestions.map(s => {
+        dom.resultsList.innerHTML = suggestions.map((s, i) => {
             const durMin = Math.round((s.end.getTime() - s.start.getTime()) / 60000);
-            return `<li class="result-item">
-                <span class="result-date">${formatResultRange(s)}</span>
-                <span class="result-duration">${formatDurationWithDays(durMin)}</span>
+            return `<li class="result-item selectable">
+                <label class="result-label">
+                    <input type="checkbox" data-index="${i}" checked>
+                    <span class="result-date">${formatResultRange(s)}</span>
+                    <span class="result-duration">${formatDurationWithDays(durMin)}</span>
+                </label>
             </li>`;
         }).join('');
-        renderHeatmap(suggestions, meta.searchStartDate);
+        dom.exportSection.style.display = '';
+        updateSelectionViews();
+    }
+
+    /** Aktualisiert alles, was von der Auswahl abhängt: Export-Bereich und Heatmap (zeigt nur angehakte Vorschläge) */
+    function updateSelectionViews() {
+        updateExportState();
+        renderHeatmap(getSelectedSuggestions(), lastSearchStartDate);
+    }
+
+    // ── ICAL-EXPORT (Reservierung/Blocker) ───────────────────────────────
+    // Exportiert die angehakten Vorschläge als .ics. Zeiten werden als
+    // „floating“ (lokale Zeit ohne TZID) geschrieben – passend zur restlichen
+    // Seite, die alles als lokale Zeit behandelt; Kalender-Apps legen sie in
+    // der Zeitzone des Zielkalenders an.
+    //
+    // Serie: Haben alle ausgewählten Termine dieselbe Uhrzeit und Dauer, wird
+    // genau ein VEVENT mit RRULE (wöchentlich an den betroffenen Wochentagen,
+    // bis zum letzten Termin) erzeugt; alle Tage dazwischen, die nicht
+    // ausgewählt sind, werden per EXDATE ausgenommen. So hängen alle Termine
+    // an einer UID und lassen sich in der Kalender-App gemeinsam löschen.
+
+    function getSelectedSuggestions() {
+        return Array.from(dom.resultsList.querySelectorAll('input[type="checkbox"]:checked'))
+            .map(cb => lastSuggestions[+cb.dataset.index])
+            .sort((a, b) => a.start - b.start);
+    }
+
+    /** Prüft, ob sich die Termine als Serie abbilden lassen; gibt sonst den Grund zurück */
+    function getSeriesBlocker(selected) {
+        if (selected.length < 2) return 'Erst ab zwei ausgewählten Terminen möglich.';
+        const first = selected[0];
+        const durMs = first.end - first.start;
+        const sameShape = selected.every(s => s.end - s.start === durMs
+            && s.start.getHours() === first.start.getHours()
+            && s.start.getMinutes() === first.start.getMinutes());
+        if (!sameShape) return 'Nicht möglich, da die ausgewählten Termine unterschiedliche Uhrzeiten oder Dauern haben – es werden Einzeltermine erzeugt.';
+        return null;
+    }
+
+    function updateExportState() {
+        const selected = getSelectedSuggestions();
+        const blocker = getSeriesBlocker(selected);
+        dom.exportSeriesInput.disabled = !!blocker;
+        dom.exportSeriesHint.textContent = blocker ? `(${blocker})` : '';
+        dom.exportIcsBtn.disabled = selected.length === 0;
+        dom.copyResultsBtn.disabled = selected.length === 0;
+        dom.exportSummary.textContent = `${selected.length} von ${lastSuggestions.length} Vorschlägen ausgewählt.`;
+    }
+
+    /** Date → "YYYYMMDDTHHMMSS" (floating, lokale Zeit) */
+    function formatIcsLocal(d) {
+        return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+            + `T${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}${String(d.getSeconds()).padStart(2, '0')}`;
+    }
+
+    /** Date → "YYYYMMDDTHHMMSSZ" (UTC, für DTSTAMP) */
+    function formatIcsUtc(d) {
+        return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    }
+
+    /** Maskiert Sonderzeichen in TEXT-Werten gemäß RFC 5545 */
+    function escapeIcsText(str) {
+        return String(str).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+    }
+
+    /** Faltet Zeilen > 75 Oktette gemäß RFC 5545 (Fortsetzungszeilen beginnen mit Leerzeichen) */
+    function foldIcsLine(line) {
+        const encoder = new TextEncoder();
+        const parts = [];
+        let current = '', currentBytes = 0;
+        for (const ch of line) {
+            const chBytes = encoder.encode(ch).length;
+            const limit = parts.length === 0 ? 75 : 74;
+            if (currentBytes + chBytes > limit) {
+                parts.push(current);
+                current = '';
+                currentBytes = 0;
+            }
+            current += ch;
+            currentBytes += chBytes;
+        }
+        parts.push(current);
+        return parts.join('\r\n ');
+    }
+
+    function createUid() {
+        const rand = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+        return `${rand}@ical-terminsuche`;
+    }
+
+    function buildVevent(lines, summary, start, end, extra = []) {
+        lines.push(
+            'BEGIN:VEVENT',
+            `UID:${createUid()}`,
+            `DTSTAMP:${formatIcsUtc(new Date())}`,
+            `DTSTART:${formatIcsLocal(start)}`,
+            `DTEND:${formatIcsLocal(end)}`,
+            ...extra,
+            `SUMMARY:${escapeIcsText(summary)}`,
+            'TRANSP:OPAQUE',
+            'END:VEVENT',
+        );
+    }
+
+    /** Baut eine Serie: wöchentlich an allen Wochentagen der Auswahl bis zum letzten Termin, nicht ausgewählte Tage als EXDATE */
+    function buildSeriesVevent(lines, summary, selected) {
+        const first = selected[0];
+        const last = selected[selected.length - 1];
+        const durMs = first.end - first.start;
+        const weekdays = [...new Set(selected.map(s => s.start.getDay()))];
+        const selectedKeys = new Set(selected.map(s => toDateInputValue(s.start)));
+
+        const exdates = [];
+        for (let d = startOfDay(first.start); d.getTime() <= startOfDay(last.start).getTime(); d = addDays(d, 1)) {
+            if (weekdays.includes(d.getDay()) && !selectedKeys.has(toDateInputValue(d))) {
+                exdates.push(formatIcsLocal(setTimeOfDay(d, first.start)));
+            }
+        }
+
+        const extra = [`RRULE:FREQ=WEEKLY;UNTIL=${formatIcsLocal(last.start)};BYDAY=${weekdays.map(n => NUM_TO_DAY_CODE[n]).join(',')}`];
+        if (exdates.length) extra.push(`EXDATE:${exdates.join(',')}`);
+        buildVevent(lines, summary, first.start, new Date(first.start.getTime() + durMs), extra);
+    }
+
+    function buildIcs(selected, summary, asSeries) {
+        const lines = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//klmpfh//iCal Terminsuche//DE',
+            'CALSCALE:GREGORIAN',
+            'METHOD:PUBLISH',
+        ];
+        if (asSeries) buildSeriesVevent(lines, summary, selected);
+        else selected.forEach(s => buildVevent(lines, summary, s.start, s.end));
+        lines.push('END:VCALENDAR');
+        return lines.map(foldIcsLine).join('\r\n') + '\r\n';
+    }
+
+    function downloadSelectedAsIcs() {
+        const selected = getSelectedSuggestions();
+        if (!selected.length) return;
+        const summary = dom.exportNameInput.value.trim() || 'Reserviert';
+        const asSeries = !dom.exportSeriesInput.disabled && dom.exportSeriesInput.checked;
+
+        const blob = new Blob([buildIcs(selected, summary, asSeries)], { type: 'text/calendar;charset=utf-8' });
+        const fileBase = summary.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '_').slice(0, 60) || 'reservierung';
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${fileBase}.ics`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     }
 
     /** Baut den kopierbaren Markdown-Text: Suchparameter, berücksichtigte Kalender, Ergebnistabelle */
@@ -1373,8 +1654,11 @@
     }
 
     function copyResultsToClipboard() {
-        if (!lastResultsMarkdown) return;
-        navigator.clipboard.writeText(lastResultsMarkdown).then(() => {
+        // Nur angehakte Vorschläge kopieren
+        const selected = getSelectedSuggestions();
+        if (!lastResultsMeta || !selected.length) return;
+        const markdown = buildResultsMarkdown(selected, lastResultsMeta);
+        navigator.clipboard.writeText(markdown).then(() => {
             const original = 'In Zwischenablage kopieren';
             dom.copyResultsBtn.textContent = 'Kopiert ✓';
             setTimeout(() => { dom.copyResultsBtn.textContent = original; }, 1500);
@@ -1388,7 +1672,9 @@
         dom.searchError.textContent = msg;
         dom.searchError.style.display = 'block';
         dom.resultsSection.style.display = 'none';
-        lastResultsMarkdown = '';
+        dom.exportSection.style.display = 'none';
+        lastResultsMeta = null;
+        lastSuggestions = [];
     }
 
     function clearError() {
