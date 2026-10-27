@@ -771,8 +771,11 @@ Spuk von Welbeck Abbey", "… und die geheimen Steine", "Die drei
 
         // Wischen mit Finger oder Maus
         let drag = null;
+        // Merkt sich, ob der letzte Druck ein Wischen war, damit danach kein Klick zählt
+        let swiped = false;
 
         deck.addEventListener('pointerdown', e => {
+            swiped = false;
             const card = cards[0].el;
             if (e.button !== 0 || !card.contains(e.target)) return;
             drag = { card, id: e.pointerId, startX: e.clientX, dx: 0, active: false, lastX: e.clientX, lastT: e.timeStamp, vx: 0 };
@@ -800,6 +803,7 @@ Spuk von Welbeck Abbey", "… und die geheimen Steine", "Die drei
             if (!drag || e.pointerId !== drag.id) return;
             const { card, active, dx, vx } = drag;
             drag = null;
+            swiped = active;
             if (!active) return;
 
             // Weit genug gezogen oder schnell genug geschubst?
@@ -816,6 +820,12 @@ Spuk von Welbeck Abbey", "… und die geheimen Steine", "Die drei
         deck.addEventListener('pointerup', endDrag);
         deck.addEventListener('pointercancel', endDrag);
         deck.addEventListener('dragstart', e => e.preventDefault());
+
+        // Klick (ohne Wischen) auf das vorderste Cover öffnet das Album in Spotify
+        deck.addEventListener('click', e => {
+            if (swiped || !cards[0].el.contains(e.target)) return;
+            window.open(cards[0].spotifyUrl, '_blank', 'noopener');
+        });
 
         newAlbumBtn.addEventListener('click', () => dismissFront(-1));
 
