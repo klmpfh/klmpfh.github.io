@@ -63,9 +63,34 @@
 
         .scenario .value {
             color: var(--theme-accent-strong);
+            font-family: var(--theme-font-mono);
             font-weight: bold;
             font-size: 1.2rem;
             display: block;
+        }
+
+        .scenario .ch.rolling {
+            opacity: 0.45;
+        }
+
+        .scenario .value {
+            transform: scale(0.88);
+            transition: transform 0.4s ease-out;
+        }
+
+        .scenario.done .value {
+            transform: none;
+            animation: settle 0.8s ease-out;
+        }
+
+        @keyframes settle {
+            0% {
+                text-shadow: 0 0 14px var(--theme-accent);
+            }
+
+            100% {
+                text-shadow: 0 0 0 transparent;
+            }
         }
 
         .dice {
@@ -90,12 +115,17 @@
             transition: background-color 0.15s;
         }
 
-        .btn:hover {
+        .btn:hover:not(:disabled) {
             background-color: var(--theme-accent-strong);
         }
 
-        .btn:active {
+        .btn:active:not(:disabled) {
             background-color: var(--theme-red-700);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: wait;
         }
 
         .separator {
@@ -114,7 +144,7 @@
     <div class="container">
         <div class="scenario" id="scenario"></div>
         <hr class="separator">
-        <button class="btn" onclick="roll()">&#9654; Neu würfeln</button>
+        <button class="btn" id="roll-btn" onclick="roll()">&#9654; Neu würfeln</button>
     </div>
 
     <script src="../assets/js/scenario-generator.js"></script>
