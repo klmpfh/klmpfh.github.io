@@ -112,16 +112,69 @@
             font-weight: 500;
         }
 
+        /* ── Einklappbare Einstellungen (Zeiten, Pausen) ── */
+        .settings-panel {
+            background: var(--highlight-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .settings-panel > summary {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            padding: 12px 16px;
+            cursor: pointer;
+            list-style: none;
+            user-select: none;
+            border-radius: 8px;
+        }
+        .settings-panel > summary::-webkit-details-marker { display: none; }
+
+        /* Pfeil: zeigt nach rechts (zu) bzw. nach unten (offen) */
+        .settings-panel > summary::before {
+            content: "";
+            width: 6px;
+            height: 6px;
+            margin: 0 2px;
+            border-right: 2px solid var(--text-muted);
+            border-bottom: 2px solid var(--text-muted);
+            transform: rotate(-45deg);
+            transition: transform 0.2s;
+            flex-shrink: 0;
+        }
+        .settings-panel[open] > summary::before { transform: rotate(45deg); }
+        .settings-panel > summary:hover::before { border-color: var(--primary); }
+        .settings-panel > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+
+        .settings-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Kurzfassung der Einstellungen, nur im eingeklappten Zustand */
+        .settings-summary {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .settings-panel[open] .settings-summary { display: none; }
+        .settings-summary-warning { color: var(--warning); font-weight: 600; }
+
         /* Arbeitszeit-Eingaben */
         .work-inputs {
             display: flex;
             align-items: stretch;
             gap: 18px;
-            padding: 16px;
-            background: var(--highlight-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            margin-bottom: 20px;
+            padding: 4px 16px 16px;
             flex-wrap: wrap;
         }
 
@@ -208,11 +261,7 @@
 
         /* ── Pausen-Bereich ── */
         .pause-section {
-            background: var(--highlight-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 14px 16px;
-            margin-bottom: 20px;
+            padding: 4px 16px 14px;
             display: flex;
             flex-direction: column;
             gap: 10px;
@@ -223,15 +272,6 @@
             align-items: center;
             gap: 10px;
             flex-wrap: wrap;
-        }
-
-        .pause-controls-label {
-            font-size: 11px;
-            font-weight: 600;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-right: 4px;
         }
 
         /* ── Modus-Toggle (manuell / automatische Pflichtpausen) ── */
@@ -521,15 +561,15 @@
         /* Zeilen-Wrapper je Arbeitszeit; die Kacheln bleiben direkte Grid-Elemente */
         .stat-row { display: contents; }
 
+        /* Kachel, die nicht in den Seitentitel übernommen werden kann: flach, ohne Akzentkante */
         .stat-card {
-            background: var(--highlight-bg);
+            background: var(--container-bg);
             border: 2px solid var(--border-color);
-            border-top: 3px solid var(--primary);
+            border-top: 3px solid var(--border-color);
             border-radius: 8px;
             padding: 16px;
             text-align: center;
-            cursor: pointer;
-            transition: border-color 0.15s, background 0.15s;
+            transition: border-color 0.15s, background 0.15s, box-shadow 0.15s, transform 0.15s;
             /* Subgrid: Label-, Wert- und Balkenzeile über alle Kacheln einer Reihe gleich hoch,
                auch wenn ein Label umbricht */
             display: grid;
@@ -538,8 +578,23 @@
             row-gap: 0;
         }
 
-        .stat-card:hover {
+        /* Kachel, deren Wert per Klick im Seitentitel angezeigt wird:
+           getönt, Akzentkante oben, Schatten und Hover-Effekt */
+        .stat-card.selectable {
+            background: var(--highlight-bg);
+            border-top-color: var(--primary);
+            box-shadow: var(--theme-shadow-sm);
+            cursor: pointer;
+        }
+
+        .stat-card.selectable:hover {
+            box-shadow: var(--theme-shadow);
+            transform: translateY(-1px);
+        }
+
+        .stat-card.selectable:not(.selected):hover {
             border-color: var(--theme-accent-border);
+            border-top-color: var(--primary);
         }
 
         .stat-card.selected {
@@ -611,6 +666,11 @@
     </header>
 
     <!-- Arbeitszeitfelder -->
+    <details class="settings-panel" id="timesPanel" open>
+    <summary>
+        <span class="settings-title">Zeiten</span>
+        <span class="settings-summary" id="timesSummary"></span>
+    </summary>
     <div class="work-inputs">
         <div class="input-block">
             <div class="input-group">
@@ -645,12 +705,16 @@
             <span class="work-inputs-hint">Leer = automatisch ab Startzeit</span>
         </div>
     </div>
+    </details>
 
     <!-- Pausen -->
+    <details class="settings-panel" id="pausesPanel" open>
+    <summary>
+        <span class="settings-title">Pausen</span>
+        <span class="settings-summary" id="pausesSummary"></span>
+    </summary>
     <div class="pause-section">
         <div class="pause-controls">
-            <span class="pause-controls-label">Pausen</span>
-
             <span class="mode-toggle-label" id="autoPauseLabelManual">Manuell</span>
             <label class="mode-toggle" title="Zwischen manueller Pauseneingabe und automatischen Pflichtpausen umschalten">
                 <input type="checkbox" id="autoPauseToggle" onchange="toggleAutoPauseMode()">
@@ -684,6 +748,7 @@
         <div id="pauseList"></div>
         <div id="legalWarnings"></div>
     </div>
+    </details>
 
     <!-- Timeline -->
     <div class="timeline-container">
@@ -696,15 +761,15 @@
 
     <!-- Ergebnisse -->
     <div class="stats-grid stats-shared">
-        <div class="stat-card" id="statCardNet" onclick="selectTitleStat('net')" title="Klicken, um diesen Wert im Seitentitel anzuzeigen">
+        <div class="stat-card selectable" id="statCardNet" onclick="selectTitleStat('net')" title="Klicken, um diesen Wert im Seitentitel anzuzeigen">
             <div class="stat-label">Netto-Arbeitszeit</div>
             <div class="stat-value" id="statNetWork">–</div>
         </div>
-        <div class="stat-card" id="statCardPause" onclick="selectTitleStat('pause')" title="Klicken, um diesen Wert im Seitentitel anzuzeigen">
+        <div class="stat-card selectable" id="statCardPause" onclick="selectTitleStat('pause')" title="Klicken, um diesen Wert im Seitentitel anzuzeigen">
             <div class="stat-label">Pausen gesamt</div>
             <div class="stat-value muted" id="statPauseTotal">–</div>
         </div>
-        <div class="stat-card" id="statCardPauseElapsed" onclick="selectTitleStat('pauseElapsed')" title="Klicken, um diesen Wert im Seitentitel anzuzeigen">
+        <div class="stat-card selectable" id="statCardPauseElapsed" onclick="selectTitleStat('pauseElapsed')" title="Klicken, um diesen Wert im Seitentitel anzuzeigen">
             <div class="stat-label">Verstrichene Pausenzeit</div>
             <div class="stat-value muted" id="statPauseElapsed">–</div>
         </div>
@@ -713,7 +778,7 @@
     <!-- Je Arbeitszeit eine Zeile: Arbeitszeit, Zielzeit, Rest / Überziehung, Fortschritt (siehe renderTargetStats) -->
     <div class="stats-grid" id="targetStats"></div>
 
-    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden. Letzte Aktualisierung: <span id="lastUpdate">–</span> · v<span id="versionNumber">6.13</span></div>
+    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden. Letzte Aktualisierung: <span id="lastUpdate">–</span> · v<span id="versionNumber">6.14</span></div>
 </div>
 
 <script>
@@ -773,6 +838,14 @@
         lastUpdate:             document.getElementById('lastUpdate'),
         timelineRangeWarning:     document.getElementById('timelineRangeWarning'),
         timelineRangeWarningText: document.getElementById('timelineRangeWarningText'),
+        timesSummary:           document.getElementById('timesSummary'),
+        pausesSummary:          document.getElementById('pausesSummary'),
+    };
+
+    // Einklappbare Einstellungsbereiche; Schlüssel = Wert im URL-Parameter „collapsed“
+    const settingsPanels = {
+        times:  document.getElementById('timesPanel'),
+        pauses: document.getElementById('pausesPanel')
     };
 
     // Kacheln der gemeinsamen Werte; die Kacheln je Arbeitszeit entstehen dynamisch (renderTargetStats)
@@ -787,6 +860,8 @@
         timelineFromInput.value = defaultTimelineFrom;
         timelineToInput.value   = defaultTimelineTo;
         loadFromUrlParams();
+        // Erst nach dem Einlesen, sonst überschreibt ein frühes toggle-Event die URL-Parameter
+        Object.values(settingsPanels).forEach(panel => panel.addEventListener('toggle', updateUrlParams));
         if (!workTimeRows.length) addWorkTimeRow();
         validateTimelineRange();
         if (!startTimeInput.value) {
@@ -994,10 +1069,11 @@
 
     function targetStatRowHtml(index) {
         const card = (stat, label, extra = '') =>
-              `<div class="stat-card" data-stat="${stat}" onclick="selectTitleStat('${stat}', ${index})" title="Klicken, um diesen Wert im Seitentitel anzuzeigen">`
+              `<div class="stat-card selectable" data-stat="${stat}" onclick="selectTitleStat('${stat}', ${index})" title="Klicken, um diesen Wert im Seitentitel anzuzeigen">`
             + `<div class="stat-label">${label}</div><div class="stat-value muted">–</div>${extra}</div>`;
+        // Arbeitszeit-Kachel kann nicht in den Titel; relevant markieren über ☆ oder die übrigen Kacheln der Zeile
         return `<div class="stat-row">`
-            + `<div class="stat-card" data-stat="worktime" onclick="selectRelevantWorkTime(${index})" title="Klicken, um diese Arbeitszeit als relevant zu markieren">`
+            + `<div class="stat-card" data-stat="worktime">`
             + `<div class="stat-label">Arbeitszeit</div><div class="stat-value">–</div></div>`
             + card('target', 'Zielzeit')
             + card('diff', 'Rest / Überziehung')
@@ -1139,6 +1215,10 @@
             timelineFromInput.value = /^\d{1,2}:\d{2}$/.test(from) ? from.padStart(5, '0') : '';
             timelineToInput.value   = /^\d{1,2}:\d{2}$/.test(to)   ? to.padStart(5, '0')   : '';
         }
+
+        // "times,pauses": eingeklappte Einstellungsbereiche
+        const collapsed = (params.get('collapsed') || '').split(',');
+        Object.entries(settingsPanels).forEach(([key, panel]) => { panel.open = !collapsed.includes(key); });
     }
 
     /** "HH:MM-HH:MM,HH:MM-HH:MM" → [{ startMin, durationMin }] */
@@ -1185,7 +1265,8 @@
             pauses:    serializePausesParam(),
             titleStat: titleStat !== 'percent' ? titleStat : '',
             autoPause: autoPauseMode ? '1' : '',
-            timeline:  isDefaultTimeline ? '' : `${timelineFrom}-${timelineTo}`
+            timeline:  isDefaultTimeline ? '' : `${timelineFrom}-${timelineTo}`,
+            collapsed: Object.keys(settingsPanels).filter(key => !settingsPanels[key].open).join(',')
         });
         if (qs === lastUrlQuery) return;
         lastUrlQuery = qs;
@@ -1465,6 +1546,29 @@
         container.innerHTML = warnings.join('');
     }
 
+    // ── KURZFASSUNG EINGEKLAPPTER EINSTELLUNGEN ───────────────────────────
+    /** Zeigt im Kopf der Bereiche „Zeiten“ und „Pausen“ das Wichtigste, damit es auch eingeklappt sichtbar bleibt */
+    function updateSettingsSummaries(targets, pausesList, allPauseMin) {
+        const workTimes = targets.length ? targets.map(t => t.label).join(', ') : 'keine Arbeitszeit';
+        dom.timesSummary.textContent = `Start ${startTimeInput.value || '–'} · ${workTimes}`;
+
+        const count = pausesList.length;
+        const parts = [
+            autoPauseMode ? 'Automatisch' : 'Manuell',
+            (count === 0 ? 'keine Pausen' : count === 1 ? '1 Pause' : `${count} Pausen`)
+                + (allPauseMin > 0 ? ` (${formatDuration(allPauseMin)} h)` : '')
+        ];
+        if (runningPauseStart !== null) {
+            parts.push(`<span class="running-pause-info"><span class="running-dot"></span>läuft seit ${dom.runningPauseStartLabel.textContent}</span>`);
+        }
+        // Warnungen nicht unbemerkt wegklappen
+        const warningCount = dom.legalWarnings.children.length;
+        if (warningCount) {
+            parts.push(`<span class="settings-summary-warning">&#9888; ${warningCount === 1 ? '1 Warnung' : `${warningCount} Warnungen`}</span>`);
+        }
+        dom.pausesSummary.innerHTML = parts.join(' · ');
+    }
+
     /** Trägt die fehlende Pflichtpause automatisch ein, beginnend zum Zeitpunkt, zu dem die Warnung entstand */
     function addMissingPause(startClockMin, missingMin) {
         if (autoPauseMode || !(missingMin > 0)) return;
@@ -1637,6 +1741,7 @@
 
         renderPauseList(currentMinOfDay, effectivePauses, runningPauseMin);
         renderWarnings(netWorkMin, allPauseMin, warnMarkersAll);
+        updateSettingsSummaries(targets, effectivePauses, allPauseMin);
         drawTimeline(elapsedMin, startMin, currentMinOfDay, runningPauseMin, targetMarkers, warnMarkers, effectivePauses, axisMaxDuration);
         updateTimelineRangeWarning(startMin, targetEnds, startMin + elapsedMin);
         updateUrlParams();
