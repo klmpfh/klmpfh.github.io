@@ -154,12 +154,21 @@
             padding: 0 6px;
         }
 
+        /* Zwei Zeilen: oben Gruppen an/aus, darunter Schwerpunkte. */
+        .group-row-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--theme-text-muted);
+            text-align: center;
+            margin: 0 0 6px;
+        }
+
         .group-chips {
             display: flex;
             flex-wrap: wrap;
             justify-content: center;
             gap: 8px;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
         }
 
         .group-chip {
@@ -185,28 +194,30 @@
             letter-spacing: 0.3px;
         }
 
-        .group-chip[data-state="off"] {
+        .group-chip[aria-pressed="false"] {
             color: var(--theme-text-muted);
             border-style: dashed;
             background: none;
         }
 
-        .group-chip[data-state="off"] .group-chip-state {
+        .group-chip[aria-pressed="false"] .group-chip-state {
             display: none;
         }
 
-        .group-chip[data-state="normal"] {
+        .toggle-chip[aria-pressed="true"] {
             border-color: var(--theme-accent);
         }
 
-        .group-chip[data-state="normal"] .group-chip-state {
-            display: none;
-        }
-
-        .group-chip[data-state="focus"] {
+        .focus-chip[aria-pressed="true"] {
             border-color: var(--theme-accent);
             background: var(--theme-accent);
             color: #fff;
+        }
+
+        /* Schwerpunkt nur für eingeschaltete Gruppen möglich. */
+        .focus-chip:disabled {
+            opacity: 0.35;
+            cursor: default;
         }
 
         .controls .group-chips-hint {
@@ -274,6 +285,23 @@
             top: 50%;
             margin-left: 14px;
             transform: translateY(-50%);
+        }
+
+        /* Rechts neben der 460px-Zeile braucht der Button weitere 48px, bei
+           zentrierter Zeile also 556px Inhaltsbreite (Viewport abzüglich
+           ca. 90px Seiten- und Kachelabstand). Darunter ragte er über die
+           Kachel hinaus - dann als normales Element in die Zeile nehmen. */
+        @media (max-width: 680px) {
+            .control-row-core {
+                width: 100%;
+                max-width: 508px;
+            }
+
+            #muteBtn {
+                position: static;
+                margin-left: 0;
+                transform: none;
+            }
         }
 
         .checkbox-row {
@@ -589,6 +617,21 @@
             box-shadow: var(--theme-shadow-sm);
         }
 
+        /* Supersatz: beide Karten lückenlos als ein Block, nur durch eine
+           gestrichelte Linie getrennt. */
+        .exercise-card.superset-first {
+            border-bottom: none;
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+
+        .exercise-card.superset-second {
+            margin-top: -14px; /* hebt den gap der .exercise-list auf */
+            border-top: 1px dashed var(--theme-border);
+            border-top-left-radius: 0;
+            border-top-right-radius: 0;
+        }
+
         .exercise-card-head {
             display: flex;
             justify-content: space-between;
@@ -640,6 +683,12 @@
             color: var(--theme-warning);
             border-color: var(--theme-warning);
             background: var(--theme-warning-soft);
+        }
+
+        /* Langer Text ("Supersatz mit … – im Wechsel …") darf umbrechen. */
+        .stat-chip-superset {
+            border-color: var(--theme-accent);
+            white-space: normal;
         }
 
         .exercise-card-body {
@@ -719,13 +768,6 @@
 
             .control-row-core {
                 flex-wrap: wrap;
-                width: 100%;
-            }
-
-            #muteBtn {
-                position: static;
-                margin-left: 0;
-                transform: none;
             }
         }
 
@@ -1076,17 +1118,28 @@
             <summary><span class="settings-panel-title">Einstellungen</span><span class="settings-panel-summary" id="settingsSummary"></span></summary>
             <fieldset class="muscle-fieldset">
                 <legend>Muskelgruppen</legend>
-                <!-- Je Gruppe drei Zustände (Tippen schaltet weiter):
-                     aus → normal → Schwerpunkt. Die Übungsanzahl ergibt sich
-                     aus der Intensität, die Zustände steuern nur die Verteilung. -->
-                <div class="group-chips" id="groupChips">
-                    <button type="button" class="group-chip" data-cat="beine">Beine &amp; Gesäß<span class="group-chip-state"></span></button>
-                    <button type="button" class="group-chip" data-cat="ruecken">Rücken<span class="group-chip-state"></span></button>
-                    <button type="button" class="group-chip" data-cat="push">Brust/Schulter/Arme<span class="group-chip-state"></span></button>
-                    <button type="button" class="group-chip" data-cat="core">Core / Rumpf<span class="group-chip-state"></span></button>
-                    <button type="button" class="group-chip" data-cat="cardio">Cardio/Mobility<span class="group-chip-state"></span></button>
+                <!-- Zeile 1 schaltet Gruppen an/aus, Zeile 2 setzt Schwerpunkte
+                     (nur für eingeschaltete Gruppen). Intern bleibt es ein
+                     Zustand je Gruppe: aus / normal / Schwerpunkt. Die
+                     Übungsanzahl ergibt sich aus der Intensität, die Zustände
+                     steuern nur die Verteilung. -->
+                <p class="group-row-label" id="groupChipsLabel">Trainieren</p>
+                <div class="group-chips" id="groupChips" role="group" aria-labelledby="groupChipsLabel">
+                    <button type="button" class="group-chip toggle-chip" data-cat="beine">Beine &amp; Gesäß</button>
+                    <button type="button" class="group-chip toggle-chip" data-cat="druecken">Drücken</button>
+                    <button type="button" class="group-chip toggle-chip" data-cat="ziehen">Ziehen</button>
+                    <button type="button" class="group-chip toggle-chip" data-cat="core">Core / Rumpf</button>
+                    <button type="button" class="group-chip toggle-chip" data-cat="cardio">Cardio/Mobility</button>
                 </div>
-                <p class="hint group-chips-hint">Tippen wechselt: aus → normal → Schwerpunkt. Schwerpunkt-Gruppen bekommen etwa doppelt so viele Übungen. Wie viele Übungen und Sätze es insgesamt werden, legt die Intensität fest.</p>
+                <p class="group-row-label" id="focusChipsLabel">Schwerpunkt</p>
+                <div class="group-chips" id="focusChips" role="group" aria-labelledby="focusChipsLabel">
+                    <button type="button" class="group-chip focus-chip" data-cat="beine">Beine &amp; Gesäß<span class="group-chip-state">★</span></button>
+                    <button type="button" class="group-chip focus-chip" data-cat="druecken">Drücken<span class="group-chip-state">★</span></button>
+                    <button type="button" class="group-chip focus-chip" data-cat="ziehen">Ziehen<span class="group-chip-state">★</span></button>
+                    <button type="button" class="group-chip focus-chip" data-cat="core">Core / Rumpf<span class="group-chip-state">★</span></button>
+                    <button type="button" class="group-chip focus-chip" data-cat="cardio">Cardio/Mobility<span class="group-chip-state">★</span></button>
+                </div>
+                <p class="hint group-chips-hint">Drücken = Brust, Schulter, Trizeps · Ziehen = Rücken, Bizeps. Schwerpunkt-Gruppen bekommen etwa doppelt so viele Übungen. Wie viele Übungen und Sätze es insgesamt werden, legt die Intensität fest.</p>
                 <div class="control-row checkbox-row">
                     <label class="checkbox-label"><input type="checkbox" id="toggleAufwaermen" checked> Aufwärmen</label>
                     <label class="checkbox-label"><input type="checkbox" id="toggleCooldown" checked> Cool-down</label>
@@ -1214,7 +1267,7 @@
          gesperrte Übungen), damit das nicht versehentlich per Klick passiert. -->
     <div class="confirm-overlay" id="resetConfirm" hidden>
         <div class="confirm-box">
-            <p class="confirm-text">Wirklich alle gespeicherten Einstellungen und gesperrten Übungen löschen?</p>
+            <p class="confirm-text">Wirklich alle gespeicherten Einstellungen, gesperrten Übungen und gemerkten Stufen löschen?</p>
             <div class="sport-controls">
                 <button type="button" class="sport-btn sport-btn-secondary" id="resetConfirmNoBtn">Abbrechen</button>
                 <button type="button" class="sport-btn sport-btn-primary" id="resetConfirmYesBtn">Löschen</button>
@@ -1241,7 +1294,10 @@
          * Neue Übung hinzufügen: einfach ein weiteres Objekt in das passende
          * Array-Segment einfügen. Felder:
          *   name        - Anzeigename
-         *   category    - 'beine' | 'ruecken' | 'push' | 'core' | 'cardio'
+         *   category    - 'beine' | 'druecken' | 'ziehen' | 'core' | 'cardio'
+         *                 (Drücken = Ellbogen strecken: Brust, Schulter,
+         *                 Trizeps; Ziehen = Ellbogen beugen: Rücken, Bizeps;
+         *                 Rückenstrecker zählen zu Core)
          *   type        - 'reps' (Sätze x Wiederholungen) oder 'time' (Sätze x Haltezeit)
          *   difficulty  - 'leicht' | 'mittel' | 'schwer' (steuert, ab welcher
          *                 Intensitätsstufe die Übung ins Training darf)
@@ -1262,6 +1318,14 @@
          *                 Bodenaufprall enthält (laut, z. B. in
          *                 Mehrfamilienhäusern störend). Fehlt das Feld, kommt
          *                 die Übung ohne Sprünge/Hüpfen aus.
+         *   scale       - optional: Faktor für Wiederholungen bzw. Haltezeit
+         *                 gegenüber der Stufen-Vorgabe, z. B. 0.5 für
+         *                 Klimmzüge oder 2 für Hampelmänner. Fehlt das Feld,
+         *                 gilt 1.
+         *   mobility    - nur Cardio/Mobility: Gruppen, die diese
+         *                 Mobility-Übung beim Aufwärmen vorbereitet. Fehlt
+         *                 das Feld, gilt die Übung beim Aufwärmen als
+         *                 Puls-Übung.
          * ===================================================================== */
         var EXERCISES = [
             // --- Beine & Gesäß --------------------------------------------------
@@ -1271,160 +1335,163 @@
             { name: "Sumo-Kniebeugen", category: "beine", type: "reps", difficulty: "leicht", muscles: "Adduktoren, Gesäß, Quadrizeps", description: "Füße deutlich breiter als schulterbreit, Zehen leicht nach außen. In die Hocke gehen, die Knie zeigen dabei Richtung Zehen. Wieder aufstehen." },
             { name: "Kniebeugen-Sprünge", category: "beine", type: "reps", difficulty: "schwer", muscles: "Quadrizeps, Gesäß, Waden", jump: true, description: "Aus der Kniebeuge explosiv nach oben springen. Weich in den Knien landen und direkt in die nächste Kniebeuge gehen." },
             { name: "Bulgarische Ausfallschritte", category: "beine", type: "reps", difficulty: "schwer", muscles: "Quadrizeps, Gesäß", equipment: ["elevated"], description: "Hinteren Fuß auf eine Erhöhung (z. B. Stuhl) legen. Vorderes Bein beugen, bis das hintere Knie fast den Boden berührt, dann hochdrücken. Wiederholungen je Seite." },
-            { name: "Hüftheben", category: "beine", type: "reps", difficulty: "leicht", muscles: "Gesäß, hintere Oberschenkel", equipment: ["mat"], description: "Rückenlage, Füße hüftbreit aufgestellt. Hüfte hochdrücken, bis Schultern, Hüfte und Knie eine Linie bilden. Kurz halten, langsam absenken." },
+            { name: "Hüftheben", category: "beine", type: "reps", difficulty: "leicht", muscles: "Gesäß, hintere Oberschenkel", equipment: ["mat"], description: "Rückenlage, Füße hüftbreit aufgestellt. Hüfte hochdrücken, bis Oberkörper und Oberschenkel eine gerade Linie bilden – kein Hohlkreuz. Kurz halten, langsam absenken." },
             { name: "Einbeiniges Hüftheben", category: "beine", type: "reps", difficulty: "mittel", muscles: "Gesäß, hintere Oberschenkel", equipment: ["mat"], description: "Rückenlage, ein Fuß aufgestellt, das andere Bein gestreckt in der Luft. Hüfte nur mit dem Standbein hochdrücken und langsam absenken. Wiederholungen je Seite." },
             { name: "Treppensteiger", category: "beine", type: "reps", difficulty: "mittel", muscles: "Quadrizeps, Gesäß", equipment: ["elevated"], description: "Mit einem Fuß auf eine stabile Erhöhung (Stufe, Bank) steigen und oben ganz aufrichten. Kontrolliert wieder heruntersteigen. Seiten abwechseln." },
-            { name: "Wadenheben", category: "beine", type: "reps", difficulty: "leicht", muscles: "Waden", description: "Hüftbreit stehen. Langsam auf die Zehenspitzen drücken, oben kurz halten und kontrolliert absenken." },
+            { name: "Wadenheben", category: "beine", type: "reps", difficulty: "leicht", muscles: "Waden", scale: 1.5, description: "Hüftbreit stehen. Langsam auf die Zehenspitzen drücken, oben kurz halten und kontrolliert absenken." },
             { name: "Knicks-Ausfallschritte", category: "beine", type: "reps", difficulty: "mittel", muscles: "Gesäß, Quadrizeps, Adduktoren", description: "Ein Bein schräg hinter das Standbein setzen und in die Knie gehen wie bei einem Knicks. Zurück in den Stand. Seiten abwechseln." },
-            { name: "Einbeinige Kniebeuge (assistiert)", category: "beine", type: "reps", difficulty: "schwer", muscles: "Quadrizeps, Gesäß", description: "Auf einem Bein stehen, das andere nach vorne strecken. Langsam so tief wie möglich in die Hocke gehen und wieder aufstehen, bei Bedarf an Wand oder Möbel festhalten. Wiederholungen je Seite." },
+            { name: "Einbeinige Kniebeuge (assistiert)", category: "beine", type: "reps", difficulty: "schwer", muscles: "Quadrizeps, Gesäß", scale: 0.6, description: "Auf einem Bein stehen, das andere nach vorne strecken. Langsam so tief wie möglich in die Hocke gehen und wieder aufstehen, bei Bedarf an Wand oder Möbel festhalten. Wiederholungen je Seite." },
             { name: "Rückwärts-Ausfallschritte", category: "beine", type: "reps", difficulty: "mittel", muscles: "Quadrizeps, Gesäß", description: "Großen Schritt nach hinten machen und das hintere Knie Richtung Boden senken, bis beide Knie etwa 90° gebeugt sind. Zurück in den Stand drücken. Seiten abwechseln." },
             { name: "Seitliche Kniebeugen", category: "beine", type: "reps", difficulty: "schwer", muscles: "Adduktoren, Quadrizeps, Gesäß", description: "Breiter Stand. Gewicht auf ein Bein verlagern und dieses tief beugen, das andere Bein bleibt gestreckt, Ferse am Boden. Seiten abwechseln." },
             { name: "Froschbrücke", category: "beine", type: "reps", difficulty: "leicht", muscles: "Gesäß, Adduktoren", equipment: ["mat"], description: "Rückenlage, Fußsohlen aneinander, Knie fallen nach außen. Hüfte hochdrücken, kurz halten und langsam absenken." },
-            { name: "Einbeiniges Wadenheben", category: "beine", type: "reps", difficulty: "mittel", muscles: "Waden", description: "Auf einem Bein stehen, bei Bedarf leicht an der Wand festhalten. Langsam auf die Zehenspitze drücken und kontrolliert absenken. Wiederholungen je Seite." },
+            { name: "Einbeiniges Wadenheben", category: "beine", type: "reps", difficulty: "mittel", muscles: "Waden", scale: 1.2, description: "Auf einem Bein stehen, bei Bedarf leicht an der Wand festhalten. Langsam auf die Zehenspitze drücken und kontrolliert absenken. Wiederholungen je Seite." },
             { name: "Erhöhtes Abtreten", category: "beine", type: "reps", difficulty: "mittel", muscles: "Quadrizeps, Gesäß", equipment: ["elevated"], description: "Mit einem Bein auf einer Erhöhung stehen. Das andere Bein langsam nach vorne absenken, bis die Ferse fast den Boden berührt, dann wieder hochdrücken. Wiederholungen je Seite." },
-            { name: "Erhöhtes Wadenheben", category: "beine", type: "reps", difficulty: "leicht", muscles: "Waden", equipment: ["elevated"], description: "Mit den Fußballen auf eine Stufenkante stellen. Fersen tief unter die Kante absenken, dann ganz auf die Zehenspitzen drücken." },
+            { name: "Erhöhtes Wadenheben", category: "beine", type: "reps", difficulty: "leicht", muscles: "Waden", equipment: ["elevated"], scale: 1.5, description: "Mit den Fußballen auf eine Stufenkante stellen. Fersen tief unter die Kante absenken, dann ganz auf die Zehenspitzen drücken." },
             { name: "Kniebeuge-Halten (hoch)", category: "beine", type: "time", difficulty: "leicht", muscles: "Quadrizeps, Gesäß", description: "Halbe Kniebeuge: Oberschenkel etwa auf halbem Weg nach unten, Rücken gerade. Position ruhig atmend halten." },
             { name: "Ausfallschritt-Halten (tief)", category: "beine", type: "time", difficulty: "schwer", muscles: "Quadrizeps, Gesäß", description: "In einen tiefen Ausfallschritt gehen, bis das hintere Knie knapp über dem Boden ist. Oberkörper aufrecht, Position halten. Zur Halbzeit Seite wechseln." },
             { name: "Knicks-Sprünge", category: "beine", type: "reps", difficulty: "schwer", muscles: "Gesäß, Quadrizeps, Adduktoren", jump: true, description: "Aus dem Knicks seitlich abspringen, auf dem anderen Bein landen und direkt in den Knicks zur anderen Seite gehen. Weich landen." },
             { name: "Einbeiniger Wandsitz", category: "beine", type: "time", difficulty: "schwer", muscles: "Quadrizeps, Gesäß", equipment: ["wall"], description: "Rücken an die Wand, Oberschenkel waagrecht wie beim Wandsitz. Ein Bein gestreckt nach vorne anheben und halten. Zur Halbzeit Seite wechseln." },
             { name: "Kniebeugen mit Pause", category: "beine", type: "reps", difficulty: "mittel", muscles: "Quadrizeps, Gesäß", description: "Füße schulterbreit, Rücken gerade. Tief in die Kniebeuge gehen, unten 2 Sekunden halten, dann kraftvoll aufstehen." },
             { name: "Einbeiniges Kreuzheben", category: "beine", type: "reps", difficulty: "mittel", muscles: "hintere Oberschenkel, Gesäß", description: "Auf einem Bein stehen, Knie leicht gebeugt. Oberkörper mit geradem Rücken nach vorne kippen und das andere Bein nach hinten heben, bis beide fast waagrecht sind. Aufrichten. Wiederholungen je Seite." },
-            { name: "Seitliches Beinheben", category: "beine", type: "reps", difficulty: "leicht", muscles: "Abduktoren, Gesäß", equipment: ["mat"], description: "Seitlich liegen, Kopf auf dem unteren Arm, Beine gestreckt. Oberes Bein gestreckt anheben, Fußspitze zeigt nach vorne, langsam absenken. Wiederholungen je Seite." },
+            { name: "Seitliches Beinheben", category: "beine", type: "reps", difficulty: "leicht", muscles: "Abduktoren, Gesäß", equipment: ["mat"], scale: 1.5, description: "Seitlich liegen, Kopf auf dem unteren Arm, Beine gestreckt. Oberes Bein gestreckt anheben, Fußspitze zeigt nach vorne, langsam absenken. Wiederholungen je Seite." },
             { name: "Ausfallschritt-Sprünge", category: "beine", type: "reps", difficulty: "schwer", muscles: "Quadrizeps, Gesäß, Waden", jump: true, description: "Aus dem Ausfallschritt explosiv hochspringen, in der Luft die Beine wechseln und weich im Ausfallschritt mit dem anderen Bein vorne landen." },
-            { name: "Hüftheben-Halten", category: "beine", type: "time", difficulty: "leicht", muscles: "Gesäß, hintere Oberschenkel", equipment: ["mat"], description: "Rückenlage, Füße hüftbreit aufgestellt. Hüfte hochdrücken, bis Schultern, Hüfte und Knie eine Linie bilden, Po fest anspannen und oben halten." },
+            { name: "Hüftheben-Halten", category: "beine", type: "time", difficulty: "leicht", muscles: "Gesäß, hintere Oberschenkel", equipment: ["mat"], description: "Rückenlage, Füße hüftbreit aufgestellt. Hüfte hochdrücken, bis Oberkörper und Oberschenkel eine gerade Linie bilden – kein Hohlkreuz. Po fest anspannen und oben halten." },
             { name: "Seitschritt-Kniebeugen", category: "beine", type: "reps", difficulty: "leicht", muscles: "Quadrizeps, Gesäß, Adduktoren", description: "Großen Schritt zur Seite machen und dabei in die Kniebeuge gehen. Beim Aufstehen den Fuß wieder heranziehen. Seiten abwechseln." },
+            { name: "Rumpfvorbeuge", category: "beine", type: "reps", difficulty: "mittel", muscles: "unterer Rücken, hintere Oberschenkel, Gesäß", description: "Stehen, Hände hinter dem Kopf, Knie leicht gebeugt. Oberkörper mit geradem Rücken aus der Hüfte nach vorne kippen und wieder aufrichten." },
+            { name: "Standwaage", category: "beine", type: "time", difficulty: "schwer", muscles: "unterer Rücken, Gesäß, hintere Oberschenkel", description: "Auf einem Bein stehen. Oberkörper nach vorne kippen und das andere Bein nach hinten heben, bis Arme, Rumpf und Bein eine waagrechte Linie bilden. Halten, zur Halbzeit Seite wechseln." },
 
-            // --- Rücken (Pull) ---------------------------------------------------
-            { name: "Rumpfheber (Halten)", category: "ruecken", type: "time", difficulty: "leicht", muscles: "unterer Rücken, Gesäß", equipment: ["mat"], description: "Bauchlage, Arme nach vorne gestreckt. Arme, Oberkörper und Beine gleichzeitig leicht anheben und halten, Blick zum Boden." },
-            { name: "Rumpfheber (Pulsierend)", category: "ruecken", type: "reps", difficulty: "mittel", muscles: "unterer Rücken, Gesäß, Schultern", equipment: ["mat"], description: "Bauchlage, Arme nach vorne gestreckt. Arme, Oberkörper und Beine leicht anheben und oben in kleinen, schnellen Bewegungen auf und ab wippen." },
-            { name: "Rückwärts-Schneeengel", category: "ruecken", type: "reps", difficulty: "leicht", muscles: "oberer Rücken, Schultern", equipment: ["mat"], description: "Bauchlage, Arme neben dem Körper, Stirn knapp über dem Boden. Arme knapp über dem Boden seitlich bis über den Kopf führen und wieder zurück." },
-            { name: "Rückenstrecker", category: "ruecken", type: "reps", difficulty: "mittel", muscles: "unterer Rücken", equipment: ["mat"], description: "Bauchlage, Fingerspitzen an den Schläfen. Oberkörper langsam anheben, kurz halten und kontrolliert absenken. Die Füße bleiben am Boden." },
-            { name: "Diagonalheben (Vierfüßlerstand)", category: "ruecken", type: "reps", difficulty: "leicht", muscles: "unterer Rücken, Gesäß, Rumpf", equipment: ["mat"], description: "Vierfüßlerstand. Rechten Arm und linkes Bein gleichzeitig waagrecht strecken, kurz halten und zurückführen. Seiten abwechseln." },
-            { name: "Y-T-W-Heben", category: "ruecken", type: "reps", difficulty: "mittel", muscles: "oberer Rücken, Schultern", equipment: ["mat"], description: "Bauchlage, Stirn knapp über dem Boden. Arme nacheinander als Y (schräg nach vorne), T (zur Seite) und W (Ellbogen gebeugt) anheben und dabei die Schulterblätter zusammenziehen. Y-T-W zählt als eine Wiederholung." },
-            { name: "Rumpfvorbeuge", category: "ruecken", type: "reps", difficulty: "mittel", muscles: "unterer Rücken, hintere Oberschenkel, Gesäß", description: "Stehen, Hände hinter dem Kopf, Knie leicht gebeugt. Oberkörper mit geradem Rücken aus der Hüfte nach vorne kippen und wieder aufrichten." },
-            { name: "Heuschrecke (Pulsierend)", category: "ruecken", type: "reps", difficulty: "schwer", muscles: "unterer Rücken, Gesäß, Schultern", equipment: ["mat"], description: "Bauchlage, Arme neben dem Körper, Handflächen nach oben. Brust und Beine anheben und oben in kleinen, schnellen Pulsen weiter nach oben drücken." },
-            { name: "Schwimmer", category: "ruecken", type: "reps", difficulty: "mittel", muscles: "unterer Rücken, Gesäß, Schultern", equipment: ["mat"], description: "Bauchlage, Arme und Beine gestreckt und leicht angehoben. Rechten Arm und linkes Bein im Wechsel mit der Gegenseite auf und ab bewegen, flüssig wie beim Schwimmen." },
-            { name: "Kobra-Dehnhalten", category: "ruecken", type: "time", difficulty: "leicht", muscles: "unterer Rücken, gerade Bauchmuskeln", equipment: ["mat"], description: "Bauchlage, Hände unter den Schultern. Oberkörper mit den Armen hochdrücken, das Becken bleibt am Boden. Ruhig atmend halten." },
-            { name: "Klimmzüge", category: "ruecken", type: "reps", difficulty: "schwer", muscles: "breiter Rücken, Bizeps", equipment: ["pullup"], description: "An der Stange hängen, Handflächen zeigen nach vorne, Hände etwas breiter als schulterbreit. Hochziehen, bis das Kinn über der Stange ist, dann langsam absenken." },
-            { name: "Enge Klimmzüge (Untergriff)", category: "ruecken", type: "reps", difficulty: "mittel", muscles: "breiter Rücken, Bizeps", equipment: ["pullup"], description: "An der Stange hängen, Handflächen zeigen zum Gesicht, Hände schulterbreit. Hochziehen, bis das Kinn über der Stange ist, dann langsam absenken." },
-            { name: "Negative Klimmzüge", category: "ruecken", type: "reps", difficulty: "mittel", muscles: "breiter Rücken, Bizeps", equipment: ["pullup"], description: "Mit Sprung oder Hocker in die obere Position kommen (Kinn über der Stange). Dann so langsam wie möglich bis zu gestreckten Armen absenken." },
-            { name: "Hängendes Schulterblatt-Ziehen", category: "ruecken", type: "reps", difficulty: "leicht", muscles: "oberer Rücken, breiter Rücken", equipment: ["pullup"], description: "Mit gestreckten Armen an der Stange hängen. Schultern nach unten ziehen, sodass der Körper ein Stück hochkommt – die Arme bleiben gestreckt. Langsam wieder lösen." },
-            { name: "Inverses Rudern", category: "ruecken", type: "reps", difficulty: "mittel", muscles: "oberer Rücken, breiter Rücken, Bizeps", equipment: ["bar"], description: "Unter eine hüfthohe Stange legen und sie schulterbreit greifen. Körper gerade wie ein Brett, Brust zur Stange ziehen und langsam absenken." },
-            { name: "Einarmiges Inverses Rudern", category: "ruecken", type: "reps", difficulty: "schwer", muscles: "oberer Rücken, breiter Rücken, Bizeps, Rumpf", equipment: ["bar"], description: "Unter eine hüfthohe Stange legen und sie mit einer Hand greifen. Körper gerade halten, ohne zu verdrehen, Brust zur Stange ziehen und langsam absenken. Wiederholungen je Seite." },
-            { name: "Rückwärts-Brücke", category: "ruecken", type: "time", difficulty: "mittel", muscles: "unterer Rücken, Gesäß, hintere Oberschenkel, Schultern", equipment: ["mat"], description: "Sitzen mit gestreckten Beinen, Hände hinter dem Po, Finger zeigen zu den Füßen. Hüfte hochdrücken, bis der Körper eine gerade Linie bildet, und halten." },
-            { name: "Diagonalhalten (Vierfüßlerstand)", category: "ruecken", type: "time", difficulty: "mittel", muscles: "unterer Rücken, Gesäß, Rumpf", equipment: ["mat"], description: "Vierfüßlerstand. Rechten Arm und linkes Bein waagrecht strecken und ruhig halten, der Rücken bleibt gerade. Zur Halbzeit Seite wechseln." },
-            { name: "Superman-Halten (volle Streckung)", category: "ruecken", type: "time", difficulty: "schwer", muscles: "unterer Rücken, Gesäß, Schultern", equipment: ["mat"], description: "Bauchlage, Arme nach vorne gestreckt. Arme, Oberkörper und Beine so hoch wie möglich anheben und die Spannung halten." },
-            { name: "Y-Heben im Stand", category: "ruecken", type: "reps", difficulty: "leicht", muscles: "oberer Rücken, Schultern", description: "Knie leicht gebeugt, Oberkörper mit geradem Rücken weit nach vorne neigen. Arme schräg nach oben zu einem Y heben, Schulterblätter zusammenziehen, langsam absenken." },
-            { name: "Reverse Fly im Stand", category: "ruecken", type: "reps", difficulty: "mittel", muscles: "oberer Rücken, Schultern", description: "Knie leicht gebeugt, Oberkörper mit geradem Rücken weit nach vorne neigen. Arme leicht gebeugt seitlich bis auf Schulterhöhe öffnen, Schulterblätter zusammenziehen, langsam zurückführen." },
-            { name: "Standwaage", category: "ruecken", type: "time", difficulty: "schwer", muscles: "unterer Rücken, Gesäß, hintere Oberschenkel", description: "Auf einem Bein stehen. Oberkörper nach vorne kippen und das andere Bein nach hinten heben, bis Arme, Rumpf und Bein eine waagrechte Linie bilden. Halten, zur Halbzeit Seite wechseln." },
-            { name: "Toter Hang", category: "ruecken", type: "time", difficulty: "leicht", muscles: "breiter Rücken, Unterarme", equipment: ["pullup"], description: "Mit gestreckten Armen schulterbreit an der Stange hängen, die Füße sind frei. Schultern leicht nach unten ziehen und ruhig hängen bleiben." },
-            { name: "Klimmzug-Halten (oben)", category: "ruecken", type: "time", difficulty: "schwer", muscles: "breiter Rücken, Bizeps", equipment: ["pullup"], description: "Hochziehen oder mit Hocker hochsteigen, bis das Kinn über der Stange ist. Diese Position halten, Schultern bleiben unten." },
-            { name: "Inverses Rudern mit gebeugten Knien", category: "ruecken", type: "reps", difficulty: "leicht", muscles: "oberer Rücken, breiter Rücken, Bizeps", equipment: ["bar"], description: "Unter eine hüfthohe Stange legen, Knie gebeugt, Füße aufgestellt. Stange schulterbreit greifen, Hüfte gestreckt lassen, Brust zur Stange ziehen und langsam absenken." },
-            { name: "W-Ziehen im Stand", category: "ruecken", type: "reps", difficulty: "leicht", muscles: "oberer Rücken, breiter Rücken", description: "Arme gestreckt nach oben. Ellbogen nach unten zu den Rippen ziehen, sodass die Arme ein W bilden, und die Schulterblätter zusammendrücken. Wieder hochstrecken." },
-            { name: "Bauchlage-Latziehen", category: "ruecken", type: "reps", difficulty: "mittel", muscles: "breiter Rücken, oberer Rücken", equipment: ["mat"], description: "Bauchlage, Arme nach vorne gestreckt und leicht angehoben. Ellbogen zu den Rippen ziehen, als würde eine Stange zur Brust gezogen, und wieder nach vorne strecken. Arme bleiben in der Luft." },
-            { name: "Skispringer-Halten", category: "ruecken", type: "time", difficulty: "mittel", muscles: "unterer Rücken, oberer Rücken, hintere Oberschenkel", description: "Knie leicht gebeugt, Oberkörper mit geradem Rücken weit nach vorne neigen. Arme gestreckt nach hinten neben die Hüfte führen, Schulterblätter zusammenziehen und halten." },
+            // --- Ziehen (Rücken/Bizeps) -----------------------------------------
+            { name: "Rückwärts-Schneeengel", category: "ziehen", type: "reps", difficulty: "leicht", muscles: "oberer Rücken, Schultern", equipment: ["mat"], description: "Bauchlage, Arme neben dem Körper, Stirn knapp über dem Boden. Arme knapp über dem Boden seitlich bis über den Kopf führen und wieder zurück." },
+            { name: "Y-T-W-Heben", category: "ziehen", type: "reps", difficulty: "mittel", muscles: "oberer Rücken, Schultern", equipment: ["mat"], description: "Bauchlage, Stirn knapp über dem Boden. Arme nacheinander als Y (schräg nach vorne), T (zur Seite) und W (Ellbogen gebeugt) anheben und dabei die Schulterblätter zusammenziehen. Y-T-W zählt als eine Wiederholung." },
+            { name: "Klimmzüge", category: "ziehen", type: "reps", difficulty: "schwer", muscles: "breiter Rücken, Bizeps", equipment: ["pullup"], scale: 0.5, description: "An der Stange hängen, Handflächen zeigen nach vorne, Hände etwas breiter als schulterbreit. Hochziehen, bis das Kinn über der Stange ist, dann langsam absenken." },
+            { name: "Enge Klimmzüge (Untergriff)", category: "ziehen", type: "reps", difficulty: "mittel", muscles: "breiter Rücken, Bizeps", equipment: ["pullup"], scale: 0.5, description: "An der Stange hängen, Handflächen zeigen zum Gesicht, Hände schulterbreit. Hochziehen, bis das Kinn über der Stange ist, dann langsam absenken." },
+            { name: "Negative Klimmzüge", category: "ziehen", type: "reps", difficulty: "mittel", muscles: "breiter Rücken, Bizeps", equipment: ["pullup"], scale: 0.35, description: "Mit Sprung oder Hocker in die obere Position kommen (Kinn über der Stange). Dann so langsam wie möglich bis zu gestreckten Armen absenken." },
+            { name: "Hängendes Schulterblatt-Ziehen", category: "ziehen", type: "reps", difficulty: "leicht", muscles: "oberer Rücken, breiter Rücken", equipment: ["pullup"], description: "Mit gestreckten Armen an der Stange hängen. Schultern nach unten ziehen, sodass der Körper ein Stück hochkommt – die Arme bleiben gestreckt. Langsam wieder lösen." },
+            { name: "Inverses Rudern", category: "ziehen", type: "reps", difficulty: "mittel", muscles: "oberer Rücken, breiter Rücken, Bizeps", equipment: ["bar"], description: "Unter eine hüfthohe Stange legen und sie schulterbreit greifen. Körper gerade wie ein Brett, Brust zur Stange ziehen und langsam absenken." },
+            { name: "Einarmiges Inverses Rudern", category: "ziehen", type: "reps", difficulty: "schwer", muscles: "oberer Rücken, breiter Rücken, Bizeps, Rumpf", equipment: ["bar"], scale: 0.6, description: "Unter eine hüfthohe Stange legen und sie mit einer Hand greifen. Körper gerade halten, ohne zu verdrehen, Brust zur Stange ziehen und langsam absenken. Wiederholungen je Seite." },
+            { name: "Y-Heben im Stand", category: "ziehen", type: "reps", difficulty: "leicht", muscles: "oberer Rücken, Schultern", description: "Knie leicht gebeugt, Oberkörper mit geradem Rücken weit nach vorne neigen. Arme schräg nach oben zu einem Y heben, Schulterblätter zusammenziehen, langsam absenken." },
+            { name: "Reverse Fly im Stand", category: "ziehen", type: "reps", difficulty: "mittel", muscles: "oberer Rücken, Schultern", description: "Knie leicht gebeugt, Oberkörper mit geradem Rücken weit nach vorne neigen. Arme leicht gebeugt seitlich bis auf Schulterhöhe öffnen, Schulterblätter zusammenziehen, langsam zurückführen." },
+            { name: "Toter Hang", category: "ziehen", type: "time", difficulty: "leicht", muscles: "breiter Rücken, Unterarme", equipment: ["pullup"], description: "Mit gestreckten Armen schulterbreit an der Stange hängen, die Füße sind frei. Schultern leicht nach unten ziehen und ruhig hängen bleiben." },
+            { name: "Klimmzug-Halten (oben)", category: "ziehen", type: "time", difficulty: "schwer", muscles: "breiter Rücken, Bizeps", equipment: ["pullup"], scale: 0.5, description: "Hochziehen oder mit Hocker hochsteigen, bis das Kinn über der Stange ist. Diese Position halten, Schultern bleiben unten." },
+            { name: "Inverses Rudern mit gebeugten Knien", category: "ziehen", type: "reps", difficulty: "leicht", muscles: "oberer Rücken, breiter Rücken, Bizeps", equipment: ["bar"], description: "Unter eine hüfthohe Stange legen, Knie gebeugt, Füße aufgestellt. Stange schulterbreit greifen, Hüfte gestreckt lassen, Brust zur Stange ziehen und langsam absenken." },
+            { name: "W-Ziehen im Stand", category: "ziehen", type: "reps", difficulty: "leicht", muscles: "oberer Rücken, breiter Rücken", description: "Arme gestreckt nach oben. Ellbogen nach unten zu den Rippen ziehen, sodass die Arme ein W bilden, und die Schulterblätter zusammendrücken. Wieder hochstrecken." },
+            { name: "Bauchlage-Latziehen", category: "ziehen", type: "reps", difficulty: "mittel", muscles: "breiter Rücken, oberer Rücken", equipment: ["mat"], description: "Bauchlage, Arme nach vorne gestreckt und leicht angehoben. Ellbogen zu den Rippen ziehen, als würde eine Stange zur Brust gezogen, und wieder nach vorne strecken. Arme bleiben in der Luft." },
+            { name: "Skispringer-Halten", category: "ziehen", type: "time", difficulty: "mittel", muscles: "unterer Rücken, oberer Rücken, hintere Oberschenkel", description: "Knie leicht gebeugt, Oberkörper mit geradem Rücken weit nach vorne neigen. Arme gestreckt nach hinten neben die Hüfte führen, Schulterblätter zusammenziehen und halten." },
+            { name: "Isometrischer Bizeps-Zug", category: "ziehen", type: "time", difficulty: "leicht", muscles: "Bizeps, Unterarme", description: "Hände vor dem Bauch ineinanderhaken, die untere Handfläche zeigt nach oben, Ellbogen 90° gebeugt. Der untere Arm zieht kräftig nach oben, der obere hält mit gleicher Kraft dagegen. Zur Halbzeit Hände tauschen." },
+            { name: "Bein-Curl im Sitzen", category: "ziehen", type: "reps", difficulty: "mittel", muscles: "Bizeps, Unterarme", description: "Aufrecht sitzen, beide Hände von unten in eine Kniekehle greifen. Das Bein schwer machen und mit den Armen langsam Richtung Brust ziehen, das Bein bremst dagegen. Langsam ablassen. Wiederholungen je Seite." },
+            { name: "Bauchlage-Latziehen mit Halten", category: "ziehen", type: "reps", difficulty: "schwer", muscles: "breiter Rücken, oberer Rücken", equipment: ["mat"], description: "Bauchlage, Brust und gestreckte Arme leicht angehoben. Ellbogen kräftig zu den Rippen ziehen, Schulterblätter zusammendrücken und 2 Sekunden halten. Wieder nach vorne strecken, die Arme bleiben in der Luft." },
 
-            // --- Brust/Schulter/Arme (Push) --------------------------------------
-            { name: "Liegestütze", category: "push", type: "reps", difficulty: "mittel", muscles: "Brust, Schultern, Trizeps", equipment: ["mat"], description: "Hände etwas breiter als schulterbreit, Körper gerade von Kopf bis Fuß. Brust bis knapp über den Boden senken und wieder hochdrücken." },
-            { name: "Knie-Liegestütze", category: "push", type: "reps", difficulty: "leicht", muscles: "Brust, Schultern, Trizeps", equipment: ["mat"], description: "Auf Händen und Knien abstützen, Hände etwas breiter als schulterbreit, Körper gerade von Kopf bis Knie. Brust zum Boden senken und hochdrücken." },
-            { name: "Diamant-Liegestütze", category: "push", type: "reps", difficulty: "schwer", muscles: "Trizeps, Brust, Schultern", equipment: ["mat"], description: "Liegestützposition, Hände unter der Brust zusammen, Daumen und Zeigefinger bilden eine Raute. Brust zu den Händen senken und hochdrücken, Ellbogen eng am Körper." },
-            { name: "Breite Liegestütze", category: "push", type: "reps", difficulty: "mittel", muscles: "Brust, Schultern", equipment: ["mat"], description: "Liegestützposition mit Händen deutlich breiter als schulterbreit. Brust zum Boden senken und hochdrücken." },
-            { name: "Spitzwinkel-Liegestütze", category: "push", type: "reps", difficulty: "schwer", muscles: "Schultern, Trizeps", equipment: ["mat"], description: "Aus der Liegestützposition den Po hochschieben, bis der Körper ein umgekehrtes V bildet. Ellbogen beugen, Kopf Richtung Boden senken und hochdrücken." },
-            { name: "Trizeps-Stützen (Stuhl)", category: "push", type: "reps", difficulty: "mittel", muscles: "Trizeps, Schultern", equipment: ["elevated"], description: "Rücken zum Stuhl, Hände auf der Sitzkante, Beine nach vorne gestreckt. Ellbogen nach hinten beugen, Po absenken und wieder hochdrücken." },
-            { name: "Bogenschützen-Liegestütze", category: "push", type: "reps", difficulty: "schwer", muscles: "Brust, Trizeps, Schultern", equipment: ["mat"], description: "Liegestützposition mit sehr breiten Händen. Zu einer Seite absenken, der andere Arm bleibt gestreckt, dann hochdrücken. Seiten abwechseln." },
-            { name: "Schräge Liegestütze (erhöht)", category: "push", type: "reps", difficulty: "leicht", muscles: "Brust, Schultern", equipment: ["elevated"], description: "Hände auf eine Erhöhung (Couch, Stufe, Tisch) stützen, Körper gerade. Brust zur Kante senken und hochdrücken – leichter als am Boden." },
-            { name: "Liegestütze mit erhöhten Füßen", category: "push", type: "reps", difficulty: "schwer", muscles: "Brust, Schultern, Trizeps", equipment: ["elevated", "mat"], description: "Füße auf eine Erhöhung legen, Hände am Boden etwas breiter als schulterbreit. Brust zum Boden senken und hochdrücken." },
-            { name: "Stützwechsel", category: "push", type: "reps", difficulty: "mittel", muscles: "Trizeps, Brust, Rumpf", equipment: ["mat"], description: "Unterarmstütz. Hand für Hand in die Liegestützposition hochdrücken und wieder zurück auf die Unterarme. Den führenden Arm abwechseln." },
-            { name: "Wand-Liegestütze", category: "push", type: "reps", difficulty: "leicht", muscles: "Brust, Schultern, Trizeps", equipment: ["wall"], description: "Etwa einen Schritt vor der Wand stehen, Hände schulterhoch an die Wand. Brust zur Wand senken und wieder wegdrücken." },
-            { name: "Schulterblatt-Liegestütze", category: "push", type: "reps", difficulty: "leicht", muscles: "Schultern, Brust", equipment: ["mat"], description: "Liegestützposition, die Arme bleiben gestreckt. Brust leicht absinken lassen, bis sich die Schulterblätter berühren, dann den oberen Rücken rund nach oben drücken." },
-            { name: "Tauch-Liegestütze", category: "push", type: "reps", difficulty: "mittel", muscles: "Brust, Schultern, Trizeps", equipment: ["mat"], description: "Start im umgekehrten V (Po hoch). Brust in einem Bogen dicht über dem Boden nach vorne schieben und den Oberkörper aufrichten. Den Po wieder nach hinten oben drücken." },
-            { name: "Knie-Ellbogen-Liegestütze", category: "push", type: "reps", difficulty: "schwer", muscles: "Brust, Trizeps, schräge Bauchmuskeln", equipment: ["mat"], description: "Liegestütze, dabei beim Absenken ein Knie seitlich zum Ellbogen derselben Seite ziehen und beim Hochdrücken zurückstellen. Seiten abwechseln." },
-            { name: "Spitzwinkel-Liegestütze mit erhöhten Füßen", category: "push", type: "reps", difficulty: "schwer", muscles: "Schultern, Trizeps", equipment: ["elevated", "mat"], description: "Füße auf eine Erhöhung, Hände am Boden, Po hoch, sodass der Oberkörper möglichst senkrecht ist. Kopf Richtung Boden senken und hochdrücken." },
-            { name: "Wand-Handstand-Halten", category: "push", type: "time", difficulty: "schwer", muscles: "Schultern, Trizeps, Rumpf", equipment: ["wall"], description: "Bauch zur Wand: Hände vor der Wand aufsetzen und mit den Füßen an der Wand hochlaufen, so weit es sicher geht. Körper gerade, Position halten." },
-            { name: "Wand-Liegestütz-Halten", category: "push", type: "time", difficulty: "leicht", muscles: "Brust, Schultern, Trizeps", equipment: ["wall"], description: "Hände schulterhoch an die Wand, Körper gerade. Brust zur Wand senken und in der unteren Position halten." },
-            { name: "Liegestütz-Halten (Mitte)", category: "push", type: "time", difficulty: "mittel", muscles: "Brust, Schultern, Trizeps, Rumpf", equipment: ["mat"], description: "Liegestützposition, Arme halb beugen (Ellbogen etwa 90°) und dort halten. Der Körper bleibt gerade." },
-            { name: "Liegestütz-Halten (unten)", category: "push", type: "time", difficulty: "schwer", muscles: "Brust, Trizeps, Schultern, Rumpf", equipment: ["mat"], description: "Liegestützposition, Brust bis knapp über den Boden senken und dort halten, ohne abzulegen. Der Körper bleibt gerade." },
-            { name: "Isometrisches Handdrücken", category: "push", type: "time", difficulty: "leicht", muscles: "Brust, Schultern", description: "Handflächen vor der Brust aneinanderlegen, Ellbogen auf Brusthöhe. Hände so fest wie möglich gegeneinander pressen und halten." },
-            { name: "Seitheben-Halten", category: "push", type: "time", difficulty: "mittel", muscles: "Schultern", description: "Arme seitlich gestreckt auf Schulterhöhe heben (T-Form), Schultern locker unten lassen. Ruhig atmend halten." },
-            { name: "Überkopf-Halten", category: "push", type: "time", difficulty: "leicht", muscles: "Schultern, Trizeps", description: "Arme gestreckt senkrecht über den Kopf heben, Bauch anspannen, kein Hohlkreuz. Position halten." },
-            { name: "Trizeps-Pulse im Stand", category: "push", type: "reps", difficulty: "mittel", muscles: "Trizeps", description: "Oberkörper leicht vorneigen, Arme gestreckt hinter den Körper, Handflächen zeigen nach hinten. Arme in kleinen Pulsen nach oben drücken." },
-            { name: "Langsame Liegestütze", category: "push", type: "reps", difficulty: "schwer", muscles: "Brust, Schultern, Trizeps", equipment: ["mat"], description: "Liegestützposition. Brust in 3 Sekunden absenken, kurz über dem Boden halten und zügig hochdrücken." },
-            { name: "Enge Knie-Liegestütze", category: "push", type: "reps", difficulty: "leicht", muscles: "Trizeps, Brust", equipment: ["mat"], description: "Auf Händen und Knien abstützen, Hände schulterbreit unter der Brust, Körper gerade. Ellbogen eng am Körper beugen, Brust senken und hochdrücken." },
-            { name: "Trizeps-Stützen (Boden)", category: "push", type: "reps", difficulty: "leicht", muscles: "Trizeps, Schultern", equipment: ["mat"], description: "Sitzen, Füße aufgestellt, Hände hinter dem Po, Finger zeigen zu den Füßen. Po leicht anheben, Ellbogen nach hinten beugen und wieder strecken." },
-            { name: "Sphinx-Liegestütze", category: "push", type: "reps", difficulty: "schwer", muscles: "Trizeps, Schultern", equipment: ["mat"], description: "Unterarmstütz, Ellbogen unter den Schultern. Hände in den Boden drücken, bis die Ellbogen abheben und die Arme gestreckt sind, dann langsam zurück auf die Unterarme." },
-            { name: "Spitzwinkel-Halten", category: "push", type: "time", difficulty: "mittel", muscles: "Schultern, Trizeps", equipment: ["mat"], description: "Umgekehrtes V: Hände und Füße am Boden, Po hoch, Arme gestreckt, Kopf zwischen den Armen. Gewicht deutlich auf die Hände verlagern und halten." },
-            { name: "Seitheben-Pulse", category: "push", type: "reps", difficulty: "mittel", muscles: "Schultern", description: "Arme seitlich gestreckt auf Schulterhöhe heben. In kleinen Pulsen auf und ab bewegen, Schultern bleiben locker unten." },
+            // --- Drücken (Brust/Schulter/Trizeps) --------------------------------
+            { name: "Liegestütze", category: "druecken", type: "reps", difficulty: "mittel", muscles: "Brust, Schultern, Trizeps", equipment: ["mat"], description: "Hände etwas breiter als schulterbreit, Körper gerade von Kopf bis Fuß. Brust bis knapp über den Boden senken und wieder hochdrücken." },
+            { name: "Knie-Liegestütze", category: "druecken", type: "reps", difficulty: "leicht", muscles: "Brust, Schultern, Trizeps", equipment: ["mat"], description: "Auf Händen und Knien abstützen, Hände etwas breiter als schulterbreit, Körper gerade von Kopf bis Knie. Brust zum Boden senken und hochdrücken." },
+            { name: "Diamant-Liegestütze", category: "druecken", type: "reps", difficulty: "schwer", muscles: "Trizeps, Brust, Schultern", equipment: ["mat"], description: "Liegestützposition, Hände unter der Brust zusammen, Daumen und Zeigefinger bilden eine Raute. Brust zu den Händen senken und hochdrücken, Ellbogen eng am Körper." },
+            { name: "Breite Liegestütze", category: "druecken", type: "reps", difficulty: "mittel", muscles: "Brust, Schultern", equipment: ["mat"], description: "Liegestützposition mit Händen deutlich breiter als schulterbreit. Brust zum Boden senken und hochdrücken." },
+            { name: "Spitzwinkel-Liegestütze", category: "druecken", type: "reps", difficulty: "schwer", muscles: "Schultern, Trizeps", equipment: ["mat"], description: "Aus der Liegestützposition den Po hochschieben, bis der Körper ein umgekehrtes V bildet. Ellbogen beugen, Kopf Richtung Boden senken und hochdrücken." },
+            { name: "Trizeps-Stützen (Stuhl)", category: "druecken", type: "reps", difficulty: "mittel", muscles: "Trizeps, Schultern", equipment: ["elevated"], description: "Rücken zum Stuhl, Hände auf der Sitzkante, Beine nach vorne gestreckt. Ellbogen nach hinten beugen, Po absenken und wieder hochdrücken." },
+            { name: "Bogenschützen-Liegestütze", category: "druecken", type: "reps", difficulty: "schwer", muscles: "Brust, Trizeps, Schultern", equipment: ["mat"], scale: 0.6, description: "Liegestützposition mit sehr breiten Händen. Zu einer Seite absenken, der andere Arm bleibt gestreckt, dann hochdrücken. Seiten abwechseln." },
+            { name: "Schräge Liegestütze (erhöht)", category: "druecken", type: "reps", difficulty: "leicht", muscles: "Brust, Schultern", equipment: ["elevated"], description: "Hände auf eine Erhöhung (Couch, Stufe, Tisch) stützen, Körper gerade. Brust zur Kante senken und hochdrücken – leichter als am Boden." },
+            { name: "Liegestütze mit erhöhten Füßen", category: "druecken", type: "reps", difficulty: "schwer", muscles: "Brust, Schultern, Trizeps", equipment: ["elevated", "mat"], description: "Füße auf eine Erhöhung legen, Hände am Boden etwas breiter als schulterbreit. Brust zum Boden senken und hochdrücken." },
+            { name: "Stützwechsel", category: "druecken", type: "reps", difficulty: "mittel", muscles: "Trizeps, Brust, Rumpf", equipment: ["mat"], description: "Unterarmstütz. Hand für Hand in die Liegestützposition hochdrücken und wieder zurück auf die Unterarme. Den führenden Arm abwechseln." },
+            { name: "Wand-Liegestütze", category: "druecken", type: "reps", difficulty: "leicht", muscles: "Brust, Schultern, Trizeps", equipment: ["wall"], description: "Etwa einen Schritt vor der Wand stehen, Hände schulterhoch an die Wand. Brust zur Wand senken und wieder wegdrücken." },
+            { name: "Schulterblatt-Liegestütze", category: "druecken", type: "reps", difficulty: "leicht", muscles: "Schultern, Brust", equipment: ["mat"], description: "Liegestützposition, die Arme bleiben gestreckt. Brust leicht absinken lassen, bis sich die Schulterblätter berühren, dann den oberen Rücken rund nach oben drücken." },
+            { name: "Tauch-Liegestütze", category: "druecken", type: "reps", difficulty: "mittel", muscles: "Brust, Schultern, Trizeps", equipment: ["mat"], description: "Start im umgekehrten V (Po hoch). Brust in einem Bogen dicht über dem Boden nach vorne schieben und den Oberkörper aufrichten. Den Po wieder nach hinten oben drücken." },
+            { name: "Knie-Ellbogen-Liegestütze", category: "druecken", type: "reps", difficulty: "schwer", muscles: "Brust, Trizeps, schräge Bauchmuskeln", equipment: ["mat"], description: "Liegestütze, dabei beim Absenken ein Knie seitlich zum Ellbogen derselben Seite ziehen und beim Hochdrücken zurückstellen. Seiten abwechseln." },
+            { name: "Spitzwinkel-Liegestütze mit erhöhten Füßen", category: "druecken", type: "reps", difficulty: "schwer", muscles: "Schultern, Trizeps", equipment: ["elevated", "mat"], scale: 0.6, description: "Füße auf eine Erhöhung, Hände am Boden, Po hoch, sodass der Oberkörper möglichst senkrecht ist. Kopf Richtung Boden senken und hochdrücken." },
+            { name: "Wand-Handstand-Halten", category: "druecken", type: "time", difficulty: "schwer", muscles: "Schultern, Trizeps, Rumpf", equipment: ["wall"], scale: 0.7, description: "Bauch zur Wand: Hände vor der Wand aufsetzen und mit den Füßen an der Wand hochlaufen, so weit es sicher geht. Körper gerade, Position halten." },
+            { name: "Wand-Liegestütz-Halten", category: "druecken", type: "time", difficulty: "leicht", muscles: "Brust, Schultern, Trizeps", equipment: ["wall"], description: "Hände schulterhoch an die Wand, Körper gerade. Brust zur Wand senken und in der unteren Position halten." },
+            { name: "Liegestütz-Halten (Mitte)", category: "druecken", type: "time", difficulty: "mittel", muscles: "Brust, Schultern, Trizeps, Rumpf", equipment: ["mat"], description: "Liegestützposition, Arme halb beugen (Ellbogen etwa 90°) und dort halten. Der Körper bleibt gerade." },
+            { name: "Liegestütz-Halten (unten)", category: "druecken", type: "time", difficulty: "schwer", muscles: "Brust, Trizeps, Schultern, Rumpf", equipment: ["mat"], description: "Liegestützposition, Brust bis knapp über den Boden senken und dort halten, ohne abzulegen. Der Körper bleibt gerade." },
+            { name: "Isometrisches Handdrücken", category: "druecken", type: "time", difficulty: "leicht", muscles: "Brust, Schultern", description: "Handflächen vor der Brust aneinanderlegen, Ellbogen auf Brusthöhe. Hände so fest wie möglich gegeneinander pressen und halten." },
+            { name: "Seitheben-Halten", category: "druecken", type: "time", difficulty: "mittel", muscles: "Schultern", description: "Arme seitlich gestreckt auf Schulterhöhe heben (T-Form), Schultern locker unten lassen. Ruhig atmend halten." },
+            { name: "Überkopf-Halten", category: "druecken", type: "time", difficulty: "leicht", muscles: "Schultern, Trizeps", description: "Arme gestreckt senkrecht über den Kopf heben, Bauch anspannen, kein Hohlkreuz. Position halten." },
+            { name: "Trizeps-Pulse im Stand", category: "druecken", type: "reps", difficulty: "mittel", muscles: "Trizeps", scale: 2, description: "Oberkörper leicht vorneigen, Arme gestreckt hinter den Körper, Handflächen zeigen nach hinten. Arme in kleinen Pulsen nach oben drücken." },
+            { name: "Langsame Liegestütze", category: "druecken", type: "reps", difficulty: "schwer", muscles: "Brust, Schultern, Trizeps", equipment: ["mat"], scale: 0.7, description: "Liegestützposition. Brust in 3 Sekunden absenken, kurz über dem Boden halten und zügig hochdrücken." },
+            { name: "Enge Knie-Liegestütze", category: "druecken", type: "reps", difficulty: "leicht", muscles: "Trizeps, Brust", equipment: ["mat"], description: "Auf Händen und Knien abstützen, Hände schulterbreit unter der Brust, Körper gerade. Ellbogen eng am Körper beugen, Brust senken und hochdrücken." },
+            { name: "Trizeps-Stützen (Boden)", category: "druecken", type: "reps", difficulty: "leicht", muscles: "Trizeps, Schultern", equipment: ["mat"], description: "Sitzen, Füße aufgestellt, Hände hinter dem Po, Finger zeigen zu den Füßen. Po leicht anheben, Ellbogen nach hinten beugen und wieder strecken." },
+            { name: "Sphinx-Liegestütze", category: "druecken", type: "reps", difficulty: "schwer", muscles: "Trizeps, Schultern", equipment: ["mat"], description: "Unterarmstütz, Ellbogen unter den Schultern. Hände in den Boden drücken, bis die Ellbogen abheben und die Arme gestreckt sind, dann langsam zurück auf die Unterarme." },
+            { name: "Spitzwinkel-Halten", category: "druecken", type: "time", difficulty: "mittel", muscles: "Schultern, Trizeps", equipment: ["mat"], description: "Umgekehrtes V: Hände und Füße am Boden, Po hoch, Arme gestreckt, Kopf zwischen den Armen. Gewicht deutlich auf die Hände verlagern und halten." },
+            { name: "Seitheben-Pulse", category: "druecken", type: "reps", difficulty: "mittel", muscles: "Schultern", scale: 2, description: "Arme seitlich gestreckt auf Schulterhöhe heben. In kleinen Pulsen auf und ab bewegen, Schultern bleiben locker unten." },
 
             // --- Core / Rumpf -----------------------------------------------------
             { name: "Unterarmstütz", category: "core", type: "time", difficulty: "leicht", muscles: "Rumpf, Schultern", equipment: ["mat"], description: "Auf Unterarmen und Zehenspitzen abstützen, Ellbogen unter den Schultern. Körper gerade von Kopf bis Ferse, Bauch und Po anspannen und halten." },
             { name: "Seitlicher Unterarmstütz", category: "core", type: "time", difficulty: "mittel", muscles: "schräge Bauchmuskeln, Rumpf", equipment: ["mat"], description: "Seitlich auf einem Unterarm abstützen, Ellbogen unter der Schulter, Beine gestreckt. Hüfte anheben, bis der Körper gerade ist, und halten. Zur Halbzeit Seite wechseln." },
             { name: "Bauchpressen", category: "core", type: "reps", difficulty: "leicht", muscles: "gerade Bauchmuskeln", equipment: ["mat"], description: "Rückenlage, Füße aufgestellt, Fingerspitzen an den Schläfen. Kopf und Schultern einrollend anheben, der untere Rücken bleibt am Boden. Langsam absenken." },
-            { name: "Fahrrad-Bauchpressen", category: "core", type: "reps", difficulty: "mittel", muscles: "gerade Bauchmuskeln, schräge Bauchmuskeln", equipment: ["mat"], description: "Rückenlage, Fingerspitzen an den Schläfen, Beine angehoben. Rechten Ellbogen zum linken Knie führen und das andere Bein strecken. Seiten abwechseln wie beim Radfahren." },
+            { name: "Fahrrad-Bauchpressen", category: "core", type: "reps", difficulty: "mittel", muscles: "gerade Bauchmuskeln, schräge Bauchmuskeln", equipment: ["mat"], scale: 1.5, description: "Rückenlage, Fingerspitzen an den Schläfen, Beine angehoben. Rechten Ellbogen zum linken Knie führen und das andere Bein strecken. Seiten abwechseln wie beim Radfahren." },
             { name: "Beinheben", category: "core", type: "reps", difficulty: "mittel", muscles: "gerade Bauchmuskeln, Hüftbeuger", equipment: ["mat"], description: "Rückenlage, Beine gestreckt, Hände unter dem Po. Beine bis senkrecht anheben und langsam absenken, ohne den Boden zu berühren." },
-            { name: "Bergsteiger", category: "core", type: "reps", difficulty: "mittel", muscles: "Rumpf, Hüftbeuger, Schultern", equipment: ["mat"], description: "Liegestützposition. Knie abwechselnd zügig zur Brust ziehen, die Hüfte bleibt tief und ruhig." },
-            { name: "Russische Drehungen", category: "core", type: "reps", difficulty: "mittel", muscles: "schräge Bauchmuskeln", equipment: ["mat"], description: "Sitzen, Oberkörper leicht zurückgelehnt, Füße vom Boden abheben. Hände vor der Brust falten und den Oberkörper abwechselnd nach links und rechts drehen." },
+            { name: "Bergsteiger", category: "core", type: "reps", difficulty: "mittel", muscles: "Rumpf, Hüftbeuger, Schultern", equipment: ["mat"], scale: 2, description: "Liegestützposition. Knie abwechselnd zügig zur Brust ziehen, die Hüfte bleibt tief und ruhig." },
+            { name: "Russische Drehungen", category: "core", type: "reps", difficulty: "mittel", muscles: "schräge Bauchmuskeln", equipment: ["mat"], scale: 1.5, description: "Sitzen, Oberkörper leicht zurückgelehnt, Füße vom Boden abheben. Hände vor der Brust falten und den Oberkörper abwechselnd nach links und rechts drehen." },
             { name: "Hohlkörper-Halten", category: "core", type: "time", difficulty: "schwer", muscles: "gerade Bauchmuskeln, tiefe Bauchmuskeln", equipment: ["mat"], description: "Rückenlage, unteren Rücken fest in den Boden drücken. Arme über den Kopf strecken, Schultern und gestreckte Beine knapp über dem Boden halten." },
-            { name: "Schultertippen im Stütz", category: "core", type: "reps", difficulty: "mittel", muscles: "Rumpf, Schultern", equipment: ["mat"], description: "Liegestützposition, Füße etwas breiter. Mit einer Hand die gegenüberliegende Schulter antippen, die Hüfte möglichst ruhig halten. Seiten abwechseln." },
+            { name: "Schultertippen im Stütz", category: "core", type: "reps", difficulty: "mittel", muscles: "Rumpf, Schultern", equipment: ["mat"], scale: 1.5, description: "Liegestützposition, Füße etwas breiter. Mit einer Hand die gegenüberliegende Schulter antippen, die Hüfte möglichst ruhig halten. Seiten abwechseln." },
             { name: "Klappmesser", category: "core", type: "reps", difficulty: "schwer", muscles: "gerade Bauchmuskeln, Hüftbeuger", equipment: ["mat"], description: "Rückenlage, Arme über dem Kopf, Beine gestreckt. Oberkörper und Beine gleichzeitig anheben und mit den Händen Richtung Füße greifen. Langsam ablegen." },
             { name: "Toter Käfer", category: "core", type: "reps", difficulty: "leicht", muscles: "tiefe Bauchmuskeln, gerade Bauchmuskeln", equipment: ["mat"], description: "Rückenlage, Arme zur Decke, Knie 90° gebeugt über der Hüfte. Einen Arm und das gegenüberliegende Bein langsam Richtung Boden strecken, der untere Rücken bleibt am Boden. Seiten abwechseln." },
-            { name: "Beinschlagen", category: "core", type: "reps", difficulty: "mittel", muscles: "gerade Bauchmuskeln, Hüftbeuger", equipment: ["mat"], description: "Rückenlage, Hände unter dem Po, gestreckte Beine knapp über dem Boden. Beine im Wechsel in kleinen, schnellen Bewegungen auf und ab schlagen." },
+            { name: "Beinschlagen", category: "core", type: "reps", difficulty: "mittel", muscles: "gerade Bauchmuskeln, Hüftbeuger", equipment: ["mat"], scale: 2, description: "Rückenlage, Hände unter dem Po, gestreckte Beine knapp über dem Boden. Beine im Wechsel in kleinen, schnellen Bewegungen auf und ab schlagen." },
             { name: "Zehenheber", category: "core", type: "reps", difficulty: "leicht", muscles: "gerade Bauchmuskeln", equipment: ["mat"], description: "Rückenlage, Beine gestreckt senkrecht nach oben. Arme zu den Zehen strecken und dabei die Schultern vom Boden heben, langsam absenken." },
-            { name: "Stütz-Hampelmann", category: "core", type: "reps", difficulty: "mittel", muscles: "Rumpf, Schultern, Adduktoren", equipment: ["mat"], jump: true, description: "Liegestützposition. Die Füße mit kleinen Sprüngen auseinander und wieder zusammen springen, der Rumpf bleibt fest." },
+            { name: "Stütz-Hampelmann", category: "core", type: "reps", difficulty: "mittel", muscles: "Rumpf, Schultern, Adduktoren", equipment: ["mat"], jump: true, scale: 1.5, description: "Liegestützposition. Die Füße mit kleinen Sprüngen auseinander und wieder zusammen springen, der Rumpf bleibt fest." },
             { name: "Hüftsenken im Seitstütz", category: "core", type: "reps", difficulty: "mittel", muscles: "schräge Bauchmuskeln, Rumpf", equipment: ["mat"], description: "Seitlicher Unterarmstütz. Hüfte langsam Richtung Boden senken und wieder anheben, ohne abzulegen. Wiederholungen je Seite." },
-            { name: "Hängendes Knieheben", category: "core", type: "reps", difficulty: "mittel", muscles: "gerade Bauchmuskeln, Hüftbeuger, Unterarme", equipment: ["pullup"], description: "An der Stange hängen. Knie langsam zur Brust ziehen, kurz halten und ohne Schwung absenken." },
-            { name: "Hängendes Beinheben", category: "core", type: "reps", difficulty: "schwer", muscles: "gerade Bauchmuskeln, Hüftbeuger, Unterarme", equipment: ["pullup"], description: "An der Stange hängen. Gestreckte Beine bis auf Hüfthöhe anheben, kurz halten und ohne Schwung absenken." },
-            { name: "Hängender Scheibenwischer", category: "core", type: "reps", difficulty: "schwer", muscles: "schräge Bauchmuskeln, Hüftbeuger, Unterarme", equipment: ["pullup"], description: "An der Stange hängen und die Knie auf Hüfthöhe anziehen. Beine langsam nach links und rechts schwenken, der Oberkörper bleibt ruhig." },
+            { name: "Hängendes Knieheben", category: "core", type: "reps", difficulty: "mittel", muscles: "gerade Bauchmuskeln, Hüftbeuger, Unterarme", equipment: ["pullup"], scale: 0.8, description: "An der Stange hängen. Knie langsam zur Brust ziehen, kurz halten und ohne Schwung absenken." },
+            { name: "Hängendes Beinheben", category: "core", type: "reps", difficulty: "schwer", muscles: "gerade Bauchmuskeln, Hüftbeuger, Unterarme", equipment: ["pullup"], scale: 0.6, description: "An der Stange hängen. Gestreckte Beine bis auf Hüfthöhe anheben, kurz halten und ohne Schwung absenken." },
+            { name: "Hängender Scheibenwischer", category: "core", type: "reps", difficulty: "schwer", muscles: "schräge Bauchmuskeln, Hüftbeuger, Unterarme", equipment: ["pullup"], scale: 0.6, description: "An der Stange hängen und die Knie auf Hüfthöhe anziehen. Beine langsam nach links und rechts schwenken, der Oberkörper bleibt ruhig." },
             { name: "Toter-Käfer-Halten", category: "core", type: "time", difficulty: "leicht", muscles: "tiefe Bauchmuskeln, gerade Bauchmuskeln", equipment: ["mat"], description: "Rückenlage, Arme zur Decke, Knie 90° gebeugt. Einen Arm und das gegenüberliegende Bein knapp über dem Boden ausstrecken und halten, der untere Rücken bleibt am Boden. Zur Halbzeit Seite wechseln." },
             { name: "Beinheben-Halten", category: "core", type: "time", difficulty: "mittel", muscles: "gerade Bauchmuskeln, Hüftbeuger", equipment: ["mat"], description: "Rückenlage, Hände unter dem Po. Gestreckte Beine etwa eine Handbreit über den Boden heben und halten, der untere Rücken bleibt am Boden." },
-            { name: "V-Sitz-Halten", category: "core", type: "time", difficulty: "schwer", muscles: "gerade Bauchmuskeln, Hüftbeuger", equipment: ["mat"], description: "Auf dem Po balancieren, Oberkörper und gestreckte Beine anheben, sodass der Körper ein V bildet. Arme nach vorne strecken und halten. Leichter: Knie anwinkeln." },
+            { name: "V-Sitz-Halten", category: "core", type: "time", difficulty: "schwer", muscles: "gerade Bauchmuskeln, Hüftbeuger", equipment: ["mat"], scale: 0.7, description: "Auf dem Po balancieren, Oberkörper und gestreckte Beine anheben, sodass der Körper ein V bildet. Arme nach vorne strecken und halten. Leichter: Knie anwinkeln." },
             { name: "Stehender Diagonal-Crunch", category: "core", type: "reps", difficulty: "mittel", muscles: "schräge Bauchmuskeln, Hüftbeuger", description: "Stehen, Fingerspitzen an den Schläfen. Ein Knie anheben und den gegenüberliegenden Ellbogen dazu führen. Seiten abwechseln." },
             { name: "Seitliche Rumpfbeugen im Stand", category: "core", type: "reps", difficulty: "leicht", muscles: "schräge Bauchmuskeln", description: "Hüftbreit stehen, Arme locker am Körper. Oberkörper langsam zur Seite neigen, ohne nach vorne zu kippen. Seiten abwechseln." },
             { name: "Bauch-Vakuum", category: "core", type: "time", difficulty: "mittel", muscles: "tiefe Bauchmuskeln", description: "Aufrecht stehen und vollständig ausatmen. Bauchnabel so weit wie möglich nach innen ziehen und halten, dabei flach weiteratmen." },
             { name: "Stehendes Knieheben mit Halten", category: "core", type: "time", difficulty: "leicht", muscles: "Hüftbeuger, gerade Bauchmuskeln", description: "Aufrecht stehen, ein Knie auf Hüfthöhe anheben und halten, der Oberkörper bleibt gerade. Zur Halbzeit Seite wechseln." },
             { name: "Unterarmstütz mit Beinheben", category: "core", type: "reps", difficulty: "mittel", muscles: "Rumpf, Gesäß", equipment: ["mat"], description: "Unterarmstütz, Körper gerade. Ein gestrecktes Bein anheben, kurz halten und absenken, die Hüfte bleibt ruhig. Seiten abwechseln." },
-            { name: "Seitstütz auf den Knien", category: "core", type: "time", difficulty: "leicht", muscles: "schräge Bauchmuskeln", equipment: ["mat"], description: "Seitlich auf einem Unterarm abstützen, Knie 90° gebeugt. Hüfte anheben, bis Kopf, Hüfte und Knie eine Linie bilden, und halten. Zur Halbzeit Seite wechseln." },
+            { name: "Seitstütz auf den Knien", category: "core", type: "time", difficulty: "leicht", muscles: "schräge Bauchmuskeln", equipment: ["mat"], description: "Seitlich auf einem Unterarm abstützen, Knie 90° gebeugt. Hüfte vom Boden abheben, bis der Körper von Kopf bis Knie gerade ist und die Hüfte nicht durchhängt, und halten. Zur Halbzeit Seite wechseln." },
             { name: "Rückwärts-Crunch", category: "core", type: "reps", difficulty: "mittel", muscles: "gerade Bauchmuskeln", equipment: ["mat"], description: "Rückenlage, Arme neben dem Körper, Knie 90° gebeugt über der Hüfte. Becken einrollen und die Knie Richtung Brust ziehen, langsam zurück." },
             { name: "Stütz-Rotation", category: "core", type: "reps", difficulty: "schwer", muscles: "schräge Bauchmuskeln, Schultern, Rumpf", equipment: ["mat"], description: "Liegestützposition. Körper zur Seite aufdrehen und einen Arm zur Decke strecken (T-Form), dann zurück. Seiten abwechseln." },
             { name: "Bärenstand-Halten", category: "core", type: "time", difficulty: "mittel", muscles: "Rumpf, Quadrizeps, Schultern", equipment: ["mat"], description: "Vierfüßlerstand, Zehen aufgestellt. Knie eine Handbreit vom Boden abheben, Rücken gerade, und halten." },
             { name: "Holzhacker im Stand", category: "core", type: "reps", difficulty: "leicht", muscles: "schräge Bauchmuskeln, Schultern", description: "Hände gefaltet über einer Schulter. Arme diagonal zum gegenüberliegenden Knie ziehen und dabei leicht in die Knie gehen, der Oberkörper dreht mit. Wiederholungen je Seite." },
+            { name: "Rumpfheber (Halten)", category: "core", type: "time", difficulty: "leicht", muscles: "unterer Rücken, Gesäß", equipment: ["mat"], description: "Bauchlage, Arme nach vorne gestreckt. Arme, Oberkörper und Beine gleichzeitig leicht anheben und halten, Blick zum Boden." },
+            { name: "Rumpfheber (Pulsierend)", category: "core", type: "reps", difficulty: "mittel", muscles: "unterer Rücken, Gesäß, Schultern", equipment: ["mat"], scale: 2, description: "Bauchlage, Arme nach vorne gestreckt. Arme, Oberkörper und Beine leicht anheben und oben in kleinen, schnellen Bewegungen auf und ab wippen." },
+            { name: "Rückenstrecker", category: "core", type: "reps", difficulty: "mittel", muscles: "unterer Rücken", equipment: ["mat"], description: "Bauchlage, Fingerspitzen an den Schläfen. Oberkörper langsam anheben, kurz halten und kontrolliert absenken. Die Füße bleiben am Boden." },
+            { name: "Diagonalheben (Vierfüßlerstand)", category: "core", type: "reps", difficulty: "leicht", muscles: "unterer Rücken, Gesäß, Rumpf", equipment: ["mat"], description: "Vierfüßlerstand. Rechten Arm und linkes Bein gleichzeitig waagrecht strecken, kurz halten und zurückführen. Seiten abwechseln." },
+            { name: "Heuschrecke (Pulsierend)", category: "core", type: "reps", difficulty: "schwer", muscles: "unterer Rücken, Gesäß, Schultern", equipment: ["mat"], scale: 1.5, description: "Bauchlage, Arme neben dem Körper, Handflächen nach oben. Brust und Beine anheben und oben in kleinen, schnellen Pulsen weiter nach oben drücken." },
+            { name: "Schwimmer", category: "core", type: "reps", difficulty: "mittel", muscles: "unterer Rücken, Gesäß, Schultern", equipment: ["mat"], scale: 2, description: "Bauchlage, Arme und Beine gestreckt und leicht angehoben. Rechten Arm und linkes Bein im Wechsel mit der Gegenseite auf und ab bewegen, flüssig wie beim Schwimmen." },
+            { name: "Kobra-Dehnhalten", category: "core", type: "time", difficulty: "leicht", muscles: "unterer Rücken, gerade Bauchmuskeln", equipment: ["mat"], description: "Bauchlage, Hände unter den Schultern. Oberkörper mit den Armen hochdrücken, das Becken bleibt am Boden. Ruhig atmend halten." },
+            { name: "Rückwärts-Brücke", category: "core", type: "time", difficulty: "mittel", muscles: "unterer Rücken, Gesäß, hintere Oberschenkel, Schultern", equipment: ["mat"], description: "Sitzen mit gestreckten Beinen, Hände hinter dem Po, Finger zeigen zu den Füßen. Hüfte hochdrücken, bis der Körper eine gerade Linie bildet, und halten." },
+            { name: "Diagonalhalten (Vierfüßlerstand)", category: "core", type: "time", difficulty: "mittel", muscles: "unterer Rücken, Gesäß, Rumpf", equipment: ["mat"], description: "Vierfüßlerstand. Rechten Arm und linkes Bein waagrecht strecken und ruhig halten, der Rücken bleibt gerade. Zur Halbzeit Seite wechseln." },
+            { name: "Superman-Halten (volle Streckung)", category: "core", type: "time", difficulty: "schwer", muscles: "unterer Rücken, Gesäß, Schultern", equipment: ["mat"], description: "Bauchlage, Arme nach vorne gestreckt. Arme, Oberkörper und Beine so hoch wie möglich anheben und die Spannung halten." },
 
             // --- Cardio / Mobility (Aufwärmen & Finisher) -------------------------
-            { name: "Hampelmänner", category: "cardio", type: "reps", difficulty: "leicht", muscles: "Waden, Adduktoren, Schultern", jump: true, description: "Mit einem Sprung die Beine grätschen und die Arme über den Kopf führen. Zurück in die Ausgangsposition springen." },
-            { name: "Hohe Knie", category: "cardio", type: "reps", difficulty: "mittel", muscles: "Hüftbeuger, Quadrizeps, Waden", description: "Auf der Stelle laufen und die Knie abwechselnd mindestens auf Hüfthöhe ziehen. Die Arme schwingen mit." },
-            { name: "Armkreisen", category: "cardio", type: "time", difficulty: "leicht", muscles: "Schultern", description: "Arme seitlich ausstrecken und gleichmäßig kreisen, erst klein, dann größer. Zur Halbzeit die Richtung wechseln." },
-            { name: "Hüftkreisen", category: "cardio", type: "time", difficulty: "leicht", muscles: "Hüftbeuger, unterer Rücken", description: "Hände in die Hüften, Füße hüftbreit. Becken in großen, ruhigen Kreisen bewegen. Zur Halbzeit die Richtung wechseln." },
-            { name: "Anfersen", category: "cardio", type: "reps", difficulty: "mittel", muscles: "hintere Oberschenkel, Waden", description: "Auf der Stelle laufen und die Fersen abwechselnd zügig zum Po führen." },
-            { name: "Ausfallschritte mit Rotation", category: "cardio", type: "reps", difficulty: "mittel", muscles: "Quadrizeps, Gesäß, schräge Bauchmuskeln", description: "Großen Schritt nach vorne in den Ausfallschritt. Oberkörper zur Seite des vorderen Beins drehen, zurückdrehen und in den Stand. Seiten abwechseln." },
-            { name: "Großer Hüftöffner", category: "cardio", type: "reps", difficulty: "mittel", muscles: "Hüftbeuger, Gesäß, oberer Rücken", description: "Tiefer Ausfallschritt, beide Hände innen neben dem vorderen Fuß. Ellbogen Richtung Boden senken, dann denselben Arm zur Decke aufdrehen und hinterherschauen. Wiederholungen je Seite." },
+            { name: "Hampelmänner", category: "cardio", type: "reps", difficulty: "leicht", muscles: "Waden, Adduktoren, Schultern", jump: true, scale: 2, description: "Mit einem Sprung die Beine grätschen und die Arme über den Kopf führen. Zurück in die Ausgangsposition springen." },
+            { name: "Hohe Knie", category: "cardio", type: "reps", difficulty: "mittel", muscles: "Hüftbeuger, Quadrizeps, Waden", scale: 2, description: "Auf der Stelle laufen und die Knie abwechselnd mindestens auf Hüfthöhe ziehen. Die Arme schwingen mit." },
+            { name: "Armkreisen", category: "cardio", type: "time", difficulty: "leicht", muscles: "Schultern", mobility: ["druecken", "ziehen"], description: "Arme seitlich ausstrecken und gleichmäßig kreisen, erst klein, dann größer. Zur Halbzeit die Richtung wechseln." },
+            { name: "Hüftkreisen", category: "cardio", type: "time", difficulty: "leicht", muscles: "Hüftbeuger, unterer Rücken", mobility: ["beine", "core"], description: "Hände in die Hüften, Füße hüftbreit. Becken in großen, ruhigen Kreisen bewegen. Zur Halbzeit die Richtung wechseln." },
+            { name: "Anfersen", category: "cardio", type: "reps", difficulty: "mittel", muscles: "hintere Oberschenkel, Waden", scale: 2, description: "Auf der Stelle laufen und die Fersen abwechselnd zügig zum Po führen." },
+            { name: "Ausfallschritte mit Rotation", category: "cardio", type: "reps", difficulty: "mittel", muscles: "Quadrizeps, Gesäß, schräge Bauchmuskeln", mobility: ["beine", "core"], description: "Großen Schritt nach vorne in den Ausfallschritt. Oberkörper zur Seite des vorderen Beins drehen, zurückdrehen und in den Stand. Seiten abwechseln." },
+            { name: "Großer Hüftöffner", category: "cardio", type: "reps", difficulty: "mittel", muscles: "Hüftbeuger, Gesäß, oberer Rücken", mobility: ["beine"], description: "Tiefer Ausfallschritt, beide Hände innen neben dem vorderen Fuß. Ellbogen Richtung Boden senken, dann denselben Arm zur Decke aufdrehen und hinterherschauen. Wiederholungen je Seite." },
             { name: "Seilspringen (ohne Seil)", category: "cardio", type: "time", difficulty: "mittel", muscles: "Waden", jump: true, description: "Auf den Fußballen in kleinen, schnellen Sprüngen hüpfen und die Handgelenke kreisen, als würde ein Seil schwingen." },
-            { name: "Raupengang", category: "cardio", type: "reps", difficulty: "mittel", muscles: "hintere Oberschenkel, Schultern, Rumpf", equipment: ["mat"], description: "Aus dem Stand vorbeugen, Hände auf den Boden und nach vorne laufen bis in die Liegestützposition. Mit den Händen zurücklaufen und aufrichten." },
-            { name: "Katze-Kuh", category: "cardio", type: "reps", difficulty: "leicht", muscles: "unterer Rücken, oberer Rücken", equipment: ["mat"], description: "Vierfüßlerstand. Beim Ausatmen den Rücken rund nach oben drücken (Katze), beim Einatmen sanft ins Hohlkreuz sinken (Kuh)." },
-            { name: "Schlittschuhsprünge", category: "cardio", type: "reps", difficulty: "schwer", muscles: "Gesäß, Quadrizeps, Adduktoren", jump: true, description: "Seitlich von einem Bein aufs andere springen, das freie Bein hinter dem Standbein kreuzen. Weich landen und kurz stabilisieren." },
-            { name: "Kniebeugen mit Armkreisen", category: "cardio", type: "reps", difficulty: "leicht", muscles: "Quadrizeps, Gesäß, Schultern", description: "Langsame Kniebeugen machen und dabei die Arme gleichmäßig nach vorne kreisen." },
+            { name: "Raupengang", category: "cardio", type: "reps", difficulty: "mittel", muscles: "hintere Oberschenkel, Schultern, Rumpf", equipment: ["mat"], mobility: ["beine", "druecken", "core"], description: "Aus dem Stand vorbeugen, Hände auf den Boden und nach vorne laufen bis in die Liegestützposition. Mit den Händen zurücklaufen und aufrichten." },
+            { name: "Katze-Kuh", category: "cardio", type: "reps", difficulty: "leicht", muscles: "unterer Rücken, oberer Rücken", equipment: ["mat"], mobility: ["core", "ziehen"], description: "Vierfüßlerstand. Beim Ausatmen den Rücken rund nach oben drücken (Katze), beim Einatmen sanft ins Hohlkreuz sinken (Kuh)." },
+            { name: "Schlittschuhsprünge", category: "cardio", type: "reps", difficulty: "schwer", muscles: "Gesäß, Quadrizeps, Adduktoren", jump: true, scale: 1.5, description: "Seitlich von einem Bein aufs andere springen, das freie Bein hinter dem Standbein kreuzen. Weich landen und kurz stabilisieren." },
+            { name: "Kniebeugen mit Armkreisen", category: "cardio", type: "reps", difficulty: "leicht", muscles: "Quadrizeps, Gesäß, Schultern", mobility: ["beine", "druecken"], description: "Langsame Kniebeugen machen und dabei die Arme gleichmäßig nach vorne kreisen." },
             { name: "Liegestütz-Strecksprung", category: "cardio", type: "reps", difficulty: "schwer", muscles: "Brust, Quadrizeps, Gesäß", equipment: ["mat"], jump: true, description: "Hocke, Hände auf den Boden, Füße nach hinten in die Liegestützposition springen. Einen Liegestütz machen, Füße zurück zu den Händen springen und mit einem Strecksprung abschließen." },
             { name: "Grätschsprünge mit Kniebeuge", category: "cardio", type: "reps", difficulty: "mittel", muscles: "Quadrizeps, Gesäß, Adduktoren", jump: true, description: "Mit einem Sprung die Beine weit grätschen und in eine Kniebeuge absinken. Wieder hochspringen und mit geschlossenen Füßen landen." },
-            { name: "Seitliches Knieheben im Stand", category: "cardio", type: "reps", difficulty: "leicht", muscles: "schräge Bauchmuskeln, Hüftbeuger", description: "Stehen, Fingerspitzen an den Schläfen. Ein Knie seitlich hochziehen und mit dem Ellbogen derselben Seite antippen. Zügig Seiten abwechseln." },
-            { name: "Schulterkreisen", category: "cardio", type: "time", difficulty: "leicht", muscles: "Schultern, oberer Rücken", description: "Locker stehen, Arme hängen lassen. Schultern in großen Kreisen nach hinten bewegen, zur Halbzeit nach vorne." },
+            { name: "Seitliches Knieheben im Stand", category: "cardio", type: "reps", difficulty: "leicht", muscles: "schräge Bauchmuskeln, Hüftbeuger", scale: 1.5, description: "Stehen, Fingerspitzen an den Schläfen. Ein Knie seitlich hochziehen und mit dem Ellbogen derselben Seite antippen. Zügig Seiten abwechseln." },
+            { name: "Schulterkreisen", category: "cardio", type: "time", difficulty: "leicht", muscles: "Schultern, oberer Rücken", mobility: ["druecken", "ziehen"], description: "Locker stehen, Arme hängen lassen. Schultern in großen Kreisen nach hinten bewegen, zur Halbzeit nach vorne." },
             { name: "Sprungbereitschafts-Halten", category: "cardio", type: "time", difficulty: "schwer", muscles: "Quadrizeps, Gesäß, Waden", description: "Füße hüftbreit, Knie und Hüfte gebeugt, Gewicht auf den Fußballen, Arme vor dem Körper – wie ein Torwart. Die Position halten und dabei schnell auf der Stelle trippeln." },
-            { name: "Wandengel", category: "cardio", type: "reps", difficulty: "leicht", muscles: "oberer Rücken, Schultern", equipment: ["wall"], description: "Rücken, Kopf und Arme an die Wand lehnen, Ellbogen 90° gebeugt. Arme an der Wand langsam nach oben schieben und wieder herunterziehen, ohne den Kontakt zu verlieren." },
+            { name: "Wandengel", category: "cardio", type: "reps", difficulty: "leicht", muscles: "oberer Rücken, Schultern", equipment: ["wall"], mobility: ["ziehen", "druecken"], description: "Rücken, Kopf und Arme an die Wand lehnen, Ellbogen 90° gebeugt. Arme an der Wand langsam nach oben schieben und wieder herunterziehen, ohne den Kontakt zu verlieren." },
             { name: "Cardio-Steigen", category: "cardio", type: "time", difficulty: "mittel", muscles: "Quadrizeps, Gesäß, Waden", equipment: ["elevated"], description: "Zügig im Wechsel auf eine stabile Erhöhung steigen und wieder herunter. Ein gleichmäßig flottes Tempo halten." },
             { name: "Schattenboxen", category: "cardio", type: "time", difficulty: "mittel", muscles: "Schultern, schräge Bauchmuskeln", description: "Locker federnd stehen, Fäuste vor dem Gesicht. Abwechselnd zügig nach vorne boxen, der Oberkörper dreht leicht mit." },
-            { name: "Leise Hampelmänner", category: "cardio", type: "reps", difficulty: "leicht", muscles: "Adduktoren, Schultern", description: "Abwechselnd einen Fuß zur Seite setzen und dabei die Arme über den Kopf führen, dann zurück. Zügiges Tempo, ohne zu springen." },
+            { name: "Leise Hampelmänner", category: "cardio", type: "reps", difficulty: "leicht", muscles: "Adduktoren, Schultern", scale: 2, description: "Abwechselnd einen Fuß zur Seite setzen und dabei die Arme über den Kopf führen, dann zurück. Zügiges Tempo, ohne zu springen." },
             { name: "Leise Burpees", category: "cardio", type: "reps", difficulty: "mittel", muscles: "Quadrizeps, Brust, Schultern", equipment: ["mat"], description: "Hocke, Hände auf den Boden, Füße nacheinander nach hinten in die Liegestützposition setzen. Füße nacheinander zurückholen, aufstehen und die Arme nach oben strecken." },
             { name: "Sternsprünge", category: "cardio", type: "reps", difficulty: "schwer", muscles: "Quadrizeps, Gesäß, Waden", jump: true, description: "Aus der Hocke explosiv hochspringen und Arme und Beine in der Luft zu einem Stern spreizen. Weich in der Hocke landen." },
-            { name: "Beinpendel", category: "cardio", type: "reps", difficulty: "leicht", muscles: "Hüftbeuger, hintere Oberschenkel", equipment: ["wall"], description: "Seitlich an der Wand abstützen. Ein Bein locker nach vorne und hinten schwingen und den Schwung langsam vergrößern. Wiederholungen je Seite." },
-            { name: "Vierfüßler-Rotation", category: "cardio", type: "reps", difficulty: "leicht", muscles: "oberer Rücken, schräge Bauchmuskeln", equipment: ["mat"], description: "Vierfüßlerstand, eine Hand an die Schläfe. Ellbogen unter dem Körper zur Gegenseite führen, dann nach oben zur Decke aufdrehen, der Blick folgt. Wiederholungen je Seite." }
+            { name: "Beinpendel", category: "cardio", type: "reps", difficulty: "leicht", muscles: "Hüftbeuger, hintere Oberschenkel", equipment: ["wall"], mobility: ["beine"], description: "Seitlich an der Wand abstützen. Ein Bein locker nach vorne und hinten schwingen und den Schwung langsam vergrößern. Wiederholungen je Seite." },
+            { name: "Vierfüßler-Rotation", category: "cardio", type: "reps", difficulty: "leicht", muscles: "oberer Rücken, schräge Bauchmuskeln", equipment: ["mat"], mobility: ["core", "ziehen"], description: "Vierfüßlerstand, eine Hand an die Schläfe. Ellbogen unter dem Körper zur Gegenseite führen, dann nach oben zur Decke aufdrehen, der Blick folgt. Wiederholungen je Seite." }
         ];
 
         /* Anzeige-Metadaten je Kategorie: Label und Badge-Farbe. */
         var CATEGORY_META = {
-            beine:   { label: "Beine &amp; Gesäß",                    color: "#2f9e44" },
-            ruecken: { label: "Rücken (Pull)",                        color: "#1971c2" },
-            push:    { label: "Brust/Schulter/Arme (Push)",           color: "#e8590c" },
-            core:    { label: "Core / Rumpf",                         color: "#9c36b5" },
-            cardio:  { label: "Cardio/Mobility",                      color: "#0c8599" }
+            beine:    { label: "Beine &amp; Gesäß",                   color: "#2f9e44" },
+            druecken: { label: "Drücken (Brust/Schulter/Trizeps)",    color: "#e8590c" },
+            ziehen:   { label: "Ziehen (Rücken/Bizeps)",              color: "#1971c2" },
+            core:     { label: "Core / Rumpf",                        color: "#9c36b5" },
+            cardio:   { label: "Cardio/Mobility",                     color: "#0c8599" }
         };
-        var CATEGORY_ORDER = ["beine", "ruecken", "push", "core", "cardio"];
+        var CATEGORY_ORDER = ["beine", "druecken", "ziehen", "core", "cardio"];
 
         /* Anzeige-Metadaten je Geräte-Code. */
         var EQUIPMENT_META = {
@@ -1435,15 +1502,25 @@
             mat:      { label: "Sportmatte" }
         };
 
-        /* Je Intensitätsstufe (1-5): Wiederholungs-/Haltezeit-Basis und
-         * Pausenzeit pro Satz sowie erlaubter Schwierigkeitspool für die
-         * Übungsauswahl. Gilt pro Übung (siehe levels/balancedLevel). */
+        /* Je Intensitätsstufe (1-5): Wiederholungs-/Haltezeit-Basis sowie
+         * erlaubter Schwierigkeitspool für die Übungsauswahl. Gilt pro Übung
+         * (siehe levels/balancedLevel), skaliert mit ihrem scale-Faktor. */
         var INTENSITY_CONFIG = {
-            1: { repsMin: 6,  repsMax: 8,  holdSec: 15, restSec: 45, pool: ["leicht"] },
-            2: { repsMin: 8,  repsMax: 10, holdSec: 20, restSec: 40, pool: ["leicht", "mittel"] },
-            3: { repsMin: 10, repsMax: 14, holdSec: 30, restSec: 30, pool: ["leicht", "mittel"] },
-            4: { repsMin: 12, repsMax: 16, holdSec: 40, restSec: 25, pool: ["mittel", "schwer"] },
-            5: { repsMin: 14, repsMax: 20, holdSec: 45, restSec: 20, pool: ["mittel", "schwer"] }
+            1: { repsMin: 6,  repsMax: 8,  holdSec: 15, pool: ["leicht"] },
+            2: { repsMin: 8,  repsMax: 10, holdSec: 20, pool: ["leicht", "mittel"] },
+            3: { repsMin: 10, repsMax: 14, holdSec: 30, pool: ["leicht", "mittel"] },
+            4: { repsMin: 12, repsMax: 16, holdSec: 40, pool: ["mittel", "schwer"] },
+            5: { repsMin: 14, repsMax: 20, holdSec: 45, pool: ["mittel", "schwer"] }
+        };
+
+        /* Pause nach einem Satz in Sekunden: je anstrengender der Satz
+         * (Gesamtwert aus Schwierigkeit und Stufe, 1-5), desto länger -
+         * von 25 Sek. (Wert 1) bis 60 Sek. (Wert 5). Cardio ist
+         * Konditionstraining und kommt mit 15-30 Sek. aus. Im Supersatz gilt
+         * die längere der beiden Pausen, und zwar erst nach beiden Übungen. */
+        var REST_CONFIG = {
+            strength: { base: 15, perPoint: 9 },
+            cardio:   { base: 10, perPoint: 4 }
         };
         var INTENSITY_LABELS = { 1: "sehr leicht", 2: "leicht", 3: "mittel", 4: "anspruchsvoll", 5: "sehr intensiv" };
 
@@ -1467,8 +1544,7 @@
         /* Muskelgruppen-Zustände: Gewicht für die Verteilung der Übungen. */
         var GROUP_STATES = ["off", "normal", "focus"];
         var GROUP_WEIGHT = { off: 0, normal: 1, focus: 2 };
-        var GROUP_STATE_LABELS = { off: "aus", normal: "normal", focus: "Schwerpunkt" };
-        var DEFAULT_GROUP_STATES = { beine: "normal", ruecken: "normal", push: "normal", core: "normal", cardio: "normal" };
+        var DEFAULT_GROUP_STATES = { beine: "normal", druecken: "normal", ziehen: "normal", core: "normal", cardio: "normal" };
 
         var COOLDOWN_MIN = 5;
 
@@ -1476,8 +1552,12 @@
          * DOM-Referenzen & State
          * ===================================================================== */
         var groupChipEls = {};
-        document.querySelectorAll(".group-chip").forEach(function (btn) {
+        document.querySelectorAll(".toggle-chip").forEach(function (btn) {
             groupChipEls[btn.getAttribute("data-cat")] = btn;
+        });
+        var focusChipEls = {};
+        document.querySelectorAll(".focus-chip").forEach(function (btn) {
+            focusChipEls[btn.getAttribute("data-cat")] = btn;
         });
         var groupStates = Object.assign({}, DEFAULT_GROUP_STATES);
         var toggleAufwaermen = document.getElementById("toggleAufwaermen");
@@ -1526,7 +1606,7 @@
         var sportExitConfirmYesBtn = document.getElementById("sportExitConfirmYesBtn");
         var sportExitConfirmNoBtn = document.getElementById("sportExitConfirmNoBtn");
 
-        var currentWorkout = null; // { intensity, cfg, exercises: [...], levels: [...], sets: [...], warmup: [...], aufwaermenEnabled, cooldownEnabled }
+        var currentWorkout = null; // { intensity, cfg, exercises: [...], pairStarts: [...], levels: [...], sets: [...], warmup: [...], aufwaermenEnabled, cooldownEnabled }
         var lastSignature = "";    // Namen der zuletzt generierten Übungen, um Duplikate zu vermeiden
 
         /* =====================================================================
@@ -1537,7 +1617,7 @@
         // (normal 1, Schwerpunkt 2) aufgeteilt - abgerundet, jede aktive
         // Gruppe mindestens 1, Rest nach größtem Nachkommaanteil (bei
         // Gleichstand Schwerpunkt zuerst, dann CATEGORY_ORDER). Beispiel
-        // Stufe 3 (8 Übungen), Beine Schwerpunkt, Rücken/Push/Core normal:
+        // Stufe 3 (8 Übungen), Beine Schwerpunkt, Drücken/Ziehen/Core normal:
         // 3 / 2 / 2 / 1.
         function getCategoryCounts() {
             var counts = {};
@@ -1622,35 +1702,109 @@
             });
         }
 
-        // Baut die Reihenfolge der Hauptübungen direkt aus der je Muskelgruppe
-        // eingestellten Anzahl, so dass dieselbe Gruppe möglichst nie zweimal
-        // direkt hintereinander kommt: Als Nächstes immer die Gruppe mit dem
-        // größten offenen Kontingent, die nicht gerade dran war (bei Gleichstand
-        // in CATEGORY_ORDER-Reihenfolge). Damit wird die häufigste Gruppe
-        // gleichmäßig verteilt (z. B. Beine 2, Rücken 3 → R B R B R). Nur wenn
-        // eine Gruppe mehr als die Hälfte aller Übungen ausmacht, sind
-        // Wiederholungen unvermeidbar - die landen dann am Ende.
+        // Baut die Reihenfolge der Hauptübungen aus der je Muskelgruppe
+        // ermittelten Anzahl, nach Trainingslehre in drei Blöcken:
+        //  1. Kraft (Beine, Drücken, Ziehen) zuerst, solange man frisch ist.
+        //     Je eine Drücken- und eine Ziehen-Übung bilden einen Supersatz
+        //     (im Wechsel, Pause erst nach beiden - der Gegenspieler erholt
+        //     sich, während der andere arbeitet). Beine, Supersätze und übrige
+        //     Einzelübungen wechseln sich so ab, dass dieselbe Einheit möglichst
+        //     nie zweimal direkt hintereinander kommt: Als Nächstes immer die
+        //     mit dem größten offenen Kontingent, die nicht gerade dran war
+        //     (bei Gleichstand in STRENGTH_UNITS-Reihenfolge), z. B. Beine 2,
+        //     Drücken 2, Ziehen 2 → B [D Z] B [D Z].
+        //  2. Core - ein müder Rumpf stabilisiert die Kraftübungen schlechter.
+        //  3. Cardio als Finisher.
+        // Liefert die Kategorien in Ausführungsreihenfolge und je Supersatz
+        // den Index der ersten Übung (pairStarts).
+        var STRENGTH_UNITS = ["beine", "paar", "druecken", "ziehen"];
+
         function buildCategoryPlan(counts) {
-            var remaining = {};
-            var total = 0;
-            CATEGORY_ORDER.forEach(function (cat) {
-                remaining[cat] = counts[cat];
-                total += counts[cat];
-            });
+            var pairCount = Math.min(counts.druecken, counts.ziehen);
+            var remaining = {
+                beine: counts.beine,
+                paar: pairCount,
+                druecken: counts.druecken - pairCount,
+                ziehen: counts.ziehen - pairCount
+            };
+            var total = STRENGTH_UNITS.reduce(function (sum, u) { return sum + remaining[u]; }, 0);
             var plan = [];
+            var pairStarts = [];
             var prev = null;
             for (var n = 0; n < total; n++) {
                 var next = null;
-                CATEGORY_ORDER.forEach(function (cat) {
-                    if (cat === prev || remaining[cat] <= 0) return;
-                    if (next === null || remaining[cat] > remaining[next]) next = cat;
+                STRENGTH_UNITS.forEach(function (u) {
+                    if (u === prev || remaining[u] <= 0) return;
+                    if (next === null || remaining[u] > remaining[next]) next = u;
                 });
-                if (next === null) next = prev; // nur noch die vorige Gruppe übrig
-                plan.push(next);
+                if (next === null) next = prev; // nur noch die vorige Einheit übrig
+                if (next === "paar") {
+                    pairStarts.push(plan.length);
+                    plan.push("druecken", "ziehen");
+                } else {
+                    plan.push(next);
+                }
                 remaining[next]--;
                 prev = next;
             }
-            return plan;
+            ["core", "cardio"].forEach(function (cat) {
+                for (var i = 0; i < counts[cat]; i++) plan.push(cat);
+            });
+            return { plan: plan, pairStarts: pairStarts };
+        }
+
+        // Innerhalb jeder Gruppe die schwerste Übung zuerst (technisch
+        // anspruchsvoll, also solange man frisch ist). Die Positionen der
+        // Gruppen im Plan bleiben, nur die Übungen tauschen untereinander.
+        function hardestFirst(exercises) {
+            CATEGORY_ORDER.forEach(function (cat) {
+                var positions = [];
+                exercises.forEach(function (ex, idx) { if (ex.category === cat) positions.push(idx); });
+                var sorted = positions.map(function (idx) { return exercises[idx]; })
+                    .sort(function (a, b) { return DIFFICULTY_SCORE[b.difficulty] - DIFFICULTY_SCORE[a.difficulty]; });
+                positions.forEach(function (idx, k) { exercises[idx] = sorted[k]; });
+            });
+        }
+
+        // Index des Supersatz-Partners einer Hauptübung oder -1.
+        function pairPartner(workout, idx) {
+            if (workout.pairStarts.indexOf(idx) !== -1) return idx + 1;
+            if (workout.pairStarts.indexOf(idx - 1) !== -1) return idx - 1;
+            return -1;
+        }
+
+        // Ausführungseinheiten des Hauptteils: Einzelübungen und Supersätze,
+        // jeweils als Liste der Übungs-Indizes.
+        function workoutUnits(workout) {
+            var units = [];
+            for (var idx = 0; idx < workout.exercises.length; idx++) {
+                if (workout.pairStarts.indexOf(idx) !== -1) {
+                    units.push([idx, idx + 1]);
+                    idx++;
+                } else {
+                    units.push([idx]);
+                }
+            }
+            return units;
+        }
+
+        // Ablauf einer Einheit in Runden: je Runde ein Satz jeder Übung (hat
+        // im Supersatz eine Übung mehr Sätze, kommt sie am Ende allein),
+        // danach die längste Pause der beteiligten Übungen.
+        function unitRounds(workout, members) {
+            var cfgs = members.map(function (idx) { return exerciseCfg(workout, idx); });
+            var count = Math.max.apply(null, cfgs.map(function (c) { return c.sets; }));
+            var rounds = [];
+            for (var s = 1; s <= count; s++) {
+                var round = { setIndex: s, members: [], rest: 0 };
+                members.forEach(function (idx, k) {
+                    if (s > cfgs[k].sets) return;
+                    round.members.push(idx);
+                    round.rest = Math.max(round.rest, cfgs[k].restSec);
+                });
+                rounds.push(round);
+            }
+            return rounds;
         }
 
         // Wählt zufällig eine Übung einer Kategorie, bevorzugt aus dem zur
@@ -1685,21 +1839,66 @@
             return 5;
         }
 
-        // Wählt unterschiedliche Cardio/Mobility-Übungen fürs Aufwärmen aus.
+        // Aufwärmen: nur leichte und mittlere Cardio/Mobility-Übungen (keine
+        // schweren Sprünge mit kalten Muskeln), in fester Reihenfolge - erst
+        // Mobility für die Gelenke, dann Puls für den Kreislauf, bei längeren
+        // Trainings zum Schluss noch einmal Mobility. Mobility-Übungen werden
+        // bevorzugt passend zu den Gruppen des Hauptteils gewählt (Feld
+        // mobility), die zweite möglichst für noch nicht vorbereitete Gruppen.
+        var WARMUP_SLOTS = { 2: ["mobility", "pulse"], 3: ["mobility", "pulse", "mobility"] };
+
+        function warmupKind(ex) {
+            return ex.mobility ? "mobility" : "pulse";
+        }
+
+        function warmupEligible(ex, allowedEquipment) {
+            return ex.category === "cardio" && ex.difficulty !== "schwer" && exerciseSelectable(ex, allowedEquipment);
+        }
+
+        // Gruppen des Hauptteils, die noch keine der übrigen Mobility-Übungen
+        // im Aufwärmen vorbereitet - oder alle, falls schon jede abgedeckt ist.
+        function openWarmupTargets(mainExercises, otherWarmup) {
+            var targets = [];
+            mainExercises.forEach(function (ex) {
+                if (targets.indexOf(ex.category) === -1) targets.push(ex.category);
+            });
+            var open = targets.filter(function (cat) {
+                return !otherWarmup.some(function (ex) { return (ex.mobility || []).indexOf(cat) !== -1; });
+            });
+            return open.length ? open : targets;
+        }
+
+        // Wählt zufällig eine Aufwärm-Übung der gewünschten Art, die noch
+        // nicht verwendet ist. Fällt kontrolliert zurück: erst ohne
+        // Gruppen-Bezug, dann jede Art. Liefert undefined, wenn gar nichts
+        // mehr frei ist.
+        function pickWarmupExercise(kind, allowedEquipment, usedNames, targetCats) {
+            var pool = EXERCISES.filter(function (e) { return warmupEligible(e, allowedEquipment) && !usedNames.has(e.name); });
+            var filters = [
+                function (e) {
+                    return warmupKind(e) === kind && (e.mobility || []).some(function (cat) { return targetCats.indexOf(cat) !== -1; });
+                },
+                function (e) { return warmupKind(e) === kind; },
+                function () { return true; }
+            ];
+            for (var i = 0; i < filters.length; i++) {
+                var candidates = pool.filter(filters[i]);
+                if (candidates.length) return candidates[Math.floor(Math.random() * candidates.length)];
+            }
+            return undefined;
+        }
+
         // usedNames enthält die Namen der bereits für die Hauptübungen
         // gewürfelten Übungen (Kategorie "cardio" kann in beiden vorkommen),
         // damit dieselbe Übung nicht in Aufwärmen UND Hauptteil auftaucht.
-        function pickWarmup(allowedEquipment, mainCount, usedNames) {
-            var pool = EXERCISES.filter(function (e) {
-                return e.category === "cardio" && exerciseSelectable(e, allowedEquipment) && !usedNames.has(e.name);
-            });
-            var count = warmupExerciseCount(mainCount);
+        function pickWarmup(allowedEquipment, mainExercises, usedNames) {
             var picked = [];
-            for (var n = 0; n < count && pool.length > 0; n++) {
-                var idx = Math.floor(Math.random() * pool.length);
-                picked.push(pool[idx]);
-                pool.splice(idx, 1);
-            }
+            WARMUP_SLOTS[warmupExerciseCount(mainExercises.length)].forEach(function (kind) {
+                var ex = pickWarmupExercise(kind, allowedEquipment, usedNames, openWarmupTargets(mainExercises, picked));
+                if (!ex) return;
+                picked.push(ex);
+                usedNames.add(ex.name);
+            });
             return picked;
         }
 
@@ -1719,18 +1918,47 @@
             return Math.min(5, Math.max(1, level));
         }
 
-        // Sätze + Pausen einer Übung in Sekunden (ohne Übergang zur nächsten).
-        function exerciseSeconds(ex, cfg) {
-            var workSec = ex.type === "time" ? cfg.holdSec : ((cfg.repsMin + cfg.repsMax) / 2) * 3;
-            return cfg.sets * workSec + (cfg.sets - 1) * cfg.restSec;
+        // Start-Stufe einschließlich der für diese Übung gemerkten Anpassung
+        // aus "leichter"/"schwerer" (siehe levelOffsets).
+        function startLevel(intensity, ex) {
+            var level = balancedLevel(intensity, ex.difficulty) + (levelOffsets[ex.name] || 0);
+            return Math.min(5, Math.max(1, level));
         }
 
-        // Durchschnittliche Dauer (Sek.) einer Übung dieser Kategorie unter der
-        // aktuellen Intensität/Geräte-Auswahl, jeweils mit ihrer Start-Stufe
-        // (siehe balancedLevel) und der durchschnittlichen Satzzahl aus dem
-        // Satz-Budget - Basis für die live aktualisierte Dauer-Schätzung,
-        // bevor überhaupt konkret gewürfelt wurde.
-        function categoryAverageSeconds(category, intensity, allowedEquipment, sets) {
+        // Pause nach einem Satz dieser Übung auf dieser Stufe (siehe REST_CONFIG).
+        function restSeconds(ex, level) {
+            var rc = ex.category === "cardio" ? REST_CONFIG.cardio : REST_CONFIG.strength;
+            var score = (DIFFICULTY_SCORE[ex.difficulty] + level) / 2;
+            return Math.round((rc.base + rc.perPoint * score) / 5) * 5;
+        }
+
+        // Wdh./Haltezeit/Pause einer Übung auf einer Stufe: die
+        // Stufen-Vorgabe, skaliert mit dem scale-Faktor der Übung.
+        function levelCfg(ex, level) {
+            var base = INTENSITY_CONFIG[level];
+            var scale = ex.scale || 1;
+            var repsMin = Math.max(1, Math.round(base.repsMin * scale));
+            return {
+                repsMin: repsMin,
+                repsMax: Math.max(repsMin + 1, Math.round(base.repsMax * scale)),
+                holdSec: Math.max(10, Math.round(base.holdSec * scale / 5) * 5),
+                restSec: restSeconds(ex, level)
+            };
+        }
+
+        // Reine Arbeitszeit eines Satzes in Sekunden (ca. 3 Sek. je Wdh.).
+        function workSeconds(ex, cfg) {
+            return ex.type === "time" ? cfg.holdSec : ((cfg.repsMin + cfg.repsMax) / 2) * 3;
+        }
+
+        // Sätze + Pausen einer Übung in Sekunden (ohne Übergang zur nächsten).
+        function exerciseSeconds(ex, cfg) {
+            return cfg.sets * workSeconds(ex, cfg) + (cfg.sets - 1) * cfg.restSec;
+        }
+
+        // Übungen dieser Kategorie, aus denen bei der aktuellen
+        // Intensität/Geräte-Auswahl gewürfelt würde (wie pickExercise).
+        function categoryCandidates(category, intensity, allowedEquipment) {
             var pool = INTENSITY_CONFIG[intensity].pool;
             var candidates = EXERCISES.filter(function (e) {
                 return e.category === category && pool.indexOf(e.difficulty) !== -1 && exerciseSelectable(e, allowedEquipment);
@@ -1738,13 +1966,25 @@
             if (candidates.length === 0) {
                 candidates = EXERCISES.filter(function (e) { return e.category === category && exerciseSelectable(e, allowedEquipment); });
             }
-            function withSets(cfg) { return Object.assign({}, cfg, { sets: sets }); }
-            if (candidates.length === 0) return exerciseSeconds({ type: "reps" }, withSets(INTENSITY_CONFIG[intensity]));
-            var total = 0;
+            return candidates;
+        }
+
+        // Durchschnittliche Dauer (Sek.) und Pause einer Übung dieser
+        // Kategorie unter der aktuellen Intensität/Geräte-Auswahl, jeweils mit
+        // ihrer Start-Stufe (siehe startLevel) und der durchschnittlichen
+        // Satzzahl aus dem Satz-Budget - Basis für die live aktualisierte
+        // Dauer-Schätzung, bevor überhaupt konkret gewürfelt wurde.
+        function categoryAverages(category, intensity, allowedEquipment, sets) {
+            var candidates = categoryCandidates(category, intensity, allowedEquipment);
+            if (candidates.length === 0) return { seconds: 0, rest: 0 };
+            var seconds = 0;
+            var rest = 0;
             candidates.forEach(function (e) {
-                total += exerciseSeconds(e, withSets(INTENSITY_CONFIG[balancedLevel(intensity, e.difficulty)]));
+                var cfg = Object.assign(levelCfg(e, startLevel(intensity, e)), { sets: sets });
+                seconds += exerciseSeconds(e, cfg);
+                rest += cfg.restSec;
             });
-            return total / candidates.length;
+            return { seconds: seconds / candidates.length, rest: rest / candidates.length };
         }
 
         // Live-Schätzung der Trainingsdauer allein aus den aktuellen
@@ -1758,12 +1998,20 @@
             var totalSec = 0;
             var mainCount = totalCategoryCount(counts);
             var avgSets = mainCount > 0 ? Math.max(SETS_MIN, Math.min(SETS_MAX, VOLUME_CONFIG[intensity].totalSets / mainCount)) : 0;
+            var averages = {};
 
             CATEGORY_ORDER.forEach(function (cat) {
                 var count = counts[cat];
                 if (count <= 0) return;
-                totalSec += count * (categoryAverageSeconds(cat, intensity, equipment, avgSets) + transitionSec);
+                averages[cat] = categoryAverages(cat, intensity, equipment, avgSets);
+                totalSec += count * (averages[cat].seconds + transitionSec);
             });
+
+            // Im Supersatz entfällt je Runde die kürzere der beiden Pausen.
+            var pairCount = Math.min(counts.druecken, counts.ziehen);
+            if (pairCount > 0) {
+                totalSec -= pairCount * (avgSets - 1) * Math.min(averages.druecken.rest, averages.ziehen.rest);
+            }
 
             if (toggleAufwaermen.checked && mainCount > 0) totalSec += warmupMinutesEstimate(mainCount) * 60;
             if (toggleCooldown.checked && mainCount > 0) totalSec += COOLDOWN_MIN * 60;
@@ -1771,13 +2019,21 @@
             return roundUpToFiveMinutes(totalSec);
         }
 
-        // Exakte Dauer-Schätzung anhand der tatsächlich gewürfelten Übungen.
+        // Exakte Dauer-Schätzung anhand der tatsächlich gewürfelten Übungen,
+        // Einheit für Einheit wie im Sport-Modus (siehe unitRounds).
         function estimateDurationMinutes(workout) {
             var transitionSec = 15;
             var totalSec = 0;
 
-            workout.exercises.forEach(function (ex, idx) {
-                totalSec += exerciseSeconds(ex, exerciseCfg(workout, idx)) + transitionSec;
+            workoutUnits(workout).forEach(function (members) {
+                var rounds = unitRounds(workout, members);
+                rounds.forEach(function (round, r) {
+                    round.members.forEach(function (idx) {
+                        totalSec += workSeconds(workout.exercises[idx], exerciseCfg(workout, idx));
+                    });
+                    if (r < rounds.length - 1) totalSec += round.rest;
+                });
+                totalSec += members.length * transitionSec;
             });
 
             if (workout.aufwaermenEnabled) totalSec += warmupMinutesEstimate(workout.exercises.length) * 60;
@@ -1868,18 +2124,24 @@
 
         function updateGroupChips() {
             CATEGORY_ORDER.forEach(function (cat) {
-                var btn = groupChipEls[cat];
                 var state = groupStates[cat];
-                btn.setAttribute("data-state", state);
-                btn.querySelector(".group-chip-state").textContent = state === "focus" ? "★" : "";
-                btn.setAttribute("aria-label", btn.firstChild.textContent + ": " + GROUP_STATE_LABELS[state] + " (tippen zum Wechseln)");
+                groupChipEls[cat].setAttribute("aria-pressed", String(state !== "off"));
+                focusChipEls[cat].setAttribute("aria-pressed", String(state === "focus"));
+                focusChipEls[cat].disabled = state === "off";
             });
         }
 
-        // aus → normal → Schwerpunkt → aus
-        function cycleGroupState(cat) {
-            var next = GROUP_STATES[(GROUP_STATES.indexOf(groupStates[cat]) + 1) % GROUP_STATES.length];
-            groupStates[cat] = next;
+        // Zeile 1: an/aus. Beim Ausschalten geht ein Schwerpunkt mit verloren.
+        function toggleGroup(cat) {
+            groupStates[cat] = groupStates[cat] === "off" ? "normal" : "off";
+            handleControlChange();
+            generateWorkout();
+        }
+
+        // Zeile 2: Schwerpunkt an/aus (nur für eingeschaltete Gruppen).
+        function toggleFocus(cat) {
+            if (groupStates[cat] === "off") return;
+            groupStates[cat] = groupStates[cat] === "focus" ? "normal" : "focus";
             handleControlChange();
             generateWorkout();
         }
@@ -1922,16 +2184,21 @@
         /* =====================================================================
          * Persistenz (localStorage)
          * ---------------------------------------------------------------------
-         * Zwei unabhängige Speicher, beide über die Oberfläche einsehbar (die
+         * Drei unabhängige Speicher, alle über die Oberfläche einsehbar (die
          * Regler/Checkboxen selbst zeigen die gespeicherten Werte, die Liste
-         * der gesperrten Übungen ist über "Gesperrte Übungen" einsehbar) und
+         * der gesperrten Übungen ist über "Gesperrte Übungen" einsehbar,
+         * gemerkte Stufen stehen auf der jeweiligen Übungskarte) und
          * gemeinsam über "Alle Daten löschen" komplett entfernbar:
          *   sport.settings         - zuletzt gewählte Regler-/Checkbox-Werte
          *   sport.blockedExercises - dauerhaft gesperrte Übungsnamen (werden
          *                            nie wieder ausgewählt)
+         *   sport.levelOffsets     - je Übungsname die per "leichter"/
+         *                            "schwerer" gemerkte Abweichung von der
+         *                            Standard-Stufe, z. B. { "Liegestütze": 1 }
          * ===================================================================== */
         var STORAGE_KEY_SETTINGS = "sport.settings";
         var STORAGE_KEY_BLOCKED = "sport.blockedExercises";
+        var STORAGE_KEY_LEVELS = "sport.levelOffsets";
 
         function loadJson(key, fallback) {
             try {
@@ -1975,15 +2242,22 @@
         function restoreSettings() {
             var s = loadJson(STORAGE_KEY_SETTINGS, null);
             if (!s) return;
+            // Frühere Gruppen-Schlüssel: "ruecken" ist jetzt "ziehen", "push"
+            // ist jetzt "druecken".
+            var legacyKeys = { ziehen: "ruecken", druecken: "push" };
+            function savedValue(map, cat) {
+                return map[cat] != null ? map[cat] : map[legacyKeys[cat]];
+            }
             if (s.groups) {
                 CATEGORY_ORDER.forEach(function (cat) {
-                    if (GROUP_STATES.indexOf(s.groups[cat]) !== -1) groupStates[cat] = s.groups[cat];
+                    var state = savedValue(s.groups, cat);
+                    if (GROUP_STATES.indexOf(state) !== -1) groupStates[cat] = state;
                 });
             } else if (s.counts) {
                 // Alte Fassung mit Anzahl-Reglern je Gruppe (0-5) übernehmen:
                 // 0 = aus, 1-2 = normal, 3-5 = Schwerpunkt.
                 CATEGORY_ORDER.forEach(function (cat) {
-                    var n = s.counts[cat];
+                    var n = savedValue(s.counts, cat);
                     if (n == null) return;
                     groupStates[cat] = n <= 0 ? "off" : (n <= 2 ? "normal" : "focus");
                 });
@@ -2018,6 +2292,9 @@
             return RENAMED_EXERCISES[name] || name;
         }));
 
+        var storedOffsets = loadJson(STORAGE_KEY_LEVELS, {});
+        var levelOffsets = storedOffsets && typeof storedOffsets === "object" && !Array.isArray(storedOffsets) ? storedOffsets : {};
+
         function saveBlockedExercises() {
             saveJson(STORAGE_KEY_BLOCKED, Array.from(blockedExercises));
         }
@@ -2026,13 +2303,14 @@
             blockedCountBadgeEl.textContent = String(blockedExercises.size);
         }
 
-        // Löscht alle gespeicherten Daten (Einstellungen + gesperrte Übungen)
-        // auf einmal und lädt die Seite neu, damit alle Regler/Checkboxen
-        // wieder ihre HTML-Standardwerte zeigen statt einzeln zurückgesetzt
-        // werden zu müssen.
+        // Löscht alle gespeicherten Daten (Einstellungen, gesperrte Übungen,
+        // gemerkte Stufen) auf einmal und lädt die Seite neu, damit alle
+        // Regler/Checkboxen wieder ihre HTML-Standardwerte zeigen statt
+        // einzeln zurückgesetzt werden zu müssen.
         function resetAllData() {
             localStorage.removeItem(STORAGE_KEY_SETTINGS);
             localStorage.removeItem(STORAGE_KEY_BLOCKED);
+            localStorage.removeItem(STORAGE_KEY_LEVELS);
             location.reload();
         }
 
@@ -2078,17 +2356,18 @@
             }
 
             var exercises, signature;
+            var categoryPlan = buildCategoryPlan(counts);
             // Bis zu 6 Versuche, damit die neue Zusammenstellung nicht exakt
             // der zuletzt angezeigten entspricht (falls die Übungsdatenbank
             // das überhaupt zulässt).
             for (var attempt = 0; attempt < 6; attempt++) {
-                var categoryPlan = buildCategoryPlan(counts);
                 var usedNames = new Set();
-                exercises = categoryPlan.map(function (cat) {
+                exercises = categoryPlan.plan.map(function (cat) {
                     var ex = pickExercise(cat, cfg.pool, usedNames, equipment);
                     usedNames.add(ex.name);
                     return ex;
                 });
+                hardestFirst(exercises);
                 signature = exercises.map(function (e) { return e.name; }).join("|");
                 if (signature !== lastSignature) break;
             }
@@ -2098,9 +2377,10 @@
                 intensity: intensity,
                 cfg: cfg,
                 exercises: exercises,
-                levels: exercises.map(function (ex) { return balancedLevel(intensity, ex.difficulty); }),
+                pairStarts: categoryPlan.pairStarts,
+                levels: exercises.map(function (ex) { return startLevel(intensity, ex); }),
                 sets: distributeSets(exercises, intensity),
-                warmup: aufwaermenEnabled ? pickWarmup(equipment, exercises.length, usedNames) : [],
+                warmup: aufwaermenEnabled ? pickWarmup(equipment, exercises, usedNames) : [],
                 aufwaermenEnabled: aufwaermenEnabled,
                 cooldownEnabled: cooldownEnabled
             };
@@ -2111,8 +2391,8 @@
         // Würfelt eine einzelne Übung (per Klick auf "andere Übung") innerhalb
         // derselben Kategorie neu, ohne den Rest des Trainings zu verändern.
         // Gewürfelt wird wie beim Erstellen aus dem Schwierigkeitspool des
-        // Reglers; eine per "leichter"/"schwerer" verstellte Stufe wird dabei
-        // auf die Start-Stufe der neuen Übung zurückgesetzt (balancedLevel).
+        // Reglers; die Stufe wird auf die Start-Stufe der neuen Übung gesetzt
+        // (startLevel, also samt für sie gemerkter Anpassung).
         function rerollExercise(idx) {
             var cfg = currentWorkout.cfg;
             var equipment = getEnabledEquipment();
@@ -2124,7 +2404,7 @@
             // Kategorie gesperrt ist - dann die Karte unverändert lassen statt abzustürzen.
             if (replacement) {
                 currentWorkout.exercises[idx] = replacement;
-                currentWorkout.levels[idx] = balancedLevel(currentWorkout.intensity, replacement.difficulty);
+                currentWorkout.levels[idx] = startLevel(currentWorkout.intensity, replacement);
             }
             render();
         }
@@ -2132,41 +2412,47 @@
         window.rerollExercise = rerollExercise;
 
         // Jede Hauptübung hat eine eigene Intensitätsstufe (Start: siehe
-        // balancedLevel), deren Wdh./Haltezeit/Pause für sie gelten, und eine
-        // Satzzahl aus dem Satz-Budget des Trainings (siehe distributeSets).
+        // startLevel), deren Wdh./Haltezeit/Pause für sie gelten (siehe
+        // levelCfg), und eine Satzzahl aus dem Satz-Budget des Trainings
+        // (siehe distributeSets).
         function exerciseCfg(workout, idx) {
-            return Object.assign({ sets: workout.sets[idx] }, INTENSITY_CONFIG[workout.levels[idx]]);
+            return Object.assign({ sets: workout.sets[idx] }, levelCfg(workout.exercises[idx], workout.levels[idx]));
         }
 
         // "leichter"/"schwerer": verschiebt nur die Stufe dieser einen Übung
         // um eins (innerhalb 1-5), die Übung selbst bleibt dieselbe. Die
         // Satzzahl bleibt, damit das Satz-Budget des Trainings erhalten bleibt.
+        // Die Abweichung von der Standard-Stufe wird für die Übung gemerkt und
+        // gilt auch in künftigen Trainings (siehe startLevel).
         function changeExerciseLevel(idx, delta) {
             var level = currentWorkout.levels[idx] + delta;
             if (!INTENSITY_CONFIG[level]) return;
             currentWorkout.levels[idx] = level;
+            var ex = currentWorkout.exercises[idx];
+            var offset = level - balancedLevel(currentWorkout.intensity, ex.difficulty);
+            if (offset === 0) delete levelOffsets[ex.name]; else levelOffsets[ex.name] = offset;
+            saveJson(STORAGE_KEY_LEVELS, levelOffsets);
             render();
         }
         window.changeExerciseLevel = changeExerciseLevel;
 
         // Würfelt eine einzelne Aufwärm-Übung (per Klick auf "andere Übung")
-        // neu, ohne den Rest des Aufwärmens oder das Haupttraining zu verändern.
+        // neu - gleicher Art (Mobility oder Puls), ohne den Rest des
+        // Aufwärmens oder das Haupttraining zu verändern.
         function rerollWarmupExercise(idx) {
             var equipment = getEnabledEquipment();
+            var current = currentWorkout.warmup[idx];
+            var others = currentWorkout.warmup.filter(function (e, i) { return i !== idx; });
             var usedNames = new Set(currentWorkout.exercises.map(function (e) { return e.name; }));
             currentWorkout.warmup.forEach(function (e) { usedNames.add(e.name); });
-            var pool = EXERCISES.filter(function (e) {
-                return e.category === "cardio" && exerciseSelectable(e, equipment) && !usedNames.has(e.name);
-            });
-            if (pool.length === 0) {
-                pool = EXERCISES.filter(function (e) { return e.category === "cardio" && exerciseSelectable(e, equipment); });
-            }
-            if (pool.length === 0) {
+            var replacement = pickWarmupExercise(warmupKind(current), equipment, usedNames,
+                openWarmupTargets(currentWorkout.exercises, others));
+            if (replacement) {
+                currentWorkout.warmup[idx] = replacement;
+            } else if (!warmupEligible(current, equipment)) {
                 // Kein Ersatz verfügbar (z. B. alle Cardio-Übungen gesperrt) -
                 // Slot entfernen statt eine gesperrte Übung stehen zu lassen.
                 currentWorkout.warmup.splice(idx, 1);
-            } else {
-                currentWorkout.warmup[idx] = pool[Math.floor(Math.random() * pool.length)];
             }
             render();
         }
@@ -2221,12 +2507,25 @@
 
             lines.push("");
             lines.push("Übungen:");
-            workout.exercises.forEach(function (ex, idx) {
+            // Ein Punkt je Einheit: Einzelübung in einer Zeile, Supersatz als
+            // Überschrift mit beiden Übungen darunter.
+            function exerciseLine(idx) {
+                var ex = workout.exercises[idx];
                 var cfg = exerciseCfg(workout, idx);
                 var work = ex.type === "time"
                     ? cfg.holdSec + " Sek. halten"
                     : cfg.repsMin + "–" + cfg.repsMax + " Wiederholungen";
-                lines.push((idx + 1) + ". " + ex.name + " – " + cfg.sets + " Sätze × " + work + " (Pause " + cfg.restSec + " Sek.)");
+                return ex.name + " – " + cfg.sets + " Sätze × " + work;
+            }
+            workoutUnits(workout).forEach(function (members, u) {
+                if (members.length === 1) {
+                    lines.push((u + 1) + ". " + exerciseLine(members[0]) + " (Pause " + exerciseCfg(workout, members[0]).restSec + " Sek.)");
+                    return;
+                }
+                lines.push((u + 1) + ". Supersatz im Wechsel (Pause " + pairRestSeconds(workout, members[0]) + " Sek. nach beiden):");
+                members.forEach(function (idx, k) {
+                    lines.push("   " + "ab"[k] + ") " + exerciseLine(idx));
+                });
             });
 
             if (workout.cooldownEnabled) {
@@ -2234,6 +2533,11 @@
                 lines.push("Cool-down: ca. " + COOLDOWN_MIN + " Min. Dehnen");
             }
             return lines.join("\n");
+        }
+
+        // Pause nach einer Supersatz-Runde: die längere der beiden Pausen.
+        function pairRestSeconds(workout, idx) {
+            return Math.max(exerciseCfg(workout, idx).restSec, exerciseCfg(workout, pairPartner(workout, idx)).restSec);
         }
 
         function renderLogText(workout) {
@@ -2299,9 +2603,16 @@
                 var meta = CATEGORY_META[ex.category];
                 var cfg = exerciseCfg(workout, idx);
                 var level = workout.levels[idx];
-                var levelChip = "    <span class=\"stat-chip\">Intensität " + level + " (" + INTENSITY_LABELS[level] + ")</span>";
+                var offset = levelOffsets[ex.name] || 0;
+                var levelChip = "    <span class=\"stat-chip\">Intensität " + level + " (" + INTENSITY_LABELS[level] + ")" +
+                    (offset ? " · gemerkt: " + (offset > 0 ? "+" : "") + offset : "") + "</span>";
+                var partner = pairPartner(workout, idx);
+                var restChip = partner === -1
+                    ? "    <span class=\"stat-chip\">Pause: " + cfg.restSec + " Sek.</span>"
+                    : "    <span class=\"stat-chip stat-chip-superset\">Supersatz mit " + workout.exercises[partner].name + " – im Wechsel, " +
+                      pairRestSeconds(workout, idx) + " Sek. Pause nach beiden</span>";
                 return "" +
-                    "<div class=\"exercise-card\" style=\"--cat-color:" + meta.color + "\">" +
+                    "<div class=\"exercise-card" + (partner === -1 ? "" : partner > idx ? " superset-first" : " superset-second") + "\" style=\"--cat-color:" + meta.color + "\">" +
                     "  <div class=\"exercise-card-head\">" +
                     "    <span class=\"exercise-name\">" + ex.name + "</span>" +
                     "    <span class=\"badge-category\">" + meta.label + "</span>" +
@@ -2309,14 +2620,14 @@
                     // Buttons direkt unter dem Titel, damit sie beim Tauschen
                     // der Übung (andere Chips/Textlänge) nicht verspringen.
                     "  <div class=\"exercise-card-actions\">" +
-                    "    <button type=\"button\" class=\"reroll-btn\" onclick=\"changeExerciseLevel(" + idx + ", -1)\"" + (INTENSITY_CONFIG[level - 1] ? "" : " disabled") + " aria-label=\"" + ex.name + " leichter machen\">leichter</button>" +
-                    "    <button type=\"button\" class=\"reroll-btn\" onclick=\"changeExerciseLevel(" + idx + ", 1)\"" + (INTENSITY_CONFIG[level + 1] ? "" : " disabled") + " aria-label=\"" + ex.name + " schwerer machen\">schwerer</button>" +
+                    "    <button type=\"button\" class=\"reroll-btn\" onclick=\"changeExerciseLevel(" + idx + ", -1)\"" + (INTENSITY_CONFIG[level - 1] ? "" : " disabled") + " aria-label=\"" + ex.name + " leichter machen\" title=\"Wird für diese Übung gemerkt\">leichter</button>" +
+                    "    <button type=\"button\" class=\"reroll-btn\" onclick=\"changeExerciseLevel(" + idx + ", 1)\"" + (INTENSITY_CONFIG[level + 1] ? "" : " disabled") + " aria-label=\"" + ex.name + " schwerer machen\" title=\"Wird für diese Übung gemerkt\">schwerer</button>" +
                     "    <button type=\"button\" class=\"reroll-btn\" onclick=\"rerollExercise(" + idx + ")\" aria-label=\"Andere Übung für " + meta.label.replace(/&amp;/g, "&") + " auswürfeln\">andere Übung</button>" +
                     "    <button type=\"button\" class=\"reroll-btn lock-btn\" onclick=\"blockExercise('" + ex.name + "', 'main', " + idx + ")\" aria-label=\"" + ex.name + " dauerhaft sperren\">Übung für immer sperren</button>" +
                     "  </div>" +
                     "  <div class=\"exercise-card-stats\">" +
                     "    <span class=\"stat-chip\">" + formatSets(ex, cfg) + "</span>" +
-                    "    <span class=\"stat-chip\">Pause: " + cfg.restSec + " Sek.</span>" +
+                    restChip +
                     levelChip +
                     "    <span class=\"stat-chip\">Schwierigkeit: " + ex.difficulty + "</span>" +
                     "    <span class=\"stat-chip\">Gesamt: " + formatDecimal(exerciseScore(workout, idx)) + "</span>" +
@@ -2494,38 +2805,53 @@
                 });
             });
 
-            workout.exercises.forEach(function (ex, exIndex) {
-                var cfg = exerciseCfg(workout, exIndex);
-                var sets = cfg.sets;
-                var rest = cfg.restSec;
-                var isLastExercise = exIndex === workout.exercises.length - 1;
-                for (var s = 1; s <= sets; s++) {
-                    if (ex.type === "time") {
-                        steps.push({ kind: "work-time", exercise: ex, exIndex: exIndex, setIndex: s, totalSets: sets, duration: cfg.holdSec });
-                    } else {
-                        steps.push({ kind: "work-reps", exercise: ex, exIndex: exIndex, setIndex: s, totalSets: sets, repsMin: cfg.repsMin, repsMax: cfg.repsMax });
+            // Einheit für Einheit (Einzelübung oder Supersatz), Runde für
+            // Runde: je Runde ein Satz jeder Übung der Einheit, danach die
+            // Pause (siehe unitRounds). unit = Index der ersten Übung der
+            // Einheit, für die Fortschrittsleiste.
+            var units = workoutUnits(workout);
+            units.forEach(function (members, u) {
+                var rounds = unitRounds(workout, members);
+                rounds.forEach(function (round, r) {
+                    round.members.forEach(function (exIndex) {
+                        var ex = workout.exercises[exIndex];
+                        var cfg = exerciseCfg(workout, exIndex);
+                        var partner = pairPartner(workout, exIndex);
+                        var step = {
+                            exercise: ex, exIndex: exIndex, unit: members[0], setIndex: round.setIndex, totalSets: cfg.sets,
+                            partnerName: partner === -1 ? null : workout.exercises[partner].name
+                        };
+                        if (ex.type === "time") {
+                            step.kind = "work-time";
+                            step.duration = cfg.holdSec;
+                        } else {
+                            step.kind = "work-reps";
+                            step.repsMin = cfg.repsMin;
+                            step.repsMax = cfg.repsMax;
+                        }
+                        steps.push(step);
+                    });
+                    var isLastRound = r === rounds.length - 1;
+                    if (!(isLastRound && u === units.length - 1)) {
+                        steps.push({ kind: "rest", exIndex: round.members[round.members.length - 1], unit: members[0], duration: round.rest });
                     }
-                    var isLastSet = s === sets;
-                    if (!(isLastSet && isLastExercise)) {
-                        steps.push({ kind: "rest", exercise: ex, exIndex: exIndex, setIndex: s, totalSets: sets, duration: rest });
-                    }
-                }
+                });
             });
 
             steps.push({ kind: "done", cooldownEnabled: workout.cooldownEnabled });
             return steps;
         }
 
-        // Aufteilung der Fortschrittsleiste: jede Übung (jede Aufwärm-Übung
-        // und jede Hauptübung samt ihrer Sätze und Pausen) bekommt gleich viel
-        // Platz, innerhalb einer Übung teilen sich deren Schritte ihn
-        // gleichmäßig. starts[i] = Position (%), an der Schritt i beginnt
-        // ("done" = 100); markers = Übergänge, major = Wechsel der Übung.
+        // Aufteilung der Fortschrittsleiste: jede Einheit (jede Aufwärm-Übung
+        // und jede Hauptübung bzw. jeder Supersatz samt Sätzen und Pausen)
+        // bekommt gleich viel Platz, innerhalb einer Einheit teilen sich deren
+        // Schritte ihn gleichmäßig. starts[i] = Position (%), an der Schritt i
+        // beginnt ("done" = 100); markers = Übergänge, major = Wechsel der Einheit.
         function buildProgressLayout(steps) {
             var groups = [];
             steps.forEach(function (step, i) {
                 if (step.kind === "done") return;
-                var key = step.kind === "warmup" ? "w" + i : "e" + step.exIndex;
+                var key = step.kind === "warmup" ? "w" + i : "e" + step.unit;
                 var last = groups[groups.length - 1];
                 if (!last || last.key !== key) {
                     last = { key: key, steps: [] };
@@ -2567,6 +2893,11 @@
             if (remaining <= 0) return "letzter Satz";
             if (remaining === 1) return "noch 1 Satz danach";
             return "noch " + remaining + " Sätze danach";
+        }
+
+        function workSubInfo(step) {
+            var text = remainingSetsText(step.setIndex, step.totalSets);
+            return step.partnerName ? "Supersatz mit " + step.partnerName + " · " + text : text;
         }
 
         // Beschreibt, was als Nächstes kommt - wird auf dem Pause-Bildschirm
@@ -2695,7 +3026,7 @@
                     kicker: metaT.label,
                     name: step.exercise.name,
                     info: "Satz " + step.setIndex + " / " + step.totalSets,
-                    subInfo: remainingSetsText(step.setIndex, step.totalSets),
+                    subInfo: workSubInfo(step),
                     desc: step.exercise.description,
                     muscles: step.exercise.muscles,
                     equipment: equipmentLabelList(step.exercise),
@@ -2703,19 +3034,28 @@
                 });
             } else if (step.kind === "work-reps") {
                 var metaR = CATEGORY_META[step.exercise.category];
-                var goesToRest = next && next.kind === "rest";
+                var buttonLabel = "Satz erledigt – Training abschließen";
+                var hint = "Kein Timer für diese Übung.";
+                if (next && next.kind === "rest") {
+                    buttonLabel = "Satz erledigt – weiter zur Pause";
+                    hint = "Kein Timer für diese Übung – nur die Pause danach lässt sich starten.";
+                } else if (next && next.exercise) {
+                    // Supersatz: ohne Pause direkt zur Partner-Übung.
+                    buttonLabel = "Satz erledigt – weiter mit " + next.exercise.name;
+                    hint = "Kein Timer für diese Übung – im Supersatz geht es ohne Pause direkt weiter.";
+                }
                 html = sportRepsStepHtml({
                     kicker: metaR.label,
                     name: step.exercise.name,
                     info: "Satz " + step.setIndex + " / " + step.totalSets,
-                    subInfo: remainingSetsText(step.setIndex, step.totalSets),
+                    subInfo: workSubInfo(step),
                     reps: step.repsMin + "–" + step.repsMax + " Wiederholungen",
                     desc: step.exercise.description,
                     muscles: step.exercise.muscles,
                     equipment: equipmentLabelList(step.exercise),
                     catColor: metaR.color,
-                    buttonLabel: goesToRest ? "Satz erledigt – weiter zur Pause" : "Satz erledigt – Training abschließen",
-                    hint: goesToRest ? "Kein Timer für diese Übung – nur die Pause danach lässt sich starten." : "Kein Timer für diese Übung."
+                    buttonLabel: buttonLabel,
+                    hint: hint
                 });
             } else if (step.kind === "rest") {
                 sportState.remaining = step.duration;
@@ -2943,7 +3283,8 @@
          * Event-Listener & Initialisierung
          * ===================================================================== */
         CATEGORY_ORDER.forEach(function (cat) {
-            groupChipEls[cat].addEventListener("click", function () { cycleGroupState(cat); });
+            groupChipEls[cat].addEventListener("click", function () { toggleGroup(cat); });
+            focusChipEls[cat].addEventListener("click", function () { toggleFocus(cat); });
         });
         // "input" hält Label/Live-Schätzung während des Ziehens aktuell;
         // "change" (Loslassen bzw. abgeschlossene Eingabe) würfelt danach das
