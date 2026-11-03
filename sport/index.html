@@ -154,6 +154,66 @@
             padding: 0 6px;
         }
 
+        .group-chips {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .group-chip {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: 999px;
+            padding: 6px 12px;
+            font: inherit;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid var(--theme-border);
+            background: var(--theme-surface-muted);
+            color: var(--theme-text);
+            transition: border-color 0.15s, background-color 0.15s, color 0.15s;
+        }
+
+        .group-chip-state {
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .group-chip[data-state="off"] {
+            color: var(--theme-text-muted);
+            border-style: dashed;
+            background: none;
+        }
+
+        .group-chip[data-state="off"] .group-chip-state {
+            display: none;
+        }
+
+        .group-chip[data-state="normal"] {
+            border-color: var(--theme-accent);
+        }
+
+        .group-chip[data-state="normal"] .group-chip-state {
+            display: none;
+        }
+
+        .group-chip[data-state="focus"] {
+            border-color: var(--theme-accent);
+            background: var(--theme-accent);
+            color: #fff;
+        }
+
+        .controls .group-chips-hint {
+            text-align: center;
+            margin-bottom: 12px;
+        }
+
         .control-row {
             display: flex;
             align-items: center;
@@ -1007,32 +1067,18 @@
             <details class="settings-panel" id="settingsPanel" open>
             <summary><span class="settings-panel-title">Einstellungen</span><span class="settings-panel-summary" id="settingsSummary"></span></summary>
             <fieldset class="muscle-fieldset">
-                <legend>Muskelgruppen &amp; Übungsanzahl</legend>
-                <div class="control-row">
-                    <label for="countBeine">Beine &amp; Gesäß</label>
-                    <input type="range" id="countBeine" min="0" max="5" step="1" value="2">
-                    <span class="control-value" id="countBeineValue">2</span>
+                <legend>Muskelgruppen</legend>
+                <!-- Je Gruppe drei Zustände (Tippen schaltet weiter):
+                     aus → normal → Schwerpunkt. Die Übungsanzahl ergibt sich
+                     aus der Intensität, die Zustände steuern nur die Verteilung. -->
+                <div class="group-chips" id="groupChips">
+                    <button type="button" class="group-chip" data-cat="beine">Beine &amp; Gesäß<span class="group-chip-state"></span></button>
+                    <button type="button" class="group-chip" data-cat="ruecken">Rücken<span class="group-chip-state"></span></button>
+                    <button type="button" class="group-chip" data-cat="push">Brust/Schulter/Arme<span class="group-chip-state"></span></button>
+                    <button type="button" class="group-chip" data-cat="core">Core / Rumpf<span class="group-chip-state"></span></button>
+                    <button type="button" class="group-chip" data-cat="cardio">Cardio/Mobility<span class="group-chip-state"></span></button>
                 </div>
-                <div class="control-row">
-                    <label for="countRuecken">Rücken</label>
-                    <input type="range" id="countRuecken" min="0" max="5" step="1" value="2">
-                    <span class="control-value" id="countRueckenValue">2</span>
-                </div>
-                <div class="control-row">
-                    <label for="countPush">Brust/Schulter/Arme</label>
-                    <input type="range" id="countPush" min="0" max="5" step="1" value="2">
-                    <span class="control-value" id="countPushValue">2</span>
-                </div>
-                <div class="control-row">
-                    <label for="countCore">Core / Rumpf</label>
-                    <input type="range" id="countCore" min="0" max="5" step="1" value="2">
-                    <span class="control-value" id="countCoreValue">2</span>
-                </div>
-                <div class="control-row">
-                    <label for="countCardio">Cardio/Mobility</label>
-                    <input type="range" id="countCardio" min="0" max="5" step="1" value="2">
-                    <span class="control-value" id="countCardioValue">2</span>
-                </div>
+                <p class="hint group-chips-hint">Tippen wechselt: aus → normal → Schwerpunkt. Schwerpunkt-Gruppen bekommen etwa doppelt so viele Übungen. Wie viele Übungen und Sätze es insgesamt werden, legt die Intensität fest.</p>
                 <div class="control-row checkbox-row">
                     <label class="checkbox-label"><input type="checkbox" id="toggleAufwaermen" checked> Aufwärmen</label>
                     <label class="checkbox-label"><input type="checkbox" id="toggleCooldown" checked> Cool-down</label>
@@ -1377,36 +1423,51 @@
             mat:      { label: "Sportmatte" }
         };
 
-        /* Je Intensitätsstufe (1-5): Satzanzahl, Wiederholungs-/Haltezeit-Basis,
-         * Pausenzeit sowie erlaubter Schwierigkeitspool für die Übungsauswahl. */
+        /* Je Intensitätsstufe (1-5): Wiederholungs-/Haltezeit-Basis und
+         * Pausenzeit pro Satz sowie erlaubter Schwierigkeitspool für die
+         * Übungsauswahl. Gilt pro Übung (siehe levels/balancedLevel). */
         var INTENSITY_CONFIG = {
-            1: { sets: 2, repsMin: 6,  repsMax: 8,  holdSec: 15, restSec: 45, pool: ["leicht"] },
-            2: { sets: 2, repsMin: 8,  repsMax: 10, holdSec: 20, restSec: 40, pool: ["leicht", "mittel"] },
-            3: { sets: 3, repsMin: 10, repsMax: 14, holdSec: 30, restSec: 30, pool: ["leicht", "mittel"] },
-            4: { sets: 3, repsMin: 12, repsMax: 16, holdSec: 40, restSec: 25, pool: ["mittel", "schwer"] },
-            5: { sets: 4, repsMin: 14, repsMax: 20, holdSec: 45, restSec: 20, pool: ["mittel", "schwer"] }
+            1: { repsMin: 6,  repsMax: 8,  holdSec: 15, restSec: 45, pool: ["leicht"] },
+            2: { repsMin: 8,  repsMax: 10, holdSec: 20, restSec: 40, pool: ["leicht", "mittel"] },
+            3: { repsMin: 10, repsMax: 14, holdSec: 30, restSec: 30, pool: ["leicht", "mittel"] },
+            4: { repsMin: 12, repsMax: 16, holdSec: 40, restSec: 25, pool: ["mittel", "schwer"] },
+            5: { repsMin: 14, repsMax: 20, holdSec: 45, restSec: 20, pool: ["mittel", "schwer"] }
         };
         var INTENSITY_LABELS = { 1: "sehr leicht", 2: "leicht", 3: "mittel", 4: "anspruchsvoll", 5: "sehr intensiv" };
+
+        /* Umfang des ganzen Trainings je Regler-Intensität: Gesamtzahl der
+         * Arbeitssätze und Übungen im Hauptteil. Orientiert an gängigen
+         * Richtwerten für ein Ganzkörpertraining (ca. 6-10 Übungen, 2-4 Sätze
+         * je Übung, 15-30+ Sätze gesamt), damit "mittel" unabhängig von der
+         * Gruppenauswahl ungefähr gleich anstrengend bleibt. Die Sätze werden
+         * gleichmäßig verteilt (Schwerpunkt-Gruppen bekommen den Rest zuerst),
+         * je Übung zwischen SETS_MIN und SETS_MAX. */
+        var VOLUME_CONFIG = {
+            1: { totalSets: 12, exercises: 6 },
+            2: { totalSets: 18, exercises: 7 },
+            3: { totalSets: 24, exercises: 8 },
+            4: { totalSets: 30, exercises: 9 },
+            5: { totalSets: 36, exercises: 10 }
+        };
+        var SETS_MIN = 2;
+        var SETS_MAX = 4;
+
+        /* Muskelgruppen-Zustände: Gewicht für die Verteilung der Übungen. */
+        var GROUP_STATES = ["off", "normal", "focus"];
+        var GROUP_WEIGHT = { off: 0, normal: 1, focus: 2 };
+        var GROUP_STATE_LABELS = { off: "aus", normal: "normal", focus: "Schwerpunkt" };
+        var DEFAULT_GROUP_STATES = { beine: "normal", ruecken: "normal", push: "normal", core: "normal", cardio: "normal" };
 
         var COOLDOWN_MIN = 5;
 
         /* =====================================================================
          * DOM-Referenzen & State
          * ===================================================================== */
-        var countInputs = {
-            beine: document.getElementById("countBeine"),
-            ruecken: document.getElementById("countRuecken"),
-            push: document.getElementById("countPush"),
-            core: document.getElementById("countCore"),
-            cardio: document.getElementById("countCardio")
-        };
-        var countValueEls = {
-            beine: document.getElementById("countBeineValue"),
-            ruecken: document.getElementById("countRueckenValue"),
-            push: document.getElementById("countPushValue"),
-            core: document.getElementById("countCoreValue"),
-            cardio: document.getElementById("countCardioValue")
-        };
+        var groupChipEls = {};
+        document.querySelectorAll(".group-chip").forEach(function (btn) {
+            groupChipEls[btn.getAttribute("data-cat")] = btn;
+        });
+        var groupStates = Object.assign({}, DEFAULT_GROUP_STATES);
         var toggleAufwaermen = document.getElementById("toggleAufwaermen");
         var toggleCooldown = document.getElementById("toggleCooldown");
         var toggleJump = document.getElementById("toggleJump");
@@ -1452,19 +1513,71 @@
         var sportExitConfirmYesBtn = document.getElementById("sportExitConfirmYesBtn");
         var sportExitConfirmNoBtn = document.getElementById("sportExitConfirmNoBtn");
 
-        var currentWorkout = null; // { intensity, cfg, exercises: [...], levels: [...], warmup: [...], aufwaermenEnabled, cooldownEnabled }
+        var currentWorkout = null; // { intensity, cfg, exercises: [...], levels: [...], sets: [...], warmup: [...], aufwaermenEnabled, cooldownEnabled }
         var lastSignature = "";    // Namen der zuletzt generierten Übungen, um Duplikate zu vermeiden
 
         /* =====================================================================
          * Hilfsfunktionen
          * ===================================================================== */
 
+        // Übungen je Gruppe: die Gesamtzahl aus VOLUME_CONFIG wird nach Gewicht
+        // (normal 1, Schwerpunkt 2) aufgeteilt - abgerundet, jede aktive
+        // Gruppe mindestens 1, Rest nach größtem Nachkommaanteil (bei
+        // Gleichstand Schwerpunkt zuerst, dann CATEGORY_ORDER). Beispiel
+        // Stufe 3 (8 Übungen), Beine Schwerpunkt, Rücken/Push/Core normal:
+        // 3 / 2 / 2 / 1.
         function getCategoryCounts() {
             var counts = {};
-            CATEGORY_ORDER.forEach(function (cat) {
-                counts[cat] = Number(countInputs[cat].value) || 0;
+            var active = CATEGORY_ORDER.filter(function (cat) { return GROUP_WEIGHT[groupStates[cat]] > 0; });
+            CATEGORY_ORDER.forEach(function (cat) { counts[cat] = 0; });
+            if (active.length === 0) return counts;
+
+            var total = Math.max(VOLUME_CONFIG[Number(intensityRange.value)].exercises, active.length);
+            var weightSum = active.reduce(function (sum, cat) { return sum + GROUP_WEIGHT[groupStates[cat]]; }, 0);
+            var assigned = 0;
+            var shares = active.map(function (cat) {
+                var exact = total * GROUP_WEIGHT[groupStates[cat]] / weightSum;
+                counts[cat] = Math.max(1, Math.floor(exact));
+                assigned += counts[cat];
+                // Auf 1 angehobene Gruppen haben schon mehr als ihren Anteil -
+                // beim Verteilen des Rests hinten anstellen.
+                var frac = exact >= 1 ? exact - Math.floor(exact) : -1;
+                return { cat: cat, frac: frac, weight: GROUP_WEIGHT[groupStates[cat]] };
             });
+            shares.sort(function (a, b) { return (b.frac - a.frac) || (b.weight - a.weight); });
+            for (var i = 0; assigned < total; i = (i + 1) % shares.length) {
+                counts[shares[i].cat]++;
+                assigned++;
+            }
+            // Durch das Mindestens-1 kann es eine Übung zu viel werden - dann
+            // bei der Gruppe mit den meisten Übungen wieder abziehen.
+            while (assigned > total) {
+                var largest = active.reduce(function (a, b) { return counts[b] > counts[a] ? b : a; });
+                counts[largest]--;
+                assigned--;
+            }
             return counts;
+        }
+
+        // Verteilt das Satz-Budget gleichmäßig auf die Übungen (je SETS_MIN
+        // bis SETS_MAX); übrige Sätze gehen zuerst an Schwerpunkt-Übungen,
+        // dann der Reihe nach.
+        function distributeSets(exercises, intensity) {
+            var budget = VOLUME_CONFIG[intensity].totalSets;
+            var base = Math.max(SETS_MIN, Math.min(SETS_MAX, Math.floor(budget / exercises.length)));
+            var sets = exercises.map(function () { return base; });
+            var rest = budget - base * exercises.length;
+            var order = exercises.map(function (ex, idx) { return idx; });
+            order.sort(function (a, b) {
+                return GROUP_WEIGHT[groupStates[exercises[b].category]] - GROUP_WEIGHT[groupStates[exercises[a].category]] || a - b;
+            });
+            for (var i = 0; rest > 0 && i < order.length; i++) {
+                if (sets[order[i]] < SETS_MAX) {
+                    sets[order[i]]++;
+                    rest--;
+                }
+            }
+            return sets;
         }
 
         function totalCategoryCount(counts) {
@@ -1584,20 +1697,39 @@
             return cfg.sets + " × " + cfg.repsMin + "–" + cfg.repsMax + " Wdh.";
         }
 
-        // Durchschnittliche Arbeitszeit (Sek.) einer Übung dieser Kategorie
-        // unter der aktuellen Intensität/Geräte-Auswahl - Basis für die live
-        // aktualisierte Dauer-Schätzung, bevor überhaupt konkret gewürfelt wurde.
-        function categoryAverageWorkSeconds(category, cfg, allowedEquipment) {
+        // Stufe, mit der eine Übung nach dem Würfeln startet: so gewählt, dass
+        // ihr Gesamtwert (Schwierigkeit + Stufe) / 2 möglichst genau der
+        // Regler-Intensität entspricht - leichte Übungen bekommen mehr
+        // Umfang, schwere weniger. Begrenzt auf die Stufen 1-5.
+        function balancedLevel(intensity, difficulty) {
+            var level = 2 * intensity - DIFFICULTY_SCORE[difficulty];
+            return Math.min(5, Math.max(1, level));
+        }
+
+        // Sätze + Pausen einer Übung in Sekunden (ohne Übergang zur nächsten).
+        function exerciseSeconds(ex, cfg) {
+            var workSec = ex.type === "time" ? cfg.holdSec : ((cfg.repsMin + cfg.repsMax) / 2) * 3;
+            return cfg.sets * workSec + (cfg.sets - 1) * cfg.restSec;
+        }
+
+        // Durchschnittliche Dauer (Sek.) einer Übung dieser Kategorie unter der
+        // aktuellen Intensität/Geräte-Auswahl, jeweils mit ihrer Start-Stufe
+        // (siehe balancedLevel) und der durchschnittlichen Satzzahl aus dem
+        // Satz-Budget - Basis für die live aktualisierte Dauer-Schätzung,
+        // bevor überhaupt konkret gewürfelt wurde.
+        function categoryAverageSeconds(category, intensity, allowedEquipment, sets) {
+            var pool = INTENSITY_CONFIG[intensity].pool;
             var candidates = EXERCISES.filter(function (e) {
-                return e.category === category && cfg.pool.indexOf(e.difficulty) !== -1 && exerciseSelectable(e, allowedEquipment);
+                return e.category === category && pool.indexOf(e.difficulty) !== -1 && exerciseSelectable(e, allowedEquipment);
             });
             if (candidates.length === 0) {
                 candidates = EXERCISES.filter(function (e) { return e.category === category && exerciseSelectable(e, allowedEquipment); });
             }
-            if (candidates.length === 0) return ((cfg.repsMin + cfg.repsMax) / 2) * 3;
+            function withSets(cfg) { return Object.assign({}, cfg, { sets: sets }); }
+            if (candidates.length === 0) return exerciseSeconds({ type: "reps" }, withSets(INTENSITY_CONFIG[intensity]));
             var total = 0;
             candidates.forEach(function (e) {
-                total += e.type === "time" ? cfg.holdSec : ((cfg.repsMin + cfg.repsMax) / 2) * 3;
+                total += exerciseSeconds(e, withSets(INTENSITY_CONFIG[balancedLevel(intensity, e.difficulty)]));
             });
             return total / candidates.length;
         }
@@ -1606,20 +1738,20 @@
         // Einstellungen (ohne dass schon konkret gewürfelt wurde). Wird bei
         // jeder Eingabe neu berechnet und in der Dauer-Anzeige hervorgehoben.
         function estimateDurationMinutesLive() {
-            var cfg = INTENSITY_CONFIG[Number(intensityRange.value)];
+            var intensity = Number(intensityRange.value);
             var counts = getCategoryCounts();
             var equipment = getEnabledEquipment();
             var transitionSec = 15;
             var totalSec = 0;
+            var mainCount = totalCategoryCount(counts);
+            var avgSets = mainCount > 0 ? Math.max(SETS_MIN, Math.min(SETS_MAX, VOLUME_CONFIG[intensity].totalSets / mainCount)) : 0;
 
             CATEGORY_ORDER.forEach(function (cat) {
                 var count = counts[cat];
                 if (count <= 0) return;
-                var avgWorkSec = categoryAverageWorkSeconds(cat, cfg, equipment);
-                totalSec += count * (cfg.sets * avgWorkSec + (cfg.sets - 1) * cfg.restSec + transitionSec);
+                totalSec += count * (categoryAverageSeconds(cat, intensity, equipment, avgSets) + transitionSec);
             });
 
-            var mainCount = totalCategoryCount(counts);
             if (toggleAufwaermen.checked && mainCount > 0) totalSec += warmupMinutesEstimate(mainCount) * 60;
             if (toggleCooldown.checked && mainCount > 0) totalSec += COOLDOWN_MIN * 60;
 
@@ -1632,9 +1764,7 @@
             var totalSec = 0;
 
             workout.exercises.forEach(function (ex, idx) {
-                var cfg = exerciseCfg(workout, idx);
-                var workSec = ex.type === "time" ? cfg.holdSec : ((cfg.repsMin + cfg.repsMax) / 2) * 3;
-                totalSec += cfg.sets * workSec + (cfg.sets - 1) * cfg.restSec + transitionSec;
+                totalSec += exerciseSeconds(ex, exerciseCfg(workout, idx)) + transitionSec;
             });
 
             if (workout.aufwaermenEnabled) totalSec += warmupMinutesEstimate(workout.exercises.length) * 60;
@@ -1652,8 +1782,16 @@
             durationNumberEl.textContent = minutes > 0 ? String(minutes) : "–";
         }
 
-        function formatDurationMeta(exerciseCount, intensity) {
-            return exerciseCount + " Übungen · Intensität " + intensity + " (" + INTENSITY_LABELS[intensity] + ")";
+        function formatDurationMeta(exerciseCount, intensity, totalSets) {
+            return exerciseCount + " Übungen · " + totalSets + " Sätze · Intensität " + intensity + " (" + INTENSITY_LABELS[intensity] + ")";
+        }
+
+        function plannedTotalSets(exerciseCount, intensity) {
+            return Math.max(SETS_MIN * exerciseCount, Math.min(SETS_MAX * exerciseCount, VOLUME_CONFIG[intensity].totalSets));
+        }
+
+        function workoutTotalSets(workout) {
+            return workout.sets.reduce(function (a, s) { return a + s; }, 0);
         }
 
         // Gesamtwert je Übung = Mittelwert aus Schwierigkeit der Übung und
@@ -1708,34 +1846,56 @@
             if (blockedCategory) {
                 durationMetaEl.innerHTML = "Für „" + CATEGORY_META[blockedCategory].label + "“ ist mit den gewählten Geräten, Filtern und gesperrten Übungen keine Übung möglich.";
             } else {
+                var intensity = Number(intensityRange.value);
                 durationMetaEl.innerHTML = mainCount > 0
-                    ? formatDurationMeta(mainCount, Number(intensityRange.value))
-                    : "Bitte mindestens eine Übung auswählen";
+                    ? formatDurationMeta(mainCount, intensity, plannedTotalSets(mainCount, intensity))
+                    : "Bitte mindestens eine Muskelgruppe auswählen";
             }
         }
 
+        function updateGroupChips() {
+            CATEGORY_ORDER.forEach(function (cat) {
+                var btn = groupChipEls[cat];
+                var state = groupStates[cat];
+                btn.setAttribute("data-state", state);
+                btn.querySelector(".group-chip-state").textContent = state === "focus" ? "★" : "";
+                btn.setAttribute("aria-label", btn.firstChild.textContent + ": " + GROUP_STATE_LABELS[state] + " (tippen zum Wechseln)");
+            });
+        }
+
+        // aus → normal → Schwerpunkt → aus
+        function cycleGroupState(cat) {
+            var next = GROUP_STATES[(GROUP_STATES.indexOf(groupStates[cat]) + 1) % GROUP_STATES.length];
+            groupStates[cat] = next;
+            handleControlChange();
+            generateWorkout();
+        }
+
         function updateLabels() {
-            CATEGORY_ORDER.forEach(function (cat) { countValueEls[cat].textContent = countInputs[cat].value; });
+            updateGroupChips();
             intensityValue.textContent = intensityRange.value + " – " + INTENSITY_LABELS[intensityRange.value];
             volumeValueEl.textContent = volumeRange.value + " %";
         }
 
         // Einzeilige Kurzfassung aller Eingaben für den eingeklappten
-        // Einstellungsbereich, z. B. "10 Übungen · Intensität 2 · Aufwärmen +
-        // Cool-down · 5/5 Geräte · mit Springen · 100 %".
+        // Einstellungsbereich, z. B. "8 Übungen · Schwerpunkt Beine ·
+        // Intensität 3 · Aufwärmen + Cool-down · 5/5 Geräte · mit Springen · 100 %".
         function updateSettingsSummary() {
             var phases = [];
             if (toggleAufwaermen.checked) phases.push("Aufwärmen");
             if (toggleCooldown.checked) phases.push("Cool-down");
             var checkboxes = document.querySelectorAll(".equipment-checkbox");
-            var parts = [
-                totalCategoryCount(getCategoryCounts()) + " Übungen",
+            var focus = CATEGORY_ORDER.filter(function (cat) { return groupStates[cat] === "focus"; })
+                .map(function (cat) { return groupChipEls[cat].firstChild.textContent; });
+            var parts = [totalCategoryCount(getCategoryCounts()) + " Übungen"];
+            if (focus.length) parts.push("Schwerpunkt " + focus.join(", "));
+            parts = parts.concat([
                 "Intensität " + intensityRange.value,
                 phases.length ? phases.join(" + ") : "ohne Auf-/Abwärmen",
                 getEnabledEquipment().size + "/" + checkboxes.length + " Geräte",
                 toggleJump.checked ? "mit Springen" : "ohne Springen",
                 (muted ? "stumm " + SPEAKER_ICON_OFF : volumeRange.value + " % " + SPEAKER_ICON_ON)
-            ];
+            ]);
             settingsSummaryEl.innerHTML = parts.join(" · ");
         }
 
@@ -1783,7 +1943,7 @@
                 if (cb.checked) equipment.push(cb.value);
             });
             saveJson(STORAGE_KEY_SETTINGS, {
-                counts: getCategoryCounts(),
+                groups: groupStates,
                 intensity: Number(intensityRange.value),
                 volume: Number(volumeRange.value),
                 muted: muted,
@@ -1801,9 +1961,17 @@
         function restoreSettings() {
             var s = loadJson(STORAGE_KEY_SETTINGS, null);
             if (!s) return;
-            if (s.counts) {
+            if (s.groups) {
                 CATEGORY_ORDER.forEach(function (cat) {
-                    if (s.counts[cat] != null) countInputs[cat].value = s.counts[cat];
+                    if (GROUP_STATES.indexOf(s.groups[cat]) !== -1) groupStates[cat] = s.groups[cat];
+                });
+            } else if (s.counts) {
+                // Alte Fassung mit Anzahl-Reglern je Gruppe (0-5) übernehmen:
+                // 0 = aus, 1-2 = normal, 3-5 = Schwerpunkt.
+                CATEGORY_ORDER.forEach(function (cat) {
+                    var n = s.counts[cat];
+                    if (n == null) return;
+                    groupStates[cat] = n <= 0 ? "off" : (n <= 2 ? "normal" : "focus");
                 });
             }
             if (s.intensity != null) intensityRange.value = s.intensity;
@@ -1916,7 +2084,8 @@
                 intensity: intensity,
                 cfg: cfg,
                 exercises: exercises,
-                levels: exercises.map(function () { return intensity; }),
+                levels: exercises.map(function (ex) { return balancedLevel(intensity, ex.difficulty); }),
+                sets: distributeSets(exercises, intensity),
                 warmup: aufwaermenEnabled ? pickWarmup(equipment, exercises.length, usedNames) : [],
                 aufwaermenEnabled: aufwaermenEnabled,
                 cooldownEnabled: cooldownEnabled
@@ -1929,7 +2098,7 @@
         // derselben Kategorie neu, ohne den Rest des Trainings zu verändern.
         // Gewürfelt wird wie beim Erstellen aus dem Schwierigkeitspool des
         // Reglers; eine per "leichter"/"schwerer" verstellte Stufe wird dabei
-        // auf die Regler-Intensität zurückgesetzt.
+        // auf die Start-Stufe der neuen Übung zurückgesetzt (balancedLevel).
         function rerollExercise(idx) {
             var cfg = currentWorkout.cfg;
             var equipment = getEnabledEquipment();
@@ -1941,21 +2110,23 @@
             // Kategorie gesperrt ist - dann die Karte unverändert lassen statt abzustürzen.
             if (replacement) {
                 currentWorkout.exercises[idx] = replacement;
-                currentWorkout.levels[idx] = currentWorkout.intensity;
+                currentWorkout.levels[idx] = balancedLevel(currentWorkout.intensity, replacement.difficulty);
             }
             render();
         }
         // Für die inline onclick-Handler im generierten HTML zugänglich machen.
         window.rerollExercise = rerollExercise;
 
-        // Jede Hauptübung hat eine eigene Intensitätsstufe (Start: globale
-        // Intensität), deren Sätze/Wdh./Haltezeit/Pause für sie gelten.
+        // Jede Hauptübung hat eine eigene Intensitätsstufe (Start: siehe
+        // balancedLevel), deren Wdh./Haltezeit/Pause für sie gelten, und eine
+        // Satzzahl aus dem Satz-Budget des Trainings (siehe distributeSets).
         function exerciseCfg(workout, idx) {
-            return INTENSITY_CONFIG[workout.levels[idx]];
+            return Object.assign({ sets: workout.sets[idx] }, INTENSITY_CONFIG[workout.levels[idx]]);
         }
 
         // "leichter"/"schwerer": verschiebt nur die Stufe dieser einen Übung
-        // um eins (innerhalb 1-5), die Übung selbst bleibt dieselbe.
+        // um eins (innerhalb 1-5), die Übung selbst bleibt dieselbe. Die
+        // Satzzahl bleibt, damit das Satz-Budget des Trainings erhalten bleibt.
         function changeExerciseLevel(idx, delta) {
             var level = currentWorkout.levels[idx] + delta;
             if (!INTENSITY_CONFIG[level]) return;
@@ -2081,7 +2252,7 @@
             outputEl.hidden = false;
             sportModeBtn.hidden = false;
 
-            durationMetaEl.innerHTML = formatDurationMeta(workout.exercises.length, workout.intensity) +
+            durationMetaEl.innerHTML = formatDurationMeta(workout.exercises.length, workout.intensity, workoutTotalSets(workout)) +
                 " · Gesamt Ø " + formatDecimal(averageScore(workout));
             intensitySummaryEl.innerHTML = intensitySummary(workout);
             renderLogText(workout);
@@ -2758,8 +2929,7 @@
          * Event-Listener & Initialisierung
          * ===================================================================== */
         CATEGORY_ORDER.forEach(function (cat) {
-            countInputs[cat].addEventListener("input", handleControlChange);
-            countInputs[cat].addEventListener("change", generateWorkout);
+            groupChipEls[cat].addEventListener("click", function () { cycleGroupState(cat); });
         });
         // "input" hält Label/Live-Schätzung während des Ziehens aktuell;
         // "change" (Loslassen bzw. abgeschlossene Eingabe) würfelt danach das
