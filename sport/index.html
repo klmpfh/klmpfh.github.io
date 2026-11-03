@@ -477,6 +477,34 @@
             padding: 14px 16px;
         }
 
+        .log-hint {
+            font-size: 0.82rem;
+            color: var(--theme-text-muted);
+            line-height: 1.5;
+            margin-bottom: 10px;
+        }
+
+        .log-text {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 0.82rem;
+            line-height: 1.55;
+            color: var(--theme-text);
+            background: var(--theme-surface-muted);
+            border: 1px solid var(--theme-border);
+            border-radius: var(--theme-radius);
+            padding: 14px 16px;
+            margin-bottom: 10px;
+            resize: vertical;
+        }
+
+        .log-text:focus {
+            outline: none;
+            border-color: var(--theme-accent);
+        }
+
         /* --- Übungskarten --- */
         .exercise-list {
             display: flex;
@@ -1081,6 +1109,17 @@
                 <h2>Cool-down &amp; Dehnen <span class="phase-time">ca. 5 Min.</span></h2>
                 <p>Zum Abschluss die beanspruchten Muskelgruppen 20–30 Sekunden pro Seite sanft dehnen und dabei ruhig weiteratmen. Nicht wippen, nur bis zum leichten Ziehen dehnen.</p>
             </section>
+
+            <!-- Zusammenfassung zum Eintragen in eine Sport-App: Übungen mit
+                 Sätzen/Wiederholungen in Ausführungsreihenfolge. Editierbar,
+                 damit tatsächlich geschaffte Wiederholungen angepasst werden
+                 können, bevor kopiert wird. -->
+            <section class="phase log-summary">
+                <h2>Zusammenfassung fürs Trainingstagebuch</h2>
+                <p class="log-hint">Für deine Sport-App: Die Übungen stehen mit Sätzen und Wiederholungen in der Reihenfolge, in der du sie ausführst. Abweichungen (z. B. geschaffte Wiederholungen) kannst du vor dem Kopieren direkt im Text ändern.</p>
+                <textarea class="log-text" id="logText" spellcheck="false" aria-label="Trainings-Zusammenfassung zum Kopieren"></textarea>
+                <button type="button" class="btn btn-outline" id="logCopyBtn">Text kopieren</button>
+            </section>
         </div>
     </div>
 
@@ -1394,6 +1433,8 @@
         var outputEl = document.getElementById("output");
         var equipmentSummaryEl = document.getElementById("equipmentSummary");
         var intensitySummaryEl = document.getElementById("intensitySummary");
+        var logTextEl = document.getElementById("logText");
+        var logCopyBtn = document.getElementById("logCopyBtn");
         var warmupSectionEl = document.getElementById("warmupSection");
         var warmupTimeLabelEl = document.getElementById("warmupTimeLabel");
         var warmupListEl = document.getElementById("warmupList");
@@ -1953,15 +1994,85 @@
 
         // Fasst alle Geräte zusammen, die für das aktuelle Training (Aufwärmen
         // und Hauptteil) insgesamt benötigt werden, in fester Geräte-Reihenfolge.
-        function requiredEquipmentSummary(workout) {
+        function requiredEquipmentNames(workout) {
             var codes = new Set();
             workout.exercises.forEach(function (ex) { (ex.equipment || []).forEach(function (c) { codes.add(c); }); });
             workout.warmup.forEach(function (ex) { (ex.equipment || []).forEach(function (c) { codes.add(c); }); });
-            var names = Object.keys(EQUIPMENT_META).filter(function (c) { return codes.has(c); })
+            return Object.keys(EQUIPMENT_META).filter(function (c) { return codes.has(c); })
                 .map(function (c) { return EQUIPMENT_META[c].label; });
+        }
+
+        function requiredEquipmentSummary(workout) {
+            var names = requiredEquipmentNames(workout);
             return names.length === 0
                 ? "Benötigte Geräte: <strong>keine</strong> – reines Bodyweight-Training."
                 : "Benötigte Geräte: <strong>" + names.join(", ") + "</strong>";
+        }
+
+        // Klartext-Zusammenfassung zum Eintragen in eine Sport-App: Übungen
+        // mit Sätzen und Wiederholungen/Haltezeit in Ausführungsreihenfolge,
+        // dazu Datum, Dauer (gemessen, falls im Sport-Modus beendet),
+        // Intensität und Geräte als Kontext.
+        function buildLogText(workout) {
+            var lines = [];
+            lines.push("Training vom " + new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" }));
+            var duration = "ca. " + estimateDurationMinutes(workout) + " Min. (geschätzt)";
+            if (workout.actualDurationSec) {
+                duration = Math.max(1, Math.round(workout.actualDurationSec / 60)) + " Min. (gemessen)";
+            }
+            lines.push("Dauer: " + duration);
+            lines.push("Intensität: " + workout.intensity + " (" + INTENSITY_LABELS[workout.intensity] + "), Gesamtschwierigkeit " +
+                formatDecimal(averageScore(workout)) + " von 5");
+            var equipment = requiredEquipmentNames(workout);
+            lines.push("Geräte: " + (equipment.length ? equipment.join(", ") : "keine (Bodyweight)"));
+
+            if (workout.aufwaermenEnabled && workout.warmup.length) {
+                lines.push("");
+                lines.push("Aufwärmen (ca. " + warmupMinutesEstimate(workout.exercises.length) + " Min.):");
+                workout.warmup.forEach(function (ex) {
+                    lines.push("- " + ex.name + ": 45 Sek.");
+                });
+            }
+
+            lines.push("");
+            lines.push("Übungen:");
+            workout.exercises.forEach(function (ex, idx) {
+                var cfg = exerciseCfg(workout, idx);
+                var work = ex.type === "time"
+                    ? cfg.holdSec + " Sek. halten"
+                    : cfg.repsMin + "–" + cfg.repsMax + " Wiederholungen";
+                lines.push((idx + 1) + ". " + ex.name + " – " + cfg.sets + " Sätze × " + work + " (Pause " + cfg.restSec + " Sek.)");
+            });
+
+            if (workout.cooldownEnabled) {
+                lines.push("");
+                lines.push("Cool-down: ca. " + COOLDOWN_MIN + " Min. Dehnen");
+            }
+            return lines.join("\n");
+        }
+
+        function renderLogText(workout) {
+            logTextEl.value = buildLogText(workout);
+            logTextEl.rows = logTextEl.value.split("\n").length + 1;
+        }
+
+        function copyLogText() {
+            var text = logTextEl.value;
+            function done() {
+                logCopyBtn.textContent = "Kopiert ✓";
+                setTimeout(function () { logCopyBtn.textContent = "Text kopieren"; }, 2000);
+            }
+            function fallback() {
+                // z. B. ohne sicheren Kontext (http://, file://): klassisch
+                // über die Auswahl im Textfeld kopieren.
+                logTextEl.select();
+                try { document.execCommand("copy"); done(); } catch (e) { /* Text bleibt markiert zum manuellen Kopieren */ }
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(done, fallback);
+            } else {
+                fallback();
+            }
         }
 
         function render() {
@@ -1973,6 +2084,7 @@
             durationMetaEl.innerHTML = formatDurationMeta(workout.exercises.length, workout.intensity) +
                 " · Gesamt Ø " + formatDecimal(averageScore(workout));
             intensitySummaryEl.innerHTML = intensitySummary(workout);
+            renderLogText(workout);
             updateDurationDisplay(estimateDurationMinutes(workout));
 
             equipmentSummaryEl.innerHTML = requiredEquipmentSummary(workout);
@@ -2542,7 +2654,12 @@
         function advanceSportStep() {
             if (sportState.index < sportState.steps.length - 1) {
                 sportState.index++;
-                if (sportState.steps[sportState.index].kind === "done") stopOverallTimer();
+                if (sportState.steps[sportState.index].kind === "done") {
+                    stopOverallTimer();
+                    // Gemessene Trainingszeit in die Zusammenfassung übernehmen.
+                    currentWorkout.actualDurationSec = sportState.elapsedTotalSec;
+                    renderLogText(currentWorkout);
+                }
                 renderSportStep();
             }
         }
@@ -2676,6 +2793,7 @@
 
         generateBtn.addEventListener("click", generateWorkout);
         sportModeBtn.addEventListener("click", enterSportMode);
+        logCopyBtn.addEventListener("click", copyLogText);
         sportExitBtn.addEventListener("click", requestExitSportMode);
         sportExitConfirmYesBtn.addEventListener("click", function () {
             hideSportExitConfirm();
