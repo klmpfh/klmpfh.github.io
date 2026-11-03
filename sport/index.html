@@ -60,6 +60,84 @@
             margin-bottom: 28px;
         }
 
+        .settings-panel {
+            margin-bottom: 18px;
+        }
+
+        .settings-panel > summary {
+            list-style: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            color: var(--theme-text-muted);
+            background: var(--theme-surface-muted);
+            border: 1px solid var(--theme-border);
+            border-radius: var(--theme-radius);
+            padding: 10px 16px;
+        }
+
+        .settings-panel > summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .settings-panel-title {
+            flex: 0 0 auto;
+        }
+
+        /* Einzeilige Zusammenfassung der Eingaben, nur im eingeklappten
+           Zustand sichtbar; zu lange Zeilen werden mit "…" abgeschnitten. */
+        .settings-panel-summary {
+            flex: 1 1 auto;
+            min-width: 0;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            text-transform: none;
+            letter-spacing: 0;
+            font-weight: 600;
+            color: var(--theme-text);
+        }
+
+        .settings-panel-summary svg {
+            width: 14px;
+            height: 14px;
+            vertical-align: -2px;
+        }
+
+        .settings-panel[open] .settings-panel-summary {
+            visibility: hidden;
+        }
+
+        .settings-panel > summary::after {
+            content: "▾";
+            flex: 0 0 auto;
+            margin-left: auto;
+            font-size: 1rem;
+            transition: transform 0.15s;
+        }
+
+        .settings-panel:not([open]) > summary::after {
+            transform: rotate(-90deg);
+        }
+
+        .settings-panel > summary:hover {
+            border-color: var(--theme-accent);
+            color: var(--theme-accent-strong);
+        }
+
+        .settings-panel[open] > summary {
+            margin-bottom: 18px;
+        }
+
+        .settings-panel > .advanced-settings:last-child {
+            margin-bottom: 0;
+        }
+
         .muscle-fieldset {
             border: 1px solid var(--theme-border);
             border-radius: var(--theme-radius);
@@ -473,7 +551,7 @@
             grid-template-columns: 2fr 1fr;
             gap: 6px 16px;
             align-items: start;
-            margin-bottom: 10px;
+            margin-top: 12px;
         }
 
         .exercise-desc {
@@ -511,10 +589,18 @@
             color: var(--cat-color, var(--theme-accent));
         }
 
+        .reroll-btn:disabled {
+            opacity: 0.4;
+            cursor: default;
+            border-color: var(--theme-border);
+            color: var(--theme-text-muted);
+        }
+
         .exercise-card-actions {
             display: flex;
             gap: 8px;
             flex-wrap: wrap;
+            margin-top: 10px;
         }
 
         .lock-btn:hover {
@@ -563,25 +649,54 @@
 
         .sport-topbar {
             display: flex;
+            flex-wrap: wrap;
             align-items: center;
             gap: 12px;
+            row-gap: 14px;
             padding: 16px 18px;
             flex: 0 0 auto;
         }
 
+        /* Fortschrittsleiste in eigener, voller Zeile unter Zähler/Uhr/Buttons,
+           damit auch bei vielen Sätzen genug Platz für die Marker bleibt. */
         .sport-progress-track {
-            flex: 1;
-            height: 6px;
+            order: 1;
+            flex: 1 0 100%;
+            position: relative;
+            height: 8px;
             background: var(--theme-border);
             border-radius: 999px;
-            overflow: hidden;
         }
 
         .sport-progress-fill {
             height: 100%;
             background: var(--theme-accent);
+            border-radius: 999px;
             width: 0%;
             transition: width 0.3s ease;
+        }
+
+        /* Kleine Kerbe: Übergang zwischen Satz und Pause innerhalb einer Übung. */
+        .sport-progress-marker {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 1px;
+            background: var(--theme-surface);
+        }
+
+        /* Großer Strich: Übergang zur nächsten Übung. */
+        .sport-progress-marker.is-exercise {
+            top: -4px;
+            bottom: -4px;
+            width: 2px;
+            margin-left: -1px;
+            border-radius: 1px;
+            background: var(--theme-text-muted);
+        }
+
+        #sportMuteBtn {
+            margin-left: auto;
         }
 
         .sport-step-counter {
@@ -859,6 +974,10 @@
 
     <div class="container">
         <div class="controls">
+            <!-- Alle Eingaben einklappbar; der Zustand (auf/zu) wird mit den
+                 übrigen Einstellungen gespeichert. -->
+            <details class="settings-panel" id="settingsPanel" open>
+            <summary><span class="settings-panel-title">Einstellungen</span><span class="settings-panel-summary" id="settingsSummary"></span></summary>
             <fieldset class="muscle-fieldset">
                 <legend>Muskelgruppen &amp; Übungsanzahl</legend>
                 <div class="control-row">
@@ -925,6 +1044,7 @@
                 </fieldset>
                 <p class="hint">Deaktivieren, um laute Sprung-/Hüpf-Übungen auszuschließen – z. B. im Mehrfamilienhaus.</p>
             </div>
+            </details>
 
             <div class="duration-highlight" id="durationHighlight">
                 <div class="duration-main">
@@ -953,6 +1073,7 @@
 
             <section class="phase main">
                 <h2>Training</h2>
+                <div class="equipment-summary" id="intensitySummary"></div>
                 <div class="exercise-list" id="exerciseList"></div>
             </section>
 
@@ -971,6 +1092,7 @@
             <span class="sport-elapsed-timer" id="sportElapsedTimer" hidden>0:00</span>
             <div class="sport-progress-track">
                 <div class="sport-progress-fill" id="sportProgressFill"></div>
+                <div id="sportProgressMarkers"></div>
             </div>
             <button type="button" class="icon-btn" id="sportMuteBtn" aria-label="Signaltöne stummschalten" aria-pressed="false"></button>
             <button type="button" class="icon-btn danger-hover" id="sportExitBtn" aria-label="Sport-Modus beenden">×</button>
@@ -1249,6 +1371,8 @@
         var toggleAufwaermen = document.getElementById("toggleAufwaermen");
         var toggleCooldown = document.getElementById("toggleCooldown");
         var toggleJump = document.getElementById("toggleJump");
+        var settingsPanelEl = document.getElementById("settingsPanel");
+        var settingsSummaryEl = document.getElementById("settingsSummary");
         var intensityRange = document.getElementById("intensityRange");
         var intensityValue = document.getElementById("intensityValue");
         var volumeRange = document.getElementById("volumeRange");
@@ -1269,6 +1393,7 @@
         var durationMetaEl = document.getElementById("durationMeta");
         var outputEl = document.getElementById("output");
         var equipmentSummaryEl = document.getElementById("equipmentSummary");
+        var intensitySummaryEl = document.getElementById("intensitySummary");
         var warmupSectionEl = document.getElementById("warmupSection");
         var warmupTimeLabelEl = document.getElementById("warmupTimeLabel");
         var warmupListEl = document.getElementById("warmupList");
@@ -1278,6 +1403,7 @@
         var sportOverlayEl = document.getElementById("sportOverlay");
         var sportBodyEl = document.getElementById("sportBody");
         var sportProgressFillEl = document.getElementById("sportProgressFill");
+        var sportProgressMarkersEl = document.getElementById("sportProgressMarkers");
         var sportStepCounterEl = document.getElementById("sportStepCounter");
         var sportElapsedTimerEl = document.getElementById("sportElapsedTimer");
         var sportExitBtn = document.getElementById("sportExitBtn");
@@ -1285,7 +1411,7 @@
         var sportExitConfirmYesBtn = document.getElementById("sportExitConfirmYesBtn");
         var sportExitConfirmNoBtn = document.getElementById("sportExitConfirmNoBtn");
 
-        var currentWorkout = null; // { intensity, cfg, exercises: [...], warmup: [...], aufwaermenEnabled, cooldownEnabled }
+        var currentWorkout = null; // { intensity, cfg, exercises: [...], levels: [...], warmup: [...], aufwaermenEnabled, cooldownEnabled }
         var lastSignature = "";    // Namen der zuletzt generierten Übungen, um Duplikate zu vermeiden
 
         /* =====================================================================
@@ -1461,11 +1587,11 @@
 
         // Exakte Dauer-Schätzung anhand der tatsächlich gewürfelten Übungen.
         function estimateDurationMinutes(workout) {
-            var cfg = workout.cfg;
             var transitionSec = 15;
             var totalSec = 0;
 
-            workout.exercises.forEach(function (ex) {
+            workout.exercises.forEach(function (ex, idx) {
+                var cfg = exerciseCfg(workout, idx);
                 var workSec = ex.type === "time" ? cfg.holdSec : ((cfg.repsMin + cfg.repsMax) / 2) * 3;
                 totalSec += cfg.sets * workSec + (cfg.sets - 1) * cfg.restSec + transitionSec;
             });
@@ -1489,6 +1615,50 @@
             return exerciseCount + " Übungen · Intensität " + intensity + " (" + INTENSITY_LABELS[intensity] + ")";
         }
 
+        // Gesamtwert je Übung = Mittelwert aus Schwierigkeit der Übung und
+        // ihrer Intensitätsstufe, beides auf der 1-5-Skala des Reglers
+        // (Schwierigkeit: leicht=1, mittel=3, schwer=5). Der Ø dieser Werte
+        // über alle Hauptübungen ist die Gesamtschwierigkeit des Trainings.
+        // Dazu ein Hinweis, wenn gewürfelte Übungen außerhalb der vom Regler
+        // erlaubten Schwierigkeit liegen (Fallback bei zu kleinem Pool, siehe
+        // pickExercise).
+        var DIFFICULTY_ORDER = ["leicht", "mittel", "schwer"];
+        var DIFFICULTY_SCORE = { leicht: 1, mittel: 3, schwer: 5 };
+
+        function formatDecimal(n) {
+            return n.toFixed(1).replace(".", ",");
+        }
+
+        function exerciseScore(workout, idx) {
+            return (DIFFICULTY_SCORE[workout.exercises[idx].difficulty] + workout.levels[idx]) / 2;
+        }
+
+        function averageScore(workout) {
+            var sum = 0;
+            workout.exercises.forEach(function (ex, idx) { sum += exerciseScore(workout, idx); });
+            return sum / workout.exercises.length;
+        }
+
+        function intensitySummary(workout) {
+            var pool = workout.cfg.pool;
+            var poolMin = DIFFICULTY_ORDER.indexOf(pool[0]);
+            var poolMax = DIFFICULTY_ORDER.indexOf(pool[pool.length - 1]);
+            var easier = 0;
+            var harder = 0;
+            workout.exercises.forEach(function (ex) {
+                var d = DIFFICULTY_ORDER.indexOf(ex.difficulty);
+                if (d < poolMin) easier++;
+                if (d > poolMax) harder++;
+            });
+            var poolText = pool.length > 1 ? pool[0] + "–" + pool[pool.length - 1] : pool[0];
+            var text = "Gesamtschwierigkeit: <strong>" + formatDecimal(averageScore(workout)) + "</strong> von 5" +
+                " (Regler: " + workout.intensity + " – " + INTENSITY_LABELS[workout.intensity] + ")";
+            function countText(n) { return n === 1 ? "1 Übung ist" : n + " Übungen sind"; }
+            if (easier) text += "<br>" + countText(easier) + " leichter als die vom Regler erlaubte Schwierigkeit (" + poolText + ").";
+            if (harder) text += "<br>" + countText(harder) + " schwerer als die vom Regler erlaubte Schwierigkeit (" + poolText + ").";
+            return text;
+        }
+
         function refreshLiveEstimate() {
             var counts = getCategoryCounts();
             var mainCount = totalCategoryCount(counts);
@@ -1507,6 +1677,25 @@
             CATEGORY_ORDER.forEach(function (cat) { countValueEls[cat].textContent = countInputs[cat].value; });
             intensityValue.textContent = intensityRange.value + " – " + INTENSITY_LABELS[intensityRange.value];
             volumeValueEl.textContent = volumeRange.value + " %";
+        }
+
+        // Einzeilige Kurzfassung aller Eingaben für den eingeklappten
+        // Einstellungsbereich, z. B. "10 Übungen · Intensität 2 · Aufwärmen +
+        // Cool-down · 5/5 Geräte · mit Springen · 100 %".
+        function updateSettingsSummary() {
+            var phases = [];
+            if (toggleAufwaermen.checked) phases.push("Aufwärmen");
+            if (toggleCooldown.checked) phases.push("Cool-down");
+            var checkboxes = document.querySelectorAll(".equipment-checkbox");
+            var parts = [
+                totalCategoryCount(getCategoryCounts()) + " Übungen",
+                "Intensität " + intensityRange.value,
+                phases.length ? phases.join(" + ") : "ohne Auf-/Abwärmen",
+                getEnabledEquipment().size + "/" + checkboxes.length + " Geräte",
+                toggleJump.checked ? "mit Springen" : "ohne Springen",
+                (muted ? "stumm " + SPEAKER_ICON_OFF : volumeRange.value + " % " + SPEAKER_ICON_ON)
+            ];
+            settingsSummaryEl.innerHTML = parts.join(" · ");
         }
 
         function handleControlChange() {
@@ -1544,7 +1733,10 @@
             } catch (e) { /* z. B. privater Modus ohne Storage-Zugriff - ignorieren */ }
         }
 
+        // Jede Eingabe-Änderung landet hier, daher auch die Kurzfassung im
+        // eingeklappten Einstellungsbereich an dieser Stelle aktualisieren.
         function saveSettings() {
+            updateSettingsSummary();
             var equipment = [];
             document.querySelectorAll(".equipment-checkbox").forEach(function (cb) {
                 if (cb.checked) equipment.push(cb.value);
@@ -1557,6 +1749,7 @@
                 aufwaermen: toggleAufwaermen.checked,
                 cooldown: toggleCooldown.checked,
                 jump: toggleJump.checked,
+                settingsOpen: settingsPanelEl.open,
                 equipment: equipment
             });
         }
@@ -1577,6 +1770,7 @@
             if (s.aufwaermen != null) toggleAufwaermen.checked = s.aufwaermen;
             if (s.cooldown != null) toggleCooldown.checked = s.cooldown;
             if (s.jump != null) toggleJump.checked = s.jump;
+            if (s.settingsOpen != null) settingsPanelEl.open = s.settingsOpen;
             if (Array.isArray(s.equipment)) {
                 var enabled = new Set(s.equipment);
                 document.querySelectorAll(".equipment-checkbox").forEach(function (cb) {
@@ -1681,6 +1875,7 @@
                 intensity: intensity,
                 cfg: cfg,
                 exercises: exercises,
+                levels: exercises.map(function () { return intensity; }),
                 warmup: aufwaermenEnabled ? pickWarmup(equipment, exercises.length, usedNames) : [],
                 aufwaermenEnabled: aufwaermenEnabled,
                 cooldownEnabled: cooldownEnabled
@@ -1691,6 +1886,9 @@
 
         // Würfelt eine einzelne Übung (per Klick auf "andere Übung") innerhalb
         // derselben Kategorie neu, ohne den Rest des Trainings zu verändern.
+        // Gewürfelt wird wie beim Erstellen aus dem Schwierigkeitspool des
+        // Reglers; eine per "leichter"/"schwerer" verstellte Stufe wird dabei
+        // auf die Regler-Intensität zurückgesetzt.
         function rerollExercise(idx) {
             var cfg = currentWorkout.cfg;
             var equipment = getEnabledEquipment();
@@ -1700,11 +1898,30 @@
             var replacement = pickExercise(current.category, cfg.pool, usedNames, equipment);
             // replacement kann nur fehlen, wenn buchstäblich jede Übung dieser
             // Kategorie gesperrt ist - dann die Karte unverändert lassen statt abzustürzen.
-            if (replacement) currentWorkout.exercises[idx] = replacement;
+            if (replacement) {
+                currentWorkout.exercises[idx] = replacement;
+                currentWorkout.levels[idx] = currentWorkout.intensity;
+            }
             render();
         }
         // Für die inline onclick-Handler im generierten HTML zugänglich machen.
         window.rerollExercise = rerollExercise;
+
+        // Jede Hauptübung hat eine eigene Intensitätsstufe (Start: globale
+        // Intensität), deren Sätze/Wdh./Haltezeit/Pause für sie gelten.
+        function exerciseCfg(workout, idx) {
+            return INTENSITY_CONFIG[workout.levels[idx]];
+        }
+
+        // "leichter"/"schwerer": verschiebt nur die Stufe dieser einen Übung
+        // um eins (innerhalb 1-5), die Übung selbst bleibt dieselbe.
+        function changeExerciseLevel(idx, delta) {
+            var level = currentWorkout.levels[idx] + delta;
+            if (!INTENSITY_CONFIG[level]) return;
+            currentWorkout.levels[idx] = level;
+            render();
+        }
+        window.changeExerciseLevel = changeExerciseLevel;
 
         // Würfelt eine einzelne Aufwärm-Übung (per Klick auf "andere Übung")
         // neu, ohne den Rest des Aufwärmens oder das Haupttraining zu verändern.
@@ -1749,12 +1966,13 @@
 
         function render() {
             var workout = currentWorkout;
-            var cfg = workout.cfg;
 
             outputEl.hidden = false;
             sportModeBtn.hidden = false;
 
-            durationMetaEl.innerHTML = formatDurationMeta(workout.exercises.length, workout.intensity);
+            durationMetaEl.innerHTML = formatDurationMeta(workout.exercises.length, workout.intensity) +
+                " · Gesamt Ø " + formatDecimal(averageScore(workout));
+            intensitySummaryEl.innerHTML = intensitySummary(workout);
             updateDurationDisplay(estimateDurationMinutes(workout));
 
             equipmentSummaryEl.innerHTML = requiredEquipmentSummary(workout);
@@ -1782,25 +2000,34 @@
 
             exerciseListEl.innerHTML = workout.exercises.map(function (ex, idx) {
                 var meta = CATEGORY_META[ex.category];
+                var cfg = exerciseCfg(workout, idx);
+                var level = workout.levels[idx];
+                var levelChip = "    <span class=\"stat-chip\">Intensität " + level + " (" + INTENSITY_LABELS[level] + ")</span>";
                 return "" +
                     "<div class=\"exercise-card\" style=\"--cat-color:" + meta.color + "\">" +
                     "  <div class=\"exercise-card-head\">" +
                     "    <span class=\"exercise-name\">" + ex.name + "</span>" +
                     "    <span class=\"badge-category\">" + meta.label + "</span>" +
                     "  </div>" +
+                    // Buttons direkt unter dem Titel, damit sie beim Tauschen
+                    // der Übung (andere Chips/Textlänge) nicht verspringen.
+                    "  <div class=\"exercise-card-actions\">" +
+                    "    <button type=\"button\" class=\"reroll-btn\" onclick=\"changeExerciseLevel(" + idx + ", -1)\"" + (INTENSITY_CONFIG[level - 1] ? "" : " disabled") + " aria-label=\"" + ex.name + " leichter machen\">leichter</button>" +
+                    "    <button type=\"button\" class=\"reroll-btn\" onclick=\"changeExerciseLevel(" + idx + ", 1)\"" + (INTENSITY_CONFIG[level + 1] ? "" : " disabled") + " aria-label=\"" + ex.name + " schwerer machen\">schwerer</button>" +
+                    "    <button type=\"button\" class=\"reroll-btn\" onclick=\"rerollExercise(" + idx + ")\" aria-label=\"Andere Übung für " + meta.label.replace(/&amp;/g, "&") + " auswürfeln\">andere Übung</button>" +
+                    "    <button type=\"button\" class=\"reroll-btn lock-btn\" onclick=\"blockExercise('" + ex.name + "', 'main', " + idx + ")\" aria-label=\"" + ex.name + " dauerhaft sperren\">Übung für immer sperren</button>" +
+                    "  </div>" +
                     "  <div class=\"exercise-card-stats\">" +
                     "    <span class=\"stat-chip\">" + formatSets(ex, cfg) + "</span>" +
                     "    <span class=\"stat-chip\">Pause: " + cfg.restSec + " Sek.</span>" +
+                    levelChip +
                     "    <span class=\"stat-chip\">Schwierigkeit: " + ex.difficulty + "</span>" +
+                    "    <span class=\"stat-chip\">Gesamt: " + formatDecimal(exerciseScore(workout, idx)) + "</span>" +
                     equipmentChipHtml(ex) +
                     "  </div>" +
                     "  <div class=\"exercise-card-body\">" +
                     "    <p class=\"exercise-desc\">" + ex.description + "</p>" +
                     "    <p class=\"exercise-muscles\">Muskeln: " + ex.muscles + "</p>" +
-                    "  </div>" +
-                    "  <div class=\"exercise-card-actions\">" +
-                    "    <button type=\"button\" class=\"reroll-btn\" onclick=\"rerollExercise(" + idx + ")\" aria-label=\"Andere Übung für " + meta.label.replace(/&amp;/g, "&") + " auswürfeln\">andere Übung</button>" +
-                    "    <button type=\"button\" class=\"reroll-btn lock-btn\" onclick=\"blockExercise('" + ex.name + "', 'main', " + idx + ")\" aria-label=\"" + ex.name + " dauerhaft sperren\">Übung für immer sperren</button>" +
                     "  </div>" +
                     "</div>";
             }).join("");
@@ -1959,9 +2186,6 @@
 
         // Baut die flache Schrittliste für den Sport-Modus aus dem aktuellen Training.
         function buildSportSteps(workout) {
-            var cfg = workout.cfg;
-            var sets = cfg.sets;
-            var rest = cfg.restSec;
             var steps = [];
 
             workout.warmup.forEach(function (ex, i) {
@@ -1974,6 +2198,9 @@
             });
 
             workout.exercises.forEach(function (ex, exIndex) {
+                var cfg = exerciseCfg(workout, exIndex);
+                var sets = cfg.sets;
+                var rest = cfg.restSec;
                 var isLastExercise = exIndex === workout.exercises.length - 1;
                 for (var s = 1; s <= sets; s++) {
                     if (ex.type === "time") {
@@ -1990,6 +2217,44 @@
 
             steps.push({ kind: "done", cooldownEnabled: workout.cooldownEnabled });
             return steps;
+        }
+
+        // Aufteilung der Fortschrittsleiste: jede Übung (jede Aufwärm-Übung
+        // und jede Hauptübung samt ihrer Sätze und Pausen) bekommt gleich viel
+        // Platz, innerhalb einer Übung teilen sich deren Schritte ihn
+        // gleichmäßig. starts[i] = Position (%), an der Schritt i beginnt
+        // ("done" = 100); markers = Übergänge, major = Wechsel der Übung.
+        function buildProgressLayout(steps) {
+            var groups = [];
+            steps.forEach(function (step, i) {
+                if (step.kind === "done") return;
+                var key = step.kind === "warmup" ? "w" + i : "e" + step.exIndex;
+                var last = groups[groups.length - 1];
+                if (!last || last.key !== key) {
+                    last = { key: key, steps: [] };
+                    groups.push(last);
+                }
+                last.steps.push(i);
+            });
+            var starts = [];
+            var markers = [];
+            var groupWidth = 100 / groups.length;
+            groups.forEach(function (g, gi) {
+                var stepWidth = groupWidth / g.steps.length;
+                g.steps.forEach(function (stepIdx, si) {
+                    var pos = gi * groupWidth + si * stepWidth;
+                    starts[stepIdx] = pos;
+                    if (stepIdx > 0) markers.push({ pos: pos, major: si === 0 });
+                });
+            });
+            starts[steps.length - 1] = 100;
+            return { starts: starts, markers: markers };
+        }
+
+        function renderProgressMarkers(markers) {
+            sportProgressMarkersEl.innerHTML = markers.map(function (m) {
+                return "<div class=\"sport-progress-marker" + (m.major ? " is-exercise" : "") + "\" style=\"left:" + m.pos + "%\"></div>";
+            }).join("");
         }
 
         function formatTime(sec) {
@@ -2110,8 +2375,7 @@
             var html;
 
             sportStepCounterEl.textContent = overallStepLabel(step);
-            var pct = sportState.steps.length > 1 ? (sportState.index / (sportState.steps.length - 1)) * 100 : 100;
-            sportProgressFillEl.style.width = pct + "%";
+            sportProgressFillEl.style.width = sportState.progress.starts[sportState.index] + "%";
 
             if (step.kind === "warmup") {
                 sportState.remaining = step.duration;
@@ -2159,10 +2423,16 @@
             } else if (step.kind === "rest") {
                 sportState.remaining = step.duration;
                 sportState.lastBeepSecond = null;
+                // Anleitung der nächsten Übung schon in der Pause zeigen, damit
+                // man sich währenddessen auf die Ausführung vorbereiten kann.
+                var nextEx = next && next.exercise;
                 html = sportTimedStepHtml({
                     kicker: "Pause",
                     name: "Kurz durchatmen",
                     info: nextStepPreview(next),
+                    desc: nextEx ? nextEx.description : "",
+                    muscles: nextEx ? nextEx.muscles : "",
+                    equipment: nextEx ? equipmentLabelList(nextEx) : "",
                     catColor: "#71717a"
                 });
             } else {
@@ -2329,7 +2599,9 @@
         function enterSportMode() {
             if (!currentWorkout) return;
             ensureAudioContext();
-            sportState = { steps: buildSportSteps(currentWorkout), index: 0, remaining: 0, running: false, deadline: 0, intervalId: null, lastBeepSecond: null, elapsedStart: null, elapsedIntervalId: null, elapsedTotalSec: 0 };
+            var steps = buildSportSteps(currentWorkout);
+            sportState = { steps: steps, progress: buildProgressLayout(steps), index: 0, remaining: 0, running: false, deadline: 0, intervalId: null, lastBeepSecond: null, elapsedStart: null, elapsedIntervalId: null, elapsedTotalSec: 0 };
+            renderProgressMarkers(sportState.progress.markers);
             sportElapsedTimerEl.hidden = true;
             sportElapsedTimerEl.textContent = "0:00";
             sportOverlayEl.hidden = false;
@@ -2383,6 +2655,7 @@
         toggleCooldown.addEventListener("change", generateWorkout);
         toggleJump.addEventListener("change", handleControlChange);
         toggleJump.addEventListener("change", generateWorkout);
+        settingsPanelEl.addEventListener("toggle", saveSettings);
         document.querySelectorAll(".equipment-checkbox").forEach(function (cb) {
             cb.addEventListener("change", function () {
                 saveSettings();
@@ -2424,6 +2697,7 @@
         restoreSettings();
         updateBlockedCountBadge();
         updateLabels();
+        updateSettingsSummary();
         syncMuteButtons();
         refreshLiveEstimate();
         generateWorkout();
