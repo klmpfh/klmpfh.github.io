@@ -2483,7 +2483,7 @@
         // Klartext-Zusammenfassung zum Eintragen in eine Sport-App: Übungen
         // mit Sätzen und Wiederholungen/Haltezeit in Ausführungsreihenfolge,
         // dazu Datum, Dauer (gemessen, falls im Sport-Modus beendet),
-        // Intensität und Geräte als Kontext.
+        // Intensität, Geräte und Muskelgruppen als Kontext.
         function buildLogText(workout) {
             var lines = [];
             lines.push("Training vom " + new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" }));
@@ -2496,6 +2496,8 @@
                 formatDecimal(averageScore(workout)) + " von 5");
             var equipment = requiredEquipmentNames(workout);
             lines.push("Geräte: " + (equipment.length ? equipment.join(", ") : "keine (Bodyweight)"));
+            var muscles = collectMuscles(workout.exercises);
+            if (muscles.length) lines.push("Muskelgruppen: " + muscles.join(", "));
 
             if (workout.aufwaermenEnabled && workout.warmup.length) {
                 lines.push("");
@@ -2515,7 +2517,8 @@
                 var work = ex.type === "time"
                     ? cfg.holdSec + " Sek. halten"
                     : cfg.repsMin + "–" + cfg.repsMax + " Wiederholungen";
-                return ex.name + " – " + cfg.sets + " Sätze × " + work;
+                return ex.name + " – " + cfg.sets + " Sätze × " + work +
+                    (ex.muscles ? " [" + ex.muscles + "]" : "");
             }
             workoutUnits(workout).forEach(function (members, u) {
                 if (members.length === 1) {
@@ -2968,8 +2971,12 @@
         // Sammelt alle Muskelgruppen aus Aufwärmen + Training (ohne Duplikate,
         // in Reihenfolge des ersten Auftretens) - fürs Dehnen im Cool-down.
         function collectWorkoutMuscles(workout) {
+            return collectMuscles(workout.warmup.concat(workout.exercises));
+        }
+
+        function collectMuscles(exercises) {
             var seen = [];
-            workout.warmup.concat(workout.exercises).forEach(function (ex) {
+            exercises.forEach(function (ex) {
                 if (!ex.muscles) return;
                 ex.muscles.split(",").forEach(function (m) {
                     var name = m.trim();
