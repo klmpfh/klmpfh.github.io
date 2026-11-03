@@ -233,6 +233,14 @@
             accent-color: var(--theme-accent);
         }
 
+        .control-sublabel {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--theme-accent-strong);
+            white-space: nowrap;
+        }
+
         .control-value {
             flex: 0 0 64px;
             text-align: right;
@@ -1086,9 +1094,13 @@
             </fieldset>
 
             <div class="control-row">
-                <label for="intensityRange">Intensität</label>
+                <!-- Beschreibung ("leicht", "anspruchsvoll" …) als feste zweite
+                     Zeile unter dem Label statt neben dem Wert, damit lange
+                     Bezeichnungen die Zeile nicht umbrechen und der Regler
+                     bei jeder Stufe an derselben Stelle bleibt. -->
+                <label for="intensityRange">Intensität <span class="control-sublabel" id="intensityLabel">leicht</span></label>
                 <input type="range" id="intensityRange" min="1" max="5" step="1" value="2">
-                <span class="control-value" id="intensityValue">2 – leicht</span>
+                <span class="control-value" id="intensityValue">2</span>
             </div>
 
             <div class="control-row">
@@ -1475,6 +1487,7 @@
         var settingsSummaryEl = document.getElementById("settingsSummary");
         var intensityRange = document.getElementById("intensityRange");
         var intensityValue = document.getElementById("intensityValue");
+        var intensityLabelEl = document.getElementById("intensityLabel");
         var volumeRange = document.getElementById("volumeRange");
         var volumeValueEl = document.getElementById("volumeValue");
         var muteBtn = document.getElementById("muteBtn");
@@ -1873,7 +1886,8 @@
 
         function updateLabels() {
             updateGroupChips();
-            intensityValue.textContent = intensityRange.value + " – " + INTENSITY_LABELS[intensityRange.value];
+            intensityValue.textContent = intensityRange.value;
+            intensityLabelEl.textContent = INTENSITY_LABELS[intensityRange.value];
             volumeValueEl.textContent = volumeRange.value + " %";
         }
 
