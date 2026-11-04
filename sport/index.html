@@ -573,34 +573,6 @@
             padding: 14px 16px;
         }
 
-        .log-hint {
-            font-size: 0.82rem;
-            color: var(--theme-text-muted);
-            line-height: 1.5;
-            margin-bottom: 10px;
-        }
-
-        .log-text {
-            display: block;
-            width: 100%;
-            box-sizing: border-box;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-            font-size: 0.82rem;
-            line-height: 1.55;
-            color: var(--theme-text);
-            background: var(--theme-surface-muted);
-            border: 1px solid var(--theme-border);
-            border-radius: var(--theme-radius);
-            padding: 14px 16px;
-            margin-bottom: 10px;
-            resize: vertical;
-        }
-
-        .log-text:focus {
-            outline: none;
-            border-color: var(--theme-accent);
-        }
-
         /* --- Übungskarten --- */
         .exercise-list {
             display: flex;
@@ -947,6 +919,48 @@
             margin-top: 14px;
         }
 
+        .sport-adjust {
+            width: 100%;
+            max-width: 480px;
+            margin-top: 26px;
+            padding-top: 18px;
+            border-top: 1px solid var(--theme-border);
+        }
+
+        .sport-adjust-title {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--theme-text-muted);
+            margin-bottom: 10px;
+        }
+
+        .sport-adjust-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-align: left;
+            margin-bottom: 8px;
+        }
+
+        .sport-adjust-name {
+            flex: 1;
+            min-width: 0;
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: var(--theme-text-strong);
+        }
+
+        .sport-adjust-name span {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: var(--theme-text-muted);
+        }
+
+        .sport-adjust .sport-hint {
+            margin-top: 6px;
+        }
+
         .sport-controls {
             display: flex;
             gap: 12px;
@@ -1221,16 +1235,6 @@
                 <p>Zum Abschluss die beanspruchten Muskelgruppen 20–30 Sekunden pro Seite sanft dehnen und dabei ruhig weiteratmen. Nicht wippen, nur bis zum leichten Ziehen dehnen.</p>
             </section>
 
-            <!-- Zusammenfassung zum Eintragen in eine Sport-App: Übungen mit
-                 Sätzen/Wiederholungen in Ausführungsreihenfolge. Editierbar,
-                 damit tatsächlich geschaffte Wiederholungen angepasst werden
-                 können, bevor kopiert wird. -->
-            <section class="phase log-summary">
-                <h2>Zusammenfassung fürs Trainingstagebuch</h2>
-                <p class="log-hint">Für deine Sport-App: Die Übungen stehen mit Sätzen und Wiederholungen in der Reihenfolge, in der du sie ausführst. Abweichungen (z. B. geschaffte Wiederholungen) kannst du vor dem Kopieren direkt im Text ändern.</p>
-                <textarea class="log-text" id="logText" spellcheck="false" aria-label="Trainings-Zusammenfassung zum Kopieren"></textarea>
-                <button type="button" class="btn btn-outline" id="logCopyBtn">Text kopieren</button>
-            </section>
         </div>
     </div>
 
@@ -1587,8 +1591,6 @@
         var outputEl = document.getElementById("output");
         var equipmentSummaryEl = document.getElementById("equipmentSummary");
         var intensitySummaryEl = document.getElementById("intensitySummary");
-        var logTextEl = document.getElementById("logText");
-        var logCopyBtn = document.getElementById("logCopyBtn");
         var warmupSectionEl = document.getElementById("warmupSection");
         var warmupTimeLabelEl = document.getElementById("warmupTimeLabel");
         var warmupListEl = document.getElementById("warmupList");
@@ -2465,106 +2467,20 @@
 
         // Fasst alle Geräte zusammen, die für das aktuelle Training (Aufwärmen
         // und Hauptteil) insgesamt benötigt werden, in fester Geräte-Reihenfolge.
-        function requiredEquipmentNames(workout) {
+        function requiredEquipmentSummary(workout) {
             var codes = new Set();
             workout.exercises.forEach(function (ex) { (ex.equipment || []).forEach(function (c) { codes.add(c); }); });
             workout.warmup.forEach(function (ex) { (ex.equipment || []).forEach(function (c) { codes.add(c); }); });
-            return Object.keys(EQUIPMENT_META).filter(function (c) { return codes.has(c); })
+            var names = Object.keys(EQUIPMENT_META).filter(function (c) { return codes.has(c); })
                 .map(function (c) { return EQUIPMENT_META[c].label; });
-        }
-
-        function requiredEquipmentSummary(workout) {
-            var names = requiredEquipmentNames(workout);
             return names.length === 0
                 ? "Benötigte Geräte: <strong>keine</strong> – reines Bodyweight-Training."
                 : "Benötigte Geräte: <strong>" + names.join(", ") + "</strong>";
         }
 
-        // Klartext-Zusammenfassung zum Eintragen in eine Sport-App: Übungen
-        // mit Sätzen und Wiederholungen/Haltezeit in Ausführungsreihenfolge,
-        // dazu Datum, Dauer (gemessen, falls im Sport-Modus beendet),
-        // Intensität, Geräte und Muskelgruppen als Kontext.
-        function buildLogText(workout) {
-            var lines = [];
-            lines.push("Training vom " + new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" }));
-            var duration = "ca. " + estimateDurationMinutes(workout) + " Min. (geschätzt)";
-            if (workout.actualDurationSec) {
-                duration = Math.max(1, Math.round(workout.actualDurationSec / 60)) + " Min. (gemessen)";
-            }
-            lines.push("Dauer: " + duration);
-            lines.push("Intensität: " + workout.intensity + " (" + INTENSITY_LABELS[workout.intensity] + "), Gesamtschwierigkeit " +
-                formatDecimal(averageScore(workout)) + " von 5");
-            var equipment = requiredEquipmentNames(workout);
-            lines.push("Geräte: " + (equipment.length ? equipment.join(", ") : "keine (Bodyweight)"));
-            var muscles = collectMuscles(workout.exercises);
-            if (muscles.length) lines.push("Muskelgruppen: " + muscles.join(", "));
-
-            if (workout.aufwaermenEnabled && workout.warmup.length) {
-                lines.push("");
-                lines.push("Aufwärmen (ca. " + warmupMinutesEstimate(workout.exercises.length) + " Min.):");
-                workout.warmup.forEach(function (ex) {
-                    lines.push("- " + ex.name + ": 45 Sek.");
-                });
-            }
-
-            lines.push("");
-            lines.push("Übungen:");
-            // Ein Punkt je Einheit: Einzelübung in einer Zeile, Supersatz als
-            // Überschrift mit beiden Übungen darunter.
-            function exerciseLine(idx) {
-                var ex = workout.exercises[idx];
-                var cfg = exerciseCfg(workout, idx);
-                var work = ex.type === "time"
-                    ? cfg.holdSec + " Sek. halten"
-                    : cfg.repsMin + "–" + cfg.repsMax + " Wiederholungen";
-                return ex.name + " – " + cfg.sets + " Sätze × " + work +
-                    (ex.muscles ? " [" + ex.muscles + "]" : "");
-            }
-            workoutUnits(workout).forEach(function (members, u) {
-                if (members.length === 1) {
-                    lines.push((u + 1) + ". " + exerciseLine(members[0]) + " (Pause " + exerciseCfg(workout, members[0]).restSec + " Sek.)");
-                    return;
-                }
-                lines.push((u + 1) + ". Supersatz im Wechsel (Pause " + pairRestSeconds(workout, members[0]) + " Sek. nach beiden):");
-                members.forEach(function (idx, k) {
-                    lines.push("   " + "ab"[k] + ") " + exerciseLine(idx));
-                });
-            });
-
-            if (workout.cooldownEnabled) {
-                lines.push("");
-                lines.push("Cool-down: ca. " + COOLDOWN_MIN + " Min. Dehnen");
-            }
-            return lines.join("\n");
-        }
-
         // Pause nach einer Supersatz-Runde: die längere der beiden Pausen.
         function pairRestSeconds(workout, idx) {
             return Math.max(exerciseCfg(workout, idx).restSec, exerciseCfg(workout, pairPartner(workout, idx)).restSec);
-        }
-
-        function renderLogText(workout) {
-            logTextEl.value = buildLogText(workout);
-            logTextEl.rows = logTextEl.value.split("\n").length + 1;
-        }
-
-        function copyLogText() {
-            var text = logTextEl.value;
-            function done() {
-                logCopyBtn.textContent = "Kopiert ✓";
-                setTimeout(function () { logCopyBtn.textContent = "Text kopieren"; }, 2000);
-            }
-            function fallback() {
-                // z. B. ohne sicheren Kontext (http://, file://): klassisch
-                // über die Auswahl im Textfeld kopieren.
-                logTextEl.select();
-                try { document.execCommand("copy"); done(); } catch (e) { /* Text bleibt markiert zum manuellen Kopieren */ }
-            }
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(text).then(done, fallback);
-            } else {
-                fallback();
-            }
         }
 
         function render() {
@@ -2576,7 +2492,6 @@
             durationMetaEl.innerHTML = formatDurationMeta(workout.exercises.length, workout.intensity, workoutTotalSets(workout)) +
                 " · Gesamt Ø " + formatDecimal(averageScore(workout));
             intensitySummaryEl.innerHTML = intensitySummary(workout);
-            renderLogText(workout);
             updateDurationDisplay(estimateDurationMinutes(workout));
 
             equipmentSummaryEl.innerHTML = requiredEquipmentSummary(workout);
@@ -2836,7 +2751,7 @@
                     });
                     var isLastRound = r === rounds.length - 1;
                     if (!(isLastRound && u === units.length - 1)) {
-                        steps.push({ kind: "rest", exIndex: round.members[round.members.length - 1], unit: members[0], duration: round.rest });
+                        steps.push({ kind: "rest", exIndex: round.members[round.members.length - 1], unit: members[0], members: members, duration: round.rest });
                     }
                 });
             });
@@ -2845,35 +2760,38 @@
             return steps;
         }
 
-        // Aufteilung der Fortschrittsleiste: jede Einheit (jede Aufwärm-Übung
-        // und jede Hauptübung bzw. jeder Supersatz samt Sätzen und Pausen)
-        // bekommt gleich viel Platz, innerhalb einer Einheit teilen sich deren
-        // Schritte ihn gleichmäßig. starts[i] = Position (%), an der Schritt i
-        // beginnt ("done" = 100); markers = Übergänge, major = Wechsel der Einheit.
+        // Geschätzte Dauer eines Schritts in Sekunden (Wdh.-Sätze wie in
+        // workSeconds mit ca. 3 Sek. je Wdh.).
+        function stepSeconds(step) {
+            if (step.kind === "work-reps") return ((step.repsMin + step.repsMax) / 2) * 3;
+            return step.duration || 0;
+        }
+
+        // Aufteilung der Fortschrittsleiste nach geschätzter Dauer: jeder
+        // Schritt bekommt so viel Platz, wie er voraussichtlich Zeit braucht -
+        // eine kurze Aufwärm-Übung also deutlich weniger als eine Hauptübung
+        // samt Sätzen und Pausen. starts[i] = Position (%), an der Schritt i
+        // beginnt ("done" = 100); markers = Übergänge, major = Wechsel der
+        // Einheit (Aufwärm-Übung, Hauptübung bzw. Supersatz).
         function buildProgressLayout(steps) {
-            var groups = [];
-            steps.forEach(function (step, i) {
-                if (step.kind === "done") return;
-                var key = step.kind === "warmup" ? "w" + i : "e" + step.unit;
-                var last = groups[groups.length - 1];
-                if (!last || last.key !== key) {
-                    last = { key: key, steps: [] };
-                    groups.push(last);
-                }
-                last.steps.push(i);
-            });
+            var total = 0;
+            steps.forEach(function (step) { if (step.kind !== "done") total += stepSeconds(step); });
             var starts = [];
             var markers = [];
-            var groupWidth = 100 / groups.length;
-            groups.forEach(function (g, gi) {
-                var stepWidth = groupWidth / g.steps.length;
-                g.steps.forEach(function (stepIdx, si) {
-                    var pos = gi * groupWidth + si * stepWidth;
-                    starts[stepIdx] = pos;
-                    if (stepIdx > 0) markers.push({ pos: pos, major: si === 0 });
-                });
+            var elapsed = 0;
+            var prevKey = null;
+            steps.forEach(function (step, i) {
+                if (step.kind === "done") {
+                    starts[i] = 100;
+                    return;
+                }
+                var pos = total > 0 ? elapsed / total * 100 : 0;
+                var key = step.kind === "warmup" ? "w" + i : "e" + step.unit;
+                starts[i] = pos;
+                if (i > 0) markers.push({ pos: pos, major: key !== prevKey });
+                prevKey = key;
+                elapsed += stepSeconds(step);
             });
-            starts[steps.length - 1] = 100;
             return { starts: starts, markers: markers };
         }
 
@@ -2949,6 +2867,32 @@
                 "<div class=\"sport-controls\">" +
                 "  <button type=\"button\" class=\"sport-btn sport-btn-primary\" id=\"sportTimerBtn\" onclick=\"sportToggleTimer()\">▶ Start</button>" +
                 "  <button type=\"button\" class=\"sport-btn sport-btn-secondary\" onclick=\"sportSkipStep()\">Überspringen</button>" +
+                "</div>" +
+                (o.extra || "");
+        }
+
+        // Intensität im Sport-Modus anpassen: je Übung "leichter"/"schwerer"
+        // mit aktueller Stufe und Satz-Vorgabe - in der Pause für die Übungen
+        // der laufenden Einheit (Einzelübung bzw. beide Supersatz-Übungen),
+        // während eines Satzes für die aktuelle Übung.
+        function sportAdjustHtml(members, hint) {
+            var rows = members.map(function (idx) {
+                var ex = currentWorkout.exercises[idx];
+                var level = currentWorkout.levels[idx];
+                return "" +
+                    "<div class=\"sport-adjust-row\" style=\"--cat-color:" + CATEGORY_META[ex.category].color + "\">" +
+                    "  <div class=\"sport-adjust-name\">" + ex.name +
+                    "    <span>Intensität " + level + " (" + INTENSITY_LABELS[level] + ") · " + formatSets(ex, exerciseCfg(currentWorkout, idx)) + "</span>" +
+                    "  </div>" +
+                    "  <button type=\"button\" class=\"reroll-btn\" onclick=\"sportChangeLevel(" + idx + ", -1)\"" + (INTENSITY_CONFIG[level - 1] ? "" : " disabled") + " aria-label=\"" + ex.name + " leichter machen\">leichter</button>" +
+                    "  <button type=\"button\" class=\"reroll-btn\" onclick=\"sportChangeLevel(" + idx + ", 1)\"" + (INTENSITY_CONFIG[level + 1] ? "" : " disabled") + " aria-label=\"" + ex.name + " schwerer machen\">schwerer</button>" +
+                    "</div>";
+            }).join("");
+            return "" +
+                "<div class=\"sport-adjust\">" +
+                "  <div class=\"sport-adjust-title\">Zu leicht oder zu schwer?</div>" +
+                rows +
+                "  <p class=\"sport-hint\">" + (hint || "Gilt für die restlichen Sätze und wird für künftige Trainings gemerkt.") + "</p>" +
                 "</div>";
         }
 
@@ -2965,18 +2909,15 @@
                 "<div class=\"sport-controls\">" +
                 "  <button type=\"button\" class=\"sport-btn sport-btn-primary\" onclick=\"sportSkipStep()\">" + o.buttonLabel + "</button>" +
                 "</div>" +
-                "<p class=\"sport-hint\">" + o.hint + "</p>";
+                "<p class=\"sport-hint\">" + o.hint + "</p>" +
+                (o.extra || "");
         }
 
         // Sammelt alle Muskelgruppen aus Aufwärmen + Training (ohne Duplikate,
         // in Reihenfolge des ersten Auftretens) - fürs Dehnen im Cool-down.
         function collectWorkoutMuscles(workout) {
-            return collectMuscles(workout.warmup.concat(workout.exercises));
-        }
-
-        function collectMuscles(exercises) {
             var seen = [];
-            exercises.forEach(function (ex) {
+            workout.warmup.concat(workout.exercises).forEach(function (ex) {
                 if (!ex.muscles) return;
                 ex.muscles.split(",").forEach(function (m) {
                     var name = m.trim();
@@ -3004,11 +2945,14 @@
                 "</div>";
         }
 
-        function renderSportStep() {
+        // keepTimer: nur neu zeichnen (nach einer Intensitäts-Anpassung in
+        // der Pause), ohne den laufenden Timer zurückzusetzen.
+        function renderSportStep(keepTimer) {
             var step = sportState.steps[sportState.index];
             var next = sportState.steps[sportState.index + 1];
             var html;
 
+            if (!keepTimer) sportState.timerStarted = false;
             sportStepCounterEl.textContent = overallStepLabel(step);
             sportProgressFillEl.style.width = sportState.progress.starts[sportState.index] + "%";
 
@@ -3027,8 +2971,10 @@
                 });
             } else if (step.kind === "work-time") {
                 var metaT = CATEGORY_META[step.exercise.category];
-                sportState.remaining = step.duration;
-                sportState.lastBeepSecond = null;
+                if (!keepTimer) {
+                    sportState.remaining = step.duration;
+                    sportState.lastBeepSecond = null;
+                }
                 html = sportTimedStepHtml({
                     kicker: metaT.label,
                     name: step.exercise.name,
@@ -3037,7 +2983,8 @@
                     desc: step.exercise.description,
                     muscles: step.exercise.muscles,
                     equipment: equipmentLabelList(step.exercise),
-                    catColor: metaT.color
+                    catColor: metaT.color,
+                    extra: sportAdjustHtml([step.exIndex], "Gilt ab sofort für diesen und die restlichen Sätze und wird für künftige Trainings gemerkt.")
                 });
             } else if (step.kind === "work-reps") {
                 var metaR = CATEGORY_META[step.exercise.category];
@@ -3062,11 +3009,14 @@
                     equipment: equipmentLabelList(step.exercise),
                     catColor: metaR.color,
                     buttonLabel: buttonLabel,
-                    hint: hint
+                    hint: hint,
+                    extra: sportAdjustHtml([step.exIndex], "Gilt ab sofort für diesen und die restlichen Sätze und wird für künftige Trainings gemerkt.")
                 });
             } else if (step.kind === "rest") {
-                sportState.remaining = step.duration;
-                sportState.lastBeepSecond = null;
+                if (!keepTimer) {
+                    sportState.remaining = step.duration;
+                    sportState.lastBeepSecond = null;
+                }
                 // Anleitung der nächsten Übung schon in der Pause zeigen, damit
                 // man sich währenddessen auf die Ausführung vorbereiten kann.
                 var nextEx = next && next.exercise;
@@ -3077,7 +3027,8 @@
                     desc: nextEx ? nextEx.description : "",
                     muscles: nextEx ? nextEx.muscles : "",
                     equipment: nextEx ? equipmentLabelList(nextEx) : "",
-                    catColor: "#71717a"
+                    catColor: "#71717a",
+                    extra: sportAdjustHtml(step.members)
                 });
             } else {
                 if (step.cooldownEnabled) {
@@ -3093,10 +3044,41 @@
             // der Klick/Timer-Ablauf, der zu diesem Schritt geführt hat, zählt
             // bereits als Start-Signal. Der Gesamt-Trainingstimer bleibt dabei
             // gestoppt (startOverallTimer() ist dann bereits "verbraucht").
-            if (step.kind === "rest" || (step.kind === "done" && step.cooldownEnabled)) {
+            if (keepTimer) {
+                updateTimerDisplay();
+                if (sportState.timerStarted) updateTimerButtonLabel();
+            } else if (step.kind === "rest" || (step.kind === "done" && step.cooldownEnabled)) {
                 startSportTimer();
             }
         }
+
+        // "leichter"/"schwerer" im Sport-Modus: wie auf der Übungskarte (Stufe
+        // ändern und für die Übung merken), danach die Schritte neu aufbauen,
+        // damit die restlichen Sätze die neue Stufe nutzen. Anzahl und
+        // Reihenfolge der Schritte bleiben gleich (die Satzzahl ändert sich
+        // nicht). Eine laufende Pause behält ihre Länge; ein laufender Satz
+        // übernimmt die neue Vorgabe sofort, bei Halte-Übungen verlängert
+        // bzw. verkürzt sich die Restzeit um die Differenz.
+        function sportChangeLevel(idx, delta) {
+            if (!sportState) return;
+            changeExerciseLevel(idx, delta);
+            var steps = buildSportSteps(currentWorkout);
+            var current = sportState.steps[sportState.index];
+            if (current.kind === "rest") {
+                steps[sportState.index] = current;
+            } else if (current.kind === "work-time") {
+                if (sportState.running) {
+                    sportState.remaining = Math.max(0, Math.ceil((sportState.deadline - Date.now()) / 1000));
+                }
+                sportState.remaining = Math.max(1, sportState.remaining + steps[sportState.index].duration - current.duration);
+                if (sportState.running) sportState.deadline = Date.now() + sportState.remaining * 1000;
+            }
+            sportState.steps = steps;
+            sportState.progress = buildProgressLayout(steps);
+            renderProgressMarkers(sportState.progress.markers);
+            renderSportStep(true);
+        }
+        window.sportChangeLevel = sportChangeLevel;
 
         function updateTimerDisplay() {
             var el = document.getElementById("sportTimerDisplay");
@@ -3163,6 +3145,7 @@
             ensureAudioContext();
             startOverallTimer();
             sportState.running = true;
+            sportState.timerStarted = true;
             sportState.deadline = Date.now() + sportState.remaining * 1000;
             updateTimerButtonLabel();
             sportState.intervalId = setInterval(sportTick, 250);
@@ -3186,12 +3169,7 @@
         function advanceSportStep() {
             if (sportState.index < sportState.steps.length - 1) {
                 sportState.index++;
-                if (sportState.steps[sportState.index].kind === "done") {
-                    stopOverallTimer();
-                    // Gemessene Trainingszeit in die Zusammenfassung übernehmen.
-                    currentWorkout.actualDurationSec = sportState.elapsedTotalSec;
-                    renderLogText(currentWorkout);
-                }
+                if (sportState.steps[sportState.index].kind === "done") stopOverallTimer();
                 renderSportStep();
             }
         }
@@ -3249,7 +3227,7 @@
             if (!currentWorkout) return;
             ensureAudioContext();
             var steps = buildSportSteps(currentWorkout);
-            sportState = { steps: steps, progress: buildProgressLayout(steps), index: 0, remaining: 0, running: false, deadline: 0, intervalId: null, lastBeepSecond: null, elapsedStart: null, elapsedIntervalId: null, elapsedTotalSec: 0 };
+            sportState = { steps: steps, progress: buildProgressLayout(steps), index: 0, remaining: 0, running: false, timerStarted: false, deadline: 0, intervalId: null, lastBeepSecond: null, elapsedStart: null, elapsedIntervalId: null, elapsedTotalSec: 0 };
             renderProgressMarkers(sportState.progress.markers);
             sportElapsedTimerEl.hidden = true;
             sportElapsedTimerEl.textContent = "0:00";
@@ -3325,7 +3303,6 @@
 
         generateBtn.addEventListener("click", generateWorkout);
         sportModeBtn.addEventListener("click", enterSportMode);
-        logCopyBtn.addEventListener("click", copyLogText);
         sportExitBtn.addEventListener("click", requestExitSportMode);
         sportExitConfirmYesBtn.addEventListener("click", function () {
             hideSportExitConfirm();
