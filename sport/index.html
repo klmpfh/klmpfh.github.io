@@ -1101,6 +1101,93 @@
             font-weight: 700;
             font-size: 0.92rem;
         }
+
+        /* --- Übersicht aller Übungen mit gemerkten Stufen --- */
+        .library-hint {
+            font-size: 0.82rem;
+            color: var(--theme-text-muted);
+            line-height: 1.5;
+            margin-bottom: 14px;
+        }
+
+        .library-filters {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .library-search {
+            width: 100%;
+            box-sizing: border-box;
+            font: inherit;
+            font-size: 0.9rem;
+            padding: 10px 14px;
+            color: var(--theme-text);
+            background: var(--theme-surface-muted);
+            border: 1px solid var(--theme-border);
+            border-radius: var(--theme-radius-sm);
+        }
+
+        .library-search:focus {
+            outline: none;
+            border-color: var(--theme-accent);
+        }
+
+        .library-filters .group-chips {
+            justify-content: flex-start;
+            margin-bottom: 0;
+        }
+
+        .library-filter-chip[aria-pressed="true"] {
+            border-color: var(--theme-accent);
+            background: var(--theme-accent);
+            color: #fff;
+        }
+
+        .library-group {
+            margin-bottom: 24px;
+        }
+
+        .library-group-title {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--theme-text-strong);
+            padding-bottom: 6px;
+            border-bottom: 2px solid var(--cat-color);
+        }
+
+        .library-group-count {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--theme-text-muted);
+        }
+
+        .library-entry-info {
+            flex: 1 1 260px;
+            min-width: 0;
+        }
+
+        .library-entry-meta {
+            display: block;
+            font-size: 0.75rem;
+            color: var(--theme-text-muted);
+            margin-top: 2px;
+        }
+
+        .library-entry-meta strong {
+            color: var(--theme-accent-strong);
+        }
+
+        .library-entry-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
     </style>
 </head>
 
@@ -1209,6 +1296,7 @@
 
             <div class="controls-actions">
                 <button class="btn btn-outline" id="generateBtn" type="button">neues Training generieren</button>
+                <button class="btn btn-outline" id="libraryShowBtn" type="button">Alle Übungen &amp; Anpassungen (<span id="libraryAdjustedBadge">0</span> angepasst)</button>
                 <button class="btn btn-outline" id="blockedShowBtn" type="button">Gesperrte Übungen (<span id="blockedCountBadge">0</span>)</button>
                 <button class="btn btn-outline" id="resetDataBtn" type="button">Alle gespeicherten Daten löschen</button>
             </div>
@@ -1287,6 +1375,24 @@
             <button type="button" class="icon-btn danger-hover" id="blockedExitBtn" aria-label="Schließen">×</button>
         </div>
         <div class="blocked-body" id="blockedBody"></div>
+    </div>
+
+    <!-- Übersicht aller Übungen: nach Muskelgruppe gruppiert und filterbar,
+         mit der gemerkten Stufen-Anpassung je Übung zum direkten Einstellen. -->
+    <div class="blocked-overlay" id="libraryOverlay" hidden>
+        <div class="blocked-topbar">
+            <span class="blocked-title">Alle Übungen &amp; Anpassungen</span>
+            <button type="button" class="icon-btn danger-hover" id="libraryExitBtn" aria-label="Schließen">×</button>
+        </div>
+        <div class="blocked-body">
+            <p class="library-hint" id="libraryHint"></p>
+            <div class="library-filters">
+                <input type="search" class="library-search" id="librarySearch" placeholder="Übung oder Muskel suchen …" aria-label="Übungen filtern">
+                <div class="group-chips" id="libraryGroupFilter"></div>
+                <label class="chip-checkbox"><input type="checkbox" id="libraryOnlyAdjusted"> nur angepasste Übungen</label>
+            </div>
+            <div id="libraryList"></div>
+        </div>
     </div>
 
     <script>
@@ -1582,6 +1688,15 @@
         var blockedOverlayEl = document.getElementById("blockedOverlay");
         var blockedBodyEl = document.getElementById("blockedBody");
         var blockedCountBadgeEl = document.getElementById("blockedCountBadge");
+        var libraryShowBtn = document.getElementById("libraryShowBtn");
+        var libraryExitBtn = document.getElementById("libraryExitBtn");
+        var libraryOverlayEl = document.getElementById("libraryOverlay");
+        var libraryAdjustedBadgeEl = document.getElementById("libraryAdjustedBadge");
+        var libraryHintEl = document.getElementById("libraryHint");
+        var librarySearchEl = document.getElementById("librarySearch");
+        var libraryGroupFilterEl = document.getElementById("libraryGroupFilter");
+        var libraryOnlyAdjustedEl = document.getElementById("libraryOnlyAdjusted");
+        var libraryListEl = document.getElementById("libraryList");
         var resetDataBtn = document.getElementById("resetDataBtn");
         var resetConfirmEl = document.getElementById("resetConfirm");
         var resetConfirmYesBtn = document.getElementById("resetConfirmYesBtn");
@@ -2189,7 +2304,8 @@
          * Drei unabhängige Speicher, alle über die Oberfläche einsehbar (die
          * Regler/Checkboxen selbst zeigen die gespeicherten Werte, die Liste
          * der gesperrten Übungen ist über "Gesperrte Übungen" einsehbar,
-         * gemerkte Stufen stehen auf der jeweiligen Übungskarte) und
+         * gemerkte Stufen stehen auf der jeweiligen Übungskarte und in
+         * "Alle Übungen & Anpassungen") und
          * gemeinsam über "Alle Daten löschen" komplett entfernbar:
          *   sport.settings         - zuletzt gewählte Regler-/Checkbox-Werte
          *   sport.blockedExercises - dauerhaft gesperrte Übungsnamen (werden
@@ -2434,6 +2550,7 @@
             var offset = level - balancedLevel(currentWorkout.intensity, ex.difficulty);
             if (offset === 0) delete levelOffsets[ex.name]; else levelOffsets[ex.name] = offset;
             saveJson(STORAGE_KEY_LEVELS, levelOffsets);
+            updateLibraryBadge();
             render();
         }
         window.changeExerciseLevel = changeExerciseLevel;
@@ -2608,6 +2725,109 @@
 
         function hideBlockedList() {
             blockedOverlayEl.hidden = true;
+        }
+
+        /* =====================================================================
+         * Übersicht aller Übungen: nach Muskelgruppe gruppiert, filterbar nach
+         * Text, Gruppe und "nur angepasste". Je Übung lässt sich die gemerkte
+         * Stufen-Anpassung (siehe levelOffsets) direkt einstellen, statt zu
+         * warten, bis die Übung zufällig im Training landet.
+         * ===================================================================== */
+        var libraryFilter = { text: "", cat: "all", onlyAdjusted: false };
+
+        function updateLibraryBadge() {
+            libraryAdjustedBadgeEl.textContent = String(EXERCISES.filter(function (e) { return levelOffsets[e.name]; }).length);
+        }
+
+        // Verschiebt die Stufe einer Übung bei der aktuellen Regler-Intensität
+        // um eins (innerhalb 1-5) und merkt sich die Abweichung wie
+        // "leichter"/"schwerer" auf der Übungskarte; delta 0 setzt sie auf
+        // Standard zurück. Steckt die Übung im aktuellen Training, übernimmt
+        // sie die neue Stufe sofort.
+        function changeLibraryOffset(name, delta) {
+            var ex = EXERCISES.find(function (e) { return e.name === name; });
+            var intensity = Number(intensityRange.value);
+            if (delta === 0) {
+                delete levelOffsets[name];
+            } else {
+                var level = startLevel(intensity, ex) + delta;
+                if (!INTENSITY_CONFIG[level]) return;
+                var offset = level - balancedLevel(intensity, ex.difficulty);
+                if (offset === 0) delete levelOffsets[name]; else levelOffsets[name] = offset;
+            }
+            saveJson(STORAGE_KEY_LEVELS, levelOffsets);
+            updateLibraryBadge();
+            if (currentWorkout) {
+                currentWorkout.exercises.forEach(function (e, idx) {
+                    if (e.name === name) currentWorkout.levels[idx] = startLevel(currentWorkout.intensity, e);
+                });
+                render();
+            }
+            renderLibraryList();
+        }
+        window.changeLibraryOffset = changeLibraryOffset;
+
+        function libraryEntryHtml(ex, intensity) {
+            var offset = levelOffsets[ex.name] || 0;
+            var level = startLevel(intensity, ex);
+            var cfg = levelCfg(ex, level);
+            var work = ex.type === "time" ? cfg.holdSec + " Sek. Halten" : cfg.repsMin + "–" + cfg.repsMax + " Wdh.";
+            return "" +
+                "<div class=\"blocked-entry\">" +
+                "  <div class=\"library-entry-info\">" +
+                "    <span class=\"blocked-entry-name\">" + ex.name + "</span>" +
+                (blockedExercises.has(ex.name) ? " <span class=\"stat-chip\">gesperrt</span>" : "") +
+                "    <span class=\"library-entry-meta\">Schwierigkeit: " + ex.difficulty + " · " + ex.muscles + "</span>" +
+                "    <span class=\"library-entry-meta\"><strong>" + (offset ? "gemerkt: " + (offset > 0 ? "+" : "") + offset : "Standard") + "</strong>" +
+                " → Intensität " + level + " (" + INTENSITY_LABELS[level] + ") · " + work + "</span>" +
+                "  </div>" +
+                "  <div class=\"library-entry-actions\" style=\"--cat-color:" + CATEGORY_META[ex.category].color + "\">" +
+                "    <button type=\"button\" class=\"reroll-btn\" onclick=\"changeLibraryOffset('" + ex.name + "', -1)\"" + (INTENSITY_CONFIG[level - 1] ? "" : " disabled") + " aria-label=\"" + ex.name + " leichter machen\">leichter</button>" +
+                "    <button type=\"button\" class=\"reroll-btn\" onclick=\"changeLibraryOffset('" + ex.name + "', 1)\"" + (INTENSITY_CONFIG[level + 1] ? "" : " disabled") + " aria-label=\"" + ex.name + " schwerer machen\">schwerer</button>" +
+                "    <button type=\"button\" class=\"reroll-btn\" onclick=\"changeLibraryOffset('" + ex.name + "', 0)\"" + (offset ? "" : " disabled") + " aria-label=\"" + ex.name + " auf Standard zurücksetzen\">Standard</button>" +
+                "  </div>" +
+                "</div>";
+        }
+
+        function renderLibraryList() {
+            var intensity = Number(intensityRange.value);
+            libraryHintEl.innerHTML = "Stufen bei der aktuellen Intensität <strong>" + intensity + " (" + INTENSITY_LABELS[intensity] + ")</strong>. " +
+                "Eine Anpassung verschiebt die Standard-Stufe der Übung und gilt in jedem künftigen Training – genauso wie „leichter“/„schwerer“ auf der Übungskarte oder im Sport-Modus.";
+            libraryGroupFilterEl.querySelectorAll(".library-filter-chip").forEach(function (btn) {
+                btn.setAttribute("aria-pressed", String(btn.getAttribute("data-cat") === libraryFilter.cat));
+            });
+            var text = libraryFilter.text.trim().toLowerCase();
+            var html = CATEGORY_ORDER.filter(function (cat) {
+                return libraryFilter.cat === "all" || libraryFilter.cat === cat;
+            }).map(function (cat) {
+                var entries = EXERCISES.filter(function (ex) {
+                    return ex.category === cat &&
+                        (!libraryFilter.onlyAdjusted || levelOffsets[ex.name]) &&
+                        (!text || (ex.name + " " + ex.muscles).toLowerCase().indexOf(text) !== -1);
+                }).sort(function (a, b) { return a.name.localeCompare(b.name, "de"); });
+                if (entries.length === 0) return "";
+                var meta = CATEGORY_META[cat];
+                return "" +
+                    "<section class=\"library-group\" style=\"--cat-color:" + meta.color + "\">" +
+                    "  <h3 class=\"library-group-title\">" + meta.label + " <span class=\"library-group-count\">" + entries.length + "</span></h3>" +
+                    entries.map(function (ex) { return libraryEntryHtml(ex, intensity); }).join("") +
+                    "</section>";
+            }).join("");
+            libraryListEl.innerHTML = html || "<p class=\"blocked-empty\">Keine Übung passt zum Filter.</p>";
+        }
+
+        libraryGroupFilterEl.innerHTML = ["all"].concat(CATEGORY_ORDER).map(function (cat) {
+            return "<button type=\"button\" class=\"group-chip library-filter-chip\" data-cat=\"" + cat + "\" aria-pressed=\"false\">" +
+                (cat === "all" ? "Alle" : CATEGORY_META[cat].label) + "</button>";
+        }).join("");
+
+        function showLibrary() {
+            renderLibraryList();
+            libraryOverlayEl.hidden = false;
+        }
+
+        function hideLibrary() {
+            libraryOverlayEl.hidden = true;
         }
 
         /* =====================================================================
@@ -3314,6 +3534,22 @@
         });
         blockedShowBtn.addEventListener("click", showBlockedList);
         blockedExitBtn.addEventListener("click", hideBlockedList);
+        libraryShowBtn.addEventListener("click", showLibrary);
+        libraryExitBtn.addEventListener("click", hideLibrary);
+        librarySearchEl.addEventListener("input", function () {
+            libraryFilter.text = librarySearchEl.value;
+            renderLibraryList();
+        });
+        libraryGroupFilterEl.addEventListener("click", function (e) {
+            var btn = e.target.closest(".library-filter-chip");
+            if (!btn) return;
+            libraryFilter.cat = btn.getAttribute("data-cat");
+            renderLibraryList();
+        });
+        libraryOnlyAdjustedEl.addEventListener("change", function () {
+            libraryFilter.onlyAdjusted = libraryOnlyAdjustedEl.checked;
+            renderLibraryList();
+        });
         resetDataBtn.addEventListener("click", function () { resetConfirmEl.hidden = false; });
         resetConfirmNoBtn.addEventListener("click", function () { resetConfirmEl.hidden = true; });
         resetConfirmYesBtn.addEventListener("click", resetAllData);
@@ -3323,6 +3559,7 @@
 
         restoreSettings();
         updateBlockedCountBadge();
+        updateLibraryBadge();
         updateLabels();
         updateSettingsSummary();
         syncMuteButtons();
