@@ -233,7 +233,8 @@
             margin-bottom: 16px;
         }
 
-        .control-row label {
+        .control-row label,
+        .control-row .control-label {
             flex: 0 0 148px;
             font-weight: 600;
             font-size: 0.88rem;
@@ -242,6 +243,17 @@
         .control-row input[type="range"] {
             flex: 0 1 220px;
             accent-color: var(--theme-accent);
+        }
+
+        /* Gleich breit wie die Regler, damit die Zeilen untereinander passen. */
+        .intensity-steps {
+            flex: 0 1 220px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .intensity-steps .reroll-btn {
+            flex: 1 1 0;
         }
 
         .control-sublabel {
@@ -329,6 +341,13 @@
             font-size: 0.75rem;
             color: var(--theme-text-muted);
             margin-bottom: 16px;
+        }
+
+        .controls .intensity-hint {
+            margin-top: -6px;
+            text-align: center;
+            font-weight: 600;
+            color: var(--theme-accent-strong);
         }
 
         .advanced-settings {
@@ -730,11 +749,13 @@
                 flex-wrap: wrap;
             }
 
-            .control-row label {
+            .control-row label,
+            .control-row .control-label {
                 flex: 1 0 100%;
             }
 
-            .control-row input[type="range"] {
+            .control-row input[type="range"],
+            .intensity-steps {
                 flex: 1 1 auto;
             }
 
@@ -1038,6 +1059,12 @@
             margin-bottom: 18px;
         }
 
+        .confirm-detail {
+            font-size: 0.85rem;
+            color: var(--theme-text-muted);
+            margin: -8px 0 18px;
+        }
+
         /* --- Verwaltung gesperrter Übungen --- */
         .blocked-overlay {
             position: fixed;
@@ -1250,12 +1277,16 @@
             <div class="control-row">
                 <!-- Beschreibung ("leicht", "anspruchsvoll" …) als feste zweite
                      Zeile unter dem Label statt neben dem Wert, damit lange
-                     Bezeichnungen die Zeile nicht umbrechen und der Regler
-                     bei jeder Stufe an derselben Stelle bleibt. -->
-                <label for="intensityRange">Intensität <span class="control-sublabel" id="intensityLabel">leicht</span></label>
-                <input type="range" id="intensityRange" min="1" max="5" step="1" value="2">
+                     Bezeichnungen die Zeile nicht umbrechen und die Buttons
+                     bei jeder Stufe an derselben Stelle bleiben. -->
+                <span class="control-label" id="intensityHeading">Intensität <span class="control-sublabel" id="intensityLabel">leicht</span></span>
+                <div class="intensity-steps" role="group" aria-labelledby="intensityHeading">
+                    <button type="button" class="reroll-btn" id="intensityDownBtn" aria-label="Ganzes Training leichter machen">leichter</button>
+                    <button type="button" class="reroll-btn" id="intensityUpBtn" aria-label="Ganzes Training schwerer machen">schwerer</button>
+                </div>
                 <span class="control-value" id="intensityValue">2</span>
             </div>
+            <p class="hint intensity-hint" id="intensityHint" hidden></p>
 
             <div class="control-row">
                 <div class="control-row-core">
@@ -1351,6 +1382,20 @@
             <div class="sport-controls">
                 <button type="button" class="sport-btn sport-btn-secondary" id="sportExitConfirmNoBtn">Nein</button>
                 <button type="button" class="sport-btn sport-btn-primary" id="sportExitConfirmYesBtn">Ja</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rückfrage vor dem Ändern der Intensität des ganzen Trainings: ein
+         Schritt verändert den Umfang deutlich und setzt alle angehobenen Stufen
+         zurück. Texte kommen aus requestIntensityChange(). -->
+    <div class="confirm-overlay" id="intensityConfirm" hidden>
+        <div class="confirm-box">
+            <p class="confirm-text" id="intensityConfirmText"></p>
+            <p class="confirm-detail" id="intensityConfirmDetail"></p>
+            <div class="sport-controls">
+                <button type="button" class="sport-btn sport-btn-secondary" id="intensityConfirmNoBtn">Abbrechen</button>
+                <button type="button" class="sport-btn sport-btn-primary" id="intensityConfirmYesBtn"></button>
             </div>
         </div>
     </div>
@@ -1634,7 +1679,7 @@
         };
         var INTENSITY_LABELS = { 1: "sehr leicht", 2: "leicht", 3: "mittel", 4: "anspruchsvoll", 5: "sehr intensiv" };
 
-        /* Umfang des ganzen Trainings je Regler-Intensität: Gesamtzahl der
+        /* Umfang des ganzen Trainings je Intensität: Gesamtzahl der
          * Arbeitssätze und Übungen im Hauptteil. Orientiert an gängigen
          * Richtwerten für ein Ganzkörpertraining (ca. 6-10 Übungen, 2-4 Sätze
          * je Übung, 15-30+ Sätze gesamt), damit "mittel" unabhängig von der
@@ -1650,6 +1695,12 @@
         };
         var SETS_MIN = 2;
         var SETS_MAX = 4;
+
+        /* Ab wann eine höhere Intensität empfohlen wird: Anteil der anhebbaren
+         * Übungen einer Gruppe, die angehoben sein müssen, und die Mindestzahl
+         * dafür (siehe recommendedIntensity). */
+        var RECOMMEND_RAISED_SHARE = 0.25;
+        var RECOMMEND_RAISED_MIN = 2;
 
         /* Muskelgruppen-Zustände: Gewicht für die Verteilung der Übungen. */
         var GROUP_STATES = ["off", "normal", "focus"];
@@ -1675,7 +1726,9 @@
         var toggleJump = document.getElementById("toggleJump");
         var settingsPanelEl = document.getElementById("settingsPanel");
         var settingsSummaryEl = document.getElementById("settingsSummary");
-        var intensityRange = document.getElementById("intensityRange");
+        var intensityDownBtn = document.getElementById("intensityDownBtn");
+        var intensityUpBtn = document.getElementById("intensityUpBtn");
+        var intensityHintEl = document.getElementById("intensityHint");
         var intensityValue = document.getElementById("intensityValue");
         var intensityLabelEl = document.getElementById("intensityLabel");
         var volumeRange = document.getElementById("volumeRange");
@@ -1722,7 +1775,14 @@
         var sportExitConfirmEl = document.getElementById("sportExitConfirm");
         var sportExitConfirmYesBtn = document.getElementById("sportExitConfirmYesBtn");
         var sportExitConfirmNoBtn = document.getElementById("sportExitConfirmNoBtn");
+        var intensityConfirmEl = document.getElementById("intensityConfirm");
+        var intensityConfirmTextEl = document.getElementById("intensityConfirmText");
+        var intensityConfirmDetailEl = document.getElementById("intensityConfirmDetail");
+        var intensityConfirmYesBtn = document.getElementById("intensityConfirmYesBtn");
+        var intensityConfirmNoBtn = document.getElementById("intensityConfirmNoBtn");
 
+        var trainingIntensity = 2; // Intensität des ganzen Trainings (1-5), nur über requestIntensityChange() änderbar
+        var pendingIntensity = null; // wartet auf die Bestätigung in der Rückfrage
         var currentWorkout = null; // { intensity, cfg, exercises: [...], pairStarts: [...], levels: [...], sets: [...], warmup: [...], aufwaermenEnabled, cooldownEnabled }
         var lastSignature = "";    // Namen der zuletzt generierten Übungen, um Duplikate zu vermeiden
 
@@ -1742,7 +1802,7 @@
             CATEGORY_ORDER.forEach(function (cat) { counts[cat] = 0; });
             if (active.length === 0) return counts;
 
-            var total = Math.max(VOLUME_CONFIG[Number(intensityRange.value)].exercises, active.length);
+            var total = Math.max(VOLUME_CONFIG[trainingIntensity].exercises, active.length);
             var weightSum = active.reduce(function (sum, cat) { return sum + GROUP_WEIGHT[groupStates[cat]]; }, 0);
             var assigned = 0;
             var shares = active.map(function (cat) {
@@ -2028,7 +2088,7 @@
 
         // Stufe, mit der eine Übung nach dem Würfeln startet: so gewählt, dass
         // ihr Gesamtwert (Schwierigkeit + Stufe) / 2 möglichst genau der
-        // Regler-Intensität entspricht - leichte Übungen bekommen mehr
+        // Intensität des Trainings entspricht - leichte Übungen bekommen mehr
         // Umfang, schwere weniger. Begrenzt auf die Stufen 1-5.
         function balancedLevel(intensity, difficulty) {
             var level = 2 * intensity - DIFFICULTY_SCORE[difficulty];
@@ -2108,7 +2168,7 @@
         // Einstellungen (ohne dass schon konkret gewürfelt wurde). Wird bei
         // jeder Eingabe neu berechnet und in der Dauer-Anzeige hervorgehoben.
         function estimateDurationMinutesLive() {
-            var intensity = Number(intensityRange.value);
+            var intensity = trainingIntensity;
             var counts = getCategoryCounts();
             var equipment = getEnabledEquipment();
             var transitionSec = 15;
@@ -2181,10 +2241,10 @@
         }
 
         // Gesamtwert je Übung = Mittelwert aus Schwierigkeit der Übung und
-        // ihrer Intensitätsstufe, beides auf der 1-5-Skala des Reglers
+        // ihrer Intensitätsstufe, beides auf der 1-5-Skala der Intensität
         // (Schwierigkeit: leicht=1, mittel=3, schwer=5). Der Ø dieser Werte
         // über alle Hauptübungen ist die Gesamtschwierigkeit des Trainings.
-        // Dazu ein Hinweis, wenn gewürfelte Übungen außerhalb der vom Regler
+        // Dazu ein Hinweis, wenn gewürfelte Übungen außerhalb der von der Intensität
         // erlaubten Schwierigkeit liegen (Fallback bei zu kleinem Pool, siehe
         // pickExercise).
         var DIFFICULTY_ORDER = ["leicht", "mittel", "schwer"];
@@ -2217,10 +2277,10 @@
             });
             var poolText = pool.length > 1 ? pool[0] + "–" + pool[pool.length - 1] : pool[0];
             var text = "Gesamtschwierigkeit: <strong>" + formatDecimal(averageScore(workout)) + "</strong> von 5" +
-                " (Regler: " + workout.intensity + " – " + INTENSITY_LABELS[workout.intensity] + ")";
+                " (Intensität " + workout.intensity + " – " + INTENSITY_LABELS[workout.intensity] + ")";
             function countText(n) { return n === 1 ? "1 Übung ist" : n + " Übungen sind"; }
-            if (easier) text += "<br>" + countText(easier) + " leichter als die vom Regler erlaubte Schwierigkeit (" + poolText + ").";
-            if (harder) text += "<br>" + countText(harder) + " schwerer als die vom Regler erlaubte Schwierigkeit (" + poolText + ").";
+            if (easier) text += "<br>" + countText(easier) + " leichter als die bei dieser Intensität erlaubte Schwierigkeit (" + poolText + ").";
+            if (harder) text += "<br>" + countText(harder) + " schwerer als die bei dieser Intensität erlaubte Schwierigkeit (" + poolText + ").";
             return text;
         }
 
@@ -2232,7 +2292,7 @@
             if (blockedCategory) {
                 durationMetaEl.innerHTML = "Für „" + CATEGORY_META[blockedCategory].label + "“ ist mit den gewählten Geräten, Filtern und gesperrten Übungen keine Übung möglich.";
             } else {
-                var intensity = Number(intensityRange.value);
+                var intensity = trainingIntensity;
                 durationMetaEl.innerHTML = mainCount > 0
                     ? formatDurationMeta(mainCount, intensity, plannedTotalSets(mainCount, intensity))
                     : "Bitte mindestens eine Muskelgruppe auswählen";
@@ -2263,10 +2323,37 @@
             generateWorkout();
         }
 
+        // Nächsthöhere Intensität, wenn jede aktive Gruppe bereit dafür ist,
+        // sonst null. Bereit heißt: genug anhebbare Übungen (im Pool der
+        // aktuellen Intensität und noch nicht von Haus aus auf der höchsten
+        // Stufe) sind angehoben, und es sind mehr angehoben als abgesenkt.
+        // Gezählt wird anteilig, weil mit steigender Intensität immer weniger
+        // Übungen anhebbar sind. Gruppen, die dafür zu wenige anhebbare
+        // Übungen haben (z. B. wegen fehlender Geräte), zählen nicht mit.
+        function recommendedIntensity() {
+            var target = trainingIntensity + 1;
+            if (!INTENSITY_CONFIG[target]) return null;
+            var equipment = getEnabledEquipment();
+            var counted = 0;
+            var ready = CATEGORY_ORDER.every(function (cat) {
+                if (groupStates[cat] === "off") return true;
+                var candidates = categoryCandidates(cat, trainingIntensity, equipment);
+                var raisable = candidates.filter(function (e) { return INTENSITY_CONFIG[balancedLevel(trainingIntensity, e.difficulty) + 1]; });
+                if (raisable.length < RECOMMEND_RAISED_MIN) return true;
+                counted++;
+                var raised = raisable.filter(function (e) { return levelOffsets[e.name] > 0; }).length;
+                var lowered = candidates.filter(function (e) { return levelOffsets[e.name] < 0; }).length;
+                return raised >= Math.max(RECOMMEND_RAISED_MIN, Math.ceil(raisable.length * RECOMMEND_RAISED_SHARE)) && raised > lowered;
+            });
+            return ready && counted > 0 ? target : null;
+        }
+
         function updateLabels() {
             updateGroupChips();
-            intensityValue.textContent = intensityRange.value;
-            intensityLabelEl.textContent = INTENSITY_LABELS[intensityRange.value];
+            intensityValue.textContent = trainingIntensity;
+            intensityLabelEl.textContent = INTENSITY_LABELS[trainingIntensity];
+            intensityDownBtn.disabled = !INTENSITY_CONFIG[trainingIntensity - 1];
+            intensityUpBtn.disabled = !INTENSITY_CONFIG[trainingIntensity + 1];
             volumeValueEl.textContent = volumeRange.value + " %";
         }
 
@@ -2274,6 +2361,11 @@
         // Einstellungsbereich, z. B. "8 Übungen · Schwerpunkt Beine ·
         // Intensität 3 · Aufwärmen + Cool-down · 5/5 Geräte · mit Springen · 100 %".
         function updateSettingsSummary() {
+            var recommended = recommendedIntensity();
+            intensityHintEl.hidden = !recommended;
+            intensityHintEl.textContent = recommended
+                ? "Du hast in allen Gruppen Übungen angehoben. Vielleicht ist es Zeit für Intensität " + recommended + "."
+                : "";
             var phases = [];
             if (toggleAufwaermen.checked) phases.push("Aufwärmen");
             if (toggleCooldown.checked) phases.push("Cool-down");
@@ -2283,12 +2375,14 @@
             var parts = [totalCategoryCount(getCategoryCounts()) + " Übungen"];
             if (focus.length) parts.push("Schwerpunkt " + focus.join(", "));
             parts = parts.concat([
-                "Intensität " + intensityRange.value,
+                "Intensität " + trainingIntensity,
                 phases.length ? phases.join(" + ") : "ohne Auf-/Abwärmen",
                 getEnabledEquipment().size + "/" + checkboxes.length + " Geräte",
                 toggleJump.checked ? "mit Springen" : "ohne Springen",
                 (muted ? "stumm " + SPEAKER_ICON_OFF : volumeRange.value + " % " + SPEAKER_ICON_ON)
             ]);
+            // Ganz vorne, weil die Zeile auf schmalen Displays abgeschnitten wird.
+            if (recommended) parts.unshift("Intensität " + recommended + " empfohlen");
             settingsSummaryEl.innerHTML = parts.join(" · ");
         }
 
@@ -2343,7 +2437,7 @@
             });
             saveJson(STORAGE_KEY_SETTINGS, {
                 groups: groupStates,
-                intensity: Number(intensityRange.value),
+                intensity: trainingIntensity,
                 volume: Number(volumeRange.value),
                 muted: muted,
                 aufwaermen: toggleAufwaermen.checked,
@@ -2380,7 +2474,7 @@
                     groupStates[cat] = n <= 0 ? "off" : (n <= 2 ? "normal" : "focus");
                 });
             }
-            if (s.intensity != null) intensityRange.value = s.intensity;
+            if (INTENSITY_CONFIG[s.intensity]) trainingIntensity = s.intensity;
             if (s.volume != null) volumeRange.value = s.volume;
             if (s.aufwaermen != null) toggleAufwaermen.checked = s.aufwaermen;
             if (s.cooldown != null) toggleCooldown.checked = s.cooldown;
@@ -2432,6 +2526,52 @@
             location.reload();
         }
 
+        // "leichter"/"schwerer" für das ganze Training: ein Schritt ist groß
+        // (mehr Sätze und Übungen, die Stufen ändern sich) und verwirft alle
+        // angehobenen Stufen, deshalb nur mit Rückfrage. Abgesenkte Übungen
+        // behalten ihren Offset und wandern mit der Intensität mit.
+        function requestIntensityChange(delta) {
+            var target = trainingIntensity + delta;
+            if (!INTENSITY_CONFIG[target]) return;
+            pendingIntensity = target;
+            var from = VOLUME_CONFIG[trainingIntensity];
+            var to = VOLUME_CONFIG[target];
+            var raised = EXERCISES.filter(function (e) { return levelOffsets[e.name] > 0; }).length;
+            var lowered = EXERCISES.filter(function (e) { return levelOffsets[e.name] < 0; }).length;
+            var detail = "Intensität " + trainingIntensity + " (" + INTENSITY_LABELS[trainingIntensity] + ") → " +
+                target + " (" + INTENSITY_LABELS[target] + "): " + to.totalSets + " statt " + from.totalSets + " Sätze, " +
+                to.exercises + " statt " + from.exercises + " Übungen. Das aktuelle Training wird neu erstellt.";
+            if (raised) {
+                detail += "<br><br><strong>" + (raised === 1 ? "1 angehobene Übung wird" : raised + " angehobene Übungen werden") +
+                    " auf die Standard-Stufe zurückgesetzt.</strong> Das lässt sich nicht rückgängig machen.";
+            }
+            if (lowered) {
+                detail += "<br><br>" + (lowered === 1 ? "1 abgesenkte Übung bleibt" : lowered + " abgesenkte Übungen bleiben") +
+                    " gegenüber der neuen Standard-Stufe abgesenkt.";
+            }
+            intensityConfirmTextEl.textContent = delta > 0 ? "Training schwerer machen?" : "Training leichter machen?";
+            intensityConfirmDetailEl.innerHTML = detail;
+            intensityConfirmYesBtn.textContent = delta > 0 ? "Erhöhen" : "Senken";
+            intensityConfirmEl.hidden = false;
+        }
+
+        function hideIntensityConfirm() {
+            intensityConfirmEl.hidden = true;
+            pendingIntensity = null;
+        }
+
+        function confirmIntensityChange() {
+            trainingIntensity = pendingIntensity;
+            hideIntensityConfirm();
+            Object.keys(levelOffsets).forEach(function (name) {
+                if (levelOffsets[name] > 0) delete levelOffsets[name];
+            });
+            saveJson(STORAGE_KEY_LEVELS, levelOffsets);
+            updateLibraryBadge();
+            handleControlChange();
+            generateWorkout();
+        }
+
         // Kombiniert Geräte-Verfügbarkeit, dauerhafte Sperrung und den
         // Springen/Hüpfen-Filter: nur Übungen, die alles erfüllen, dürfen
         // überhaupt zur Auswahl stehen.
@@ -2443,7 +2583,7 @@
          * Training generieren & rendern
          * ===================================================================== */
         function generateWorkout() {
-            var intensity = Number(intensityRange.value);
+            var intensity = trainingIntensity;
             var cfg = INTENSITY_CONFIG[intensity];
             var counts = getCategoryCounts();
             var equipment = getEnabledEquipment();
@@ -2508,8 +2648,8 @@
 
         // Würfelt eine einzelne Übung (per Klick auf "andere Übung") innerhalb
         // derselben Kategorie neu, ohne den Rest des Trainings zu verändern.
-        // Gewürfelt wird wie beim Erstellen aus dem Schwierigkeitspool des
-        // Reglers; die Stufe wird auf die Start-Stufe der neuen Übung gesetzt
+        // Gewürfelt wird wie beim Erstellen aus dem Schwierigkeitspool der
+        // Intensität; die Stufe wird auf die Start-Stufe der neuen Übung gesetzt
         // (startLevel, also samt für sie gemerkter Anpassung).
         function rerollExercise(idx) {
             var cfg = currentWorkout.cfg;
@@ -2551,6 +2691,7 @@
             if (offset === 0) delete levelOffsets[ex.name]; else levelOffsets[ex.name] = offset;
             saveJson(STORAGE_KEY_LEVELS, levelOffsets);
             updateLibraryBadge();
+            updateSettingsSummary();
             render();
         }
         window.changeExerciseLevel = changeExerciseLevel;
@@ -2684,6 +2825,7 @@
             blockedExercises.add(name);
             saveBlockedExercises();
             updateBlockedCountBadge();
+            updateSettingsSummary();
             if (kind === "main") {
                 rerollExercise(idx);
             } else if (kind === "warmup") {
@@ -2696,6 +2838,7 @@
             blockedExercises.delete(name);
             saveBlockedExercises();
             updateBlockedCountBadge();
+            updateSettingsSummary();
             renderBlockedList();
         }
         window.unblockExercise = unblockExercise;
@@ -2739,14 +2882,14 @@
             libraryAdjustedBadgeEl.textContent = String(EXERCISES.filter(function (e) { return levelOffsets[e.name]; }).length);
         }
 
-        // Verschiebt die Stufe einer Übung bei der aktuellen Regler-Intensität
+        // Verschiebt die Stufe einer Übung bei der aktuellen Intensität
         // um eins (innerhalb 1-5) und merkt sich die Abweichung wie
         // "leichter"/"schwerer" auf der Übungskarte; delta 0 setzt sie auf
         // Standard zurück. Steckt die Übung im aktuellen Training, übernimmt
         // sie die neue Stufe sofort.
         function changeLibraryOffset(name, delta) {
             var ex = EXERCISES.find(function (e) { return e.name === name; });
-            var intensity = Number(intensityRange.value);
+            var intensity = trainingIntensity;
             if (delta === 0) {
                 delete levelOffsets[name];
             } else {
@@ -2757,6 +2900,7 @@
             }
             saveJson(STORAGE_KEY_LEVELS, levelOffsets);
             updateLibraryBadge();
+            updateSettingsSummary();
             if (currentWorkout) {
                 currentWorkout.exercises.forEach(function (e, idx) {
                     if (e.name === name) currentWorkout.levels[idx] = startLevel(currentWorkout.intensity, e);
@@ -2790,9 +2934,9 @@
         }
 
         function renderLibraryList() {
-            var intensity = Number(intensityRange.value);
+            var intensity = trainingIntensity;
             libraryHintEl.innerHTML = "Stufen bei der aktuellen Intensität <strong>" + intensity + " (" + INTENSITY_LABELS[intensity] + ")</strong>. " +
-                "Eine Anpassung verschiebt die Standard-Stufe der Übung und gilt in jedem künftigen Training – genauso wie „leichter“/„schwerer“ auf der Übungskarte oder im Sport-Modus.";
+                "Eine Anpassung verschiebt die Standard-Stufe der Übung und gilt in jedem künftigen Training – genauso wie „leichter“/„schwerer“ auf der Übungskarte oder im Sport-Modus. Ändert sich die Intensität des ganzen Trainings, werden angehobene Übungen zurückgesetzt, abgesenkte bleiben abgesenkt.";
             libraryGroupFilterEl.querySelectorAll(".library-filter-chip").forEach(function (btn) {
                 btn.setAttribute("aria-pressed", String(btn.getAttribute("data-cat") === libraryFilter.cat));
             });
@@ -3491,11 +3635,13 @@
             groupChipEls[cat].addEventListener("click", function () { toggleGroup(cat); });
             focusChipEls[cat].addEventListener("click", function () { toggleFocus(cat); });
         });
-        // "input" hält Label/Live-Schätzung während des Ziehens aktuell;
-        // "change" (Loslassen bzw. abgeschlossene Eingabe) würfelt danach das
-        // Training neu, statt bei jedem Zwischenwert des Sliders neu zu würfeln.
-        intensityRange.addEventListener("input", handleControlChange);
-        intensityRange.addEventListener("change", generateWorkout);
+        intensityDownBtn.addEventListener("click", function () { requestIntensityChange(-1); });
+        intensityUpBtn.addEventListener("click", function () { requestIntensityChange(1); });
+        intensityConfirmYesBtn.addEventListener("click", confirmIntensityChange);
+        intensityConfirmNoBtn.addEventListener("click", hideIntensityConfirm);
+        intensityConfirmEl.addEventListener("click", function (e) {
+            if (e.target === intensityConfirmEl) hideIntensityConfirm();
+        });
         toggleAufwaermen.addEventListener("change", handleControlChange);
         toggleAufwaermen.addEventListener("change", generateWorkout);
         toggleCooldown.addEventListener("change", handleControlChange);
