@@ -20,12 +20,16 @@
     const PEER_PREFIX = 'klmpfh-quitt-';
     const MAX_DECOMPRESSED = 8 * 1024 * 1024;
     const LINK_ACTIVITY_LIMIT = 60;
+    const OCR_DIR = 'vendor/tesseract/';
+    // Mehr ist nicht besser: Bei zu großer Schrift liest die Erkennung schlechter. Der
+    // zweite Wert ist für Bons, die klein im Bild liegen, und läuft nur bei Bedarf.
+    const OCR_SIDES = [1400, 2000];
 
     const app = document.getElementById('app');
     const toastEl = document.getElementById('toast');
 
-    let store = { groups: {}, me: {} };
-    const state = { formActive: false, pendingRender: false, search: '', statsCur: null, lastPath: null };
+    let store = { groups: {}, me: {}, last: null };
+    const state = { formActive: false, pendingRender: false, unsaved: false, search: '', statsCur: null, lastPath: null };
 
     /* ---------- Helfer ---------- */
 
@@ -146,7 +150,7 @@
     /* ---------- Speicher ---------- */
 
     function readStored() {
-        const out = { groups: {}, me: {} };
+        const out = { groups: {}, me: {}, last: null };
         try {
             const raw = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
             if (raw && raw.groups) {
@@ -157,6 +161,7 @@
                 Object.keys(raw.me || {}).forEach(function (gid) {
                     if (typeof raw.me[gid] === 'string') out.me[gid] = raw.me[gid];
                 });
+                if (typeof raw.last === 'string') out.last = raw.last;
             }
         } catch (e) {
             console.warn('Quitt: Gespeicherte Daten nicht lesbar.', e);
@@ -167,9 +172,22 @@
     function persist() {
         try {
             localStorage.setItem(STORE_KEY, JSON.stringify(store));
+            state.unsaved = false;
         } catch (e) {
+            state.unsaved = true;
             console.error('Quitt: Speichern fehlgeschlagen.', e);
             toast('Speichern fehlgeschlagen. Bitte ein Backup sichern.');
+        }
+        askToKeepData();
+    }
+
+    /** Ohne diese Bitte darf der Browser die Daten löschen, sobald der Speicher knapp wird. */
+    let keepAsked = false;
+    function askToKeepData() {
+        if (keepAsked || !Object.keys(store.groups).length) return;
+        keepAsked = true;
+        if (navigator.storage && navigator.storage.persist) {
+            navigator.storage.persist().catch(function () { /* bleibt normaler Speicher */ });
         }
     }
 
@@ -192,6 +210,7 @@
             }
         });
         store.me = loaded.me;
+        store.last = loaded.last;
         return changed;
     }
 
@@ -270,8 +289,21 @@
 
     function baseUrl() { return location.href.split('#')[0]; }
 
-    async function inviteLink(doc) {
-        return baseUrl() + '#join=' + doc.id + '&d=' + await encodeSnapshot(doc);
+    async function inviteLink(doc, expenseId) {
+        return baseUrl() + '#join=' + doc.id + '&d=' + await encodeSnapshot(doc) + (expenseId ? '&e=' + expenseId : '');
+    }
+
+    async function shareInvite(doc, expenseId) {
+        const link = await inviteLink(doc, expenseId);
+        if (navigator.share) {
+            try {
+                await navigator.share({ title: 'Quitt – ' + doc.meta.name, url: link });
+                return;
+            } catch (e) {
+                if (e && e.name === 'AbortError') return;
+            }
+        }
+        toast(await copyText(link) ? 'Link kopiert.' : 'Kopieren hat nicht geklappt.');
     }
 
     /* ---------- Live-Abgleich ---------- */
@@ -553,6 +585,10 @@
                 return;
             }
             if (Sync.gid !== route.gid) state.search = '';
+            if (store.last !== route.gid) {
+                store.last = route.gid;
+                persist();
+            }
             Sync.start(route.gid);
             if (C.expandRecurring(doc, C.todayStr())) commit(doc);
             app.appendChild(viewGroupRoute(doc, route));
@@ -590,7 +626,8 @@
         if (!store.groups[gid]) store.groups[gid] = C.emptyGroup(gid);
         if (incoming && C.mergeGroups(store.groups[gid], incoming)) toast('Gruppe aktualisiert.');
         persist();
-        history.replaceState(null, '', '#/g/' + gid);
+        const expenseId = params.get('e') || '';
+        history.replaceState(null, '', '#/g/' + gid + (C.RE_EXPENSE_ID.test(expenseId) ? '/expense/' + expenseId : ''));
         return true;
     }
 
@@ -611,6 +648,15 @@
         return h('span', { class: amount > 0 ? 'pos' : 'neg' }, money(Math.abs(amount), cur));
     }
 
+    /** Das Symbol ergibt sich aus dem Namen, siehe C.groupSymbol. */
+    function groupAvatar(name, large) {
+        const symbol = C.groupSymbol(name);
+        return h('span', {
+            class: 'avatar' + (large ? ' large' : '') + (symbol.emoji ? ' has-emoji' : ''),
+            'aria-hidden': 'true'
+        }, symbol.text);
+    }
+
     function viewHome() {
         const docs = Object.keys(store.groups).map(function (gid) { return store.groups[gid]; });
         docs.sort(function (a, b) { return C.lastT(b) - C.lastT(a); });
@@ -622,7 +668,7 @@
             mine.forEach(function (b) { totals[b.cur] = (totals[b.cur] || 0) + b.amount; });
             const memberCount = Object.keys(doc.members).filter(function (id) { return !doc.members[id].left; }).length;
             return h('a', { class: 'item', href: '#/g/' + doc.id },
-                h('span', { class: 'icon', 'aria-hidden': 'true' }, doc.meta.emoji),
+                groupAvatar(doc.meta.name),
                 h('span', { class: 'body' },
                     h('div', { class: 'title' }, doc.meta.name || 'Einladung'),
                     h('div', { class: 'sub' }, doc.meta.t ? memberCount + (memberCount === 1 ? ' Person' : ' Personen') : 'Wartet auf Daten')),
@@ -699,25 +745,6 @@
 
     /* ---------- Neue Gruppe ---------- */
 
-    const EMOJIS = ['💸', '🏖️', '🏠', '✈️', '🍕', '🎉', '🏕️', '🚗', '⛷️', '🎸'];
-
-    function emojiPicker(current, onPick) {
-        const wrap = h('div', { class: 'emoji-picker', role: 'group', 'aria-label': 'Symbol wählen' });
-        const options = EMOJIS.indexOf(current) === -1 ? [current].concat(EMOJIS) : EMOJIS;
-        options.forEach(function (emoji) {
-            wrap.appendChild(h('button', {
-                type: 'button',
-                'aria-pressed': String(emoji === current),
-                onclick: function (e) {
-                    wrap.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-pressed', 'false'); });
-                    e.currentTarget.setAttribute('aria-pressed', 'true');
-                    onPick(emoji);
-                }
-            }, emoji));
-        });
-        return wrap;
-    }
-
     function currencySelect(value, onChange, extra) {
         const list = C.CURRENCIES.indexOf(value) === -1 ? [value].concat(C.CURRENCIES) : C.CURRENCIES;
         return h('select', Object.assign({ value: value, onchange: onChange }, extra),
@@ -726,7 +753,7 @@
 
     function viewNewGroup() {
         state.formActive = true;
-        const form = { emoji: EMOJIS[0], currency: 'EUR' };
+        const form = { currency: 'EUR' };
         const friends = h('div', null);
         const error = h('div', { class: 'form-error', hidden: true });
 
@@ -746,7 +773,14 @@
         addFriendField();
         addFriendField();
 
-        const nameInput = h('input', { id: 'groupName', type: 'text', maxlength: 60, placeholder: 'Sommer in Lissabon', autocomplete: 'off' });
+        const avatarSlot = h('span', null, groupAvatar(''));
+        const nameInput = h('input', {
+            id: 'groupName', type: 'text', maxlength: 60, placeholder: 'Sommer in Lissabon', autocomplete: 'off',
+            oninput: function (e) {
+                avatarSlot.textContent = '';
+                avatarSlot.appendChild(groupAvatar(e.target.value));
+            }
+        });
         const meInput = h('input', { id: 'myName', type: 'text', maxlength: 40, placeholder: 'Dein Name', autocomplete: 'name' });
 
         function submit(e) {
@@ -760,7 +794,7 @@
             }
             const gid = C.newGroupId();
             const doc = C.emptyGroup(gid);
-            doc.meta = { t: Date.now(), name: name, emoji: form.emoji, currency: form.currency, simplify: true };
+            doc.meta = { t: Date.now(), name: name, currency: form.currency, simplify: true };
             store.groups[gid] = doc;
 
             const myId = C.newId();
@@ -782,10 +816,10 @@
             h('form', { class: 'panel', onsubmit: submit },
                 h('h2', null, 'Neue Gruppe'),
                 error,
-                h('div', { class: 'field' }, h('label', { for: 'groupName' }, 'Name der Gruppe'), nameInput),
                 h('div', { class: 'field' },
-                    h('span', { class: 'field-label' }, 'Symbol'),
-                    emojiPicker(form.emoji, function (emoji) { form.emoji = emoji; })),
+                    h('label', { for: 'groupName' }, 'Name der Gruppe'),
+                    h('div', { class: 'name-row' }, avatarSlot, nameInput),
+                    h('div', { class: 'field-hint' }, 'Ein Emoji im Namen wird zum Symbol, sonst die Anfangsbuchstaben.')),
                 h('div', { class: 'field' },
                     h('label', { for: 'groupCurrency' }, 'Währung'),
                     currencySelect(form.currency, function (e) { form.currency = e.target.value; }, { id: 'groupCurrency' })),
@@ -856,6 +890,7 @@
     function removeGroup(doc) {
         delete store.groups[doc.id];
         delete store.me[doc.id];
+        if (store.last === doc.id) store.last = null;
         persist();
         go('/');
     }
@@ -879,7 +914,7 @@
         return h('div', null,
             h('a', { class: 'back', href: '#/' }, '‹ Gruppen'),
             h('header', { class: 'group-head' },
-                h('div', { class: 'emoji', 'aria-hidden': 'true' }, doc.meta.emoji),
+                groupAvatar(doc.meta.name, true),
                 h('h1', null, doc.meta.name)),
             h('section', { class: 'panel' },
                 h('h2', null, 'Wer bist du?'),
@@ -928,7 +963,7 @@
         return h('div', null,
             h('a', { class: 'back', href: '#/' }, '‹ Gruppen'),
             h('header', { class: 'group-head' },
-                h('div', { class: 'emoji', 'aria-hidden': 'true' }, doc.meta.emoji),
+                groupAvatar(doc.meta.name, true),
                 h('h1', null, doc.meta.name),
                 h('a', { id: 'syncPill', class: syncPillClass(), href: '#/g/' + doc.id + '/settings' }, syncLabel())),
             summary ? h('section', { class: 'panel' }, summary) : null,
@@ -974,6 +1009,7 @@
             ? [entry.e.desc, entry.e.note, category(entry.e.category).label]
                 .concat(Object.keys(entry.e.payers).map(function (id) { return memberName(doc, id); }))
                 .concat(Object.keys(entry.e.split.values).map(function (id) { return memberName(doc, id); }))
+                .concat((entry.e.items || []).map(function (item) { return item.name; }))
             : [entry.p.note, memberName(doc, entry.p.from), memberName(doc, entry.p.to), 'zahlung'];
         return parts.join(' ').toLowerCase().indexOf(term) !== -1;
     }
@@ -1209,6 +1245,7 @@
             case 'expense-del': return who + ' ' + label + ' gelöscht';
             case 'expense-restore': return who + ' ' + label + ' wiederhergestellt';
             case 'comment': return who + ' ' + label + ' kommentiert';
+            case 'claim': return who + ' bei ' + label + ' Positionen zugeordnet';
             case 'pay-add': return who + ' eine Zahlung eingetragen: ' + a.label;
             case 'pay-edit': return who + ' eine Zahlung geändert: ' + a.label;
             case 'pay-del': return who + ' eine Zahlung gelöscht: ' + a.label;
@@ -1231,7 +1268,7 @@
                     h('div', { class: 'title' }, activityText(doc, a)),
                     h('div', { class: 'sub' }, timeAgo(a.t) + (a.amount ? ' · ' + money(a.amount, a.currency) : '')))
             ];
-            const target = /^expense|^comment/.test(a.kind) && doc.expenses[a.ref]
+            const target = /^expense|^comment|^claim/.test(a.kind) && doc.expenses[a.ref]
                 ? '#/g/' + doc.id + '/expense/' + a.ref
                 : /^pay/.test(a.kind) && doc.payments[a.ref] && !doc.payments[a.ref].del
                     ? '#/g/' + doc.id + '/pay/' + a.ref : null;
@@ -1255,18 +1292,6 @@
         async function copyLink() {
             toast(await copyText(await inviteLink(doc)) ? 'Link kopiert.' : 'Kopieren hat nicht geklappt.');
         }
-        async function shareLink() {
-            const link = await inviteLink(doc);
-            if (navigator.share) {
-                try {
-                    await navigator.share({ title: 'Quitt – ' + doc.meta.name, url: link });
-                    return;
-                } catch (e) {
-                    if (e && e.name === 'AbortError') return;
-                }
-            }
-            toast(await copyText(link) ? 'Link kopiert.' : 'Kopieren hat nicht geklappt.');
-        }
         function toggleQr() {
             if (!qrDrawn && typeof QRCode !== 'undefined') {
                 const box = h('div');
@@ -1287,7 +1312,7 @@
             h('p', { class: 'small muted' }, 'Der Link enthält den aktuellen Stand der Gruppe. Schick ihn in euren Chat: Beim Öffnen wird er mit dem Stand der anderen Person zusammengeführt. Das klappt immer wieder, also auch später zum Abgleichen.'),
             h('p', { class: 'small muted' }, 'Wer den Link hat, kann die Gruppe lesen und bearbeiten. Solange zwei Geräte die Gruppe gleichzeitig offen haben, gleichen sie sich automatisch ab. Für den Verbindungsaufbau wird dabei der öffentliche Dienst PeerJS genutzt, die Daten selbst gehen verschlüsselt von Gerät zu Gerät.'),
             h('div', { class: 'actions' },
-                navigator.share ? h('button', { class: 'btn btn-primary', type: 'button', onclick: shareLink }, 'Link teilen') : null,
+                navigator.share ? h('button', { class: 'btn btn-primary', type: 'button', onclick: function () { shareInvite(doc); } }, 'Link teilen') : null,
                 h('button', { class: navigator.share ? 'btn' : 'btn btn-primary', type: 'button', onclick: copyLink }, 'Link kopieren'),
                 h('button', { class: 'btn', type: 'button', onclick: toggleQr }, 'QR-Code')),
             qrBox,
@@ -1390,9 +1415,6 @@
                         }
                     })),
                 h('div', { class: 'field' },
-                    h('span', { class: 'field-label' }, 'Symbol'),
-                    emojiPicker(doc.meta.emoji, function (emoji) { saveMeta(doc, { emoji: emoji }, true); })),
-                h('div', { class: 'field' },
                     h('label', { for: 'editCurrency' }, 'Standardwährung'),
                     currencySelect(doc.meta.currency, function (e) { saveMeta(doc, { currency: e.target.value }, true); }, { id: 'editCurrency' }))),
             h('section', { class: 'panel' },
@@ -1412,17 +1434,322 @@
                     }, 'Von diesem Gerät entfernen'))));
     }
 
+    /* ---------- Rechnung lesen ---------- */
+
+    function loadOcrLibrary() {
+        if (window.Tesseract) return Promise.resolve();
+        return new Promise(function (resolve, reject) {
+            document.head.appendChild(h('script', { src: OCR_DIR + 'tesseract.min.js', onload: resolve, onerror: reject }));
+        });
+    }
+
+    async function loadPhoto(file) {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.src = url;
+        await img.decode();
+        return { url: url, img: img };
+    }
+
+    /** Schneidet den Bereich aus, verkleinert ihn und macht ihn schwarz-weiß. */
+    function preparePhoto(img, area, maxSide) {
+        const left = area.x * img.naturalWidth;
+        const top = area.y * img.naturalHeight;
+        const width = area.w * img.naturalWidth;
+        const height = area.h * img.naturalHeight;
+        const scale = Math.min(1, maxSide / Math.max(width, height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(width * scale);
+        canvas.height = Math.round(height * scale);
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(img, left, top, width, height, 0, 0, canvas.width, canvas.height);
+        binarize(ctx, canvas.width, canvas.height);
+        return canvas;
+    }
+
+    /** Längster zusammenhängender Abschnitt, in dem `flags` gilt: [Anfang, Ende). */
+    function longestRun(flags) {
+        let best = [0, flags.length];
+        let bestLength = 0;
+        let start = -1;
+        flags.concat([false]).forEach(function (flag, i) {
+            if (flag && start === -1) start = i;
+            if (!flag && start !== -1) {
+                if (i - start > bestLength) {
+                    bestLength = i - start;
+                    best = [start, i];
+                }
+                start = -1;
+            }
+        });
+        return best;
+    }
+
+    /**
+     * Vorschlag für den Rahmen: Ein Bon ist meist die größte helle Fläche im Bild.
+     * Das ist nur ein Startwert, bei hellem Tisch bleibt es einfach das ganze Foto.
+     */
+    function suggestArea(img) {
+        const whole = { x: 0, y: 0, w: 1, h: 1 };
+        const width = 160;
+        const height = Math.max(1, Math.round(width * img.naturalHeight / img.naturalWidth));
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0, width, height);
+        const data = ctx.getImageData(0, 0, width, height).data;
+        const gray = [];
+        for (let i = 0; i < width * height; i++) gray.push(0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2]);
+        const sorted = gray.slice().sort(function (a, b) { return a - b; });
+        const threshold = (sorted[Math.floor(sorted.length * 0.05)] + sorted[Math.floor(sorted.length * 0.95)]) / 2;
+
+        let rows = [0, height];
+        let cols = [0, width];
+        function brightShare(index, other, range) {
+            let count = 0;
+            for (let i = range[0]; i < range[1]; i++) {
+                const position = other === 'row' ? i * width + index : index * width + i;
+                if (gray[position] > threshold) count++;
+            }
+            return count / (range[1] - range[0]);
+        }
+        for (let round = 0; round < 2; round++) {
+            cols = longestRun(Array.from({ length: width }, function (_, x) { return brightShare(x, 'row', rows) > 0.3; }));
+            rows = longestRun(Array.from({ length: height }, function (_, y) { return brightShare(y, 'col', cols) > 0.3; }));
+        }
+
+        const margin = 0.02;
+        const x = Math.max(0, cols[0] / width - margin);
+        const y = Math.max(0, rows[0] / height - margin);
+        const area = {
+            x: x, y: y,
+            w: Math.min(1, cols[1] / width + margin) - x,
+            h: Math.min(1, rows[1] / height + margin) - y
+        };
+        return area.w * area.h < 0.05 ? whole : area;
+    }
+
+    /** Zeigt das Foto mit einem Rahmen. Liefert den Bereich in Anteilen von 0 bis 1, oder null. */
+    function askPhotoArea(box, url, start) {
+        const MIN_SIZE = 0.1;
+        const area = Object.assign({}, start);
+        const frame = h('div', { class: 'crop-frame' });
+        const stage = h('div', { class: 'crop-stage' }, h('img', { src: url, alt: 'Foto der Rechnung' }), frame);
+
+        function place() {
+            frame.style.left = area.x * 100 + '%';
+            frame.style.top = area.y * 100 + '%';
+            frame.style.width = area.w * 100 + '%';
+            frame.style.height = area.h * 100 + '%';
+        }
+
+        function moveCorner(corner, e) {
+            const rect = stage.getBoundingClientRect();
+            const px = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+            const py = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+            if (corner.charAt(1) === 'l') {
+                const right = area.x + area.w;
+                area.x = Math.min(px, right - MIN_SIZE);
+                area.w = right - area.x;
+            } else {
+                area.w = Math.max(px - area.x, MIN_SIZE);
+            }
+            if (corner.charAt(0) === 't') {
+                const bottom = area.y + area.h;
+                area.y = Math.min(py, bottom - MIN_SIZE);
+                area.h = bottom - area.y;
+            } else {
+                area.h = Math.max(py - area.y, MIN_SIZE);
+            }
+            place();
+        }
+
+        ['tl', 'tr', 'bl', 'br'].forEach(function (corner) {
+            frame.appendChild(h('span', {
+                class: 'crop-handle ' + corner,
+                onpointerdown: function (e) {
+                    e.preventDefault();
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                },
+                onpointermove: function (e) {
+                    if (e.currentTarget.hasPointerCapture(e.pointerId)) moveCorner(corner, e);
+                }
+            }));
+        });
+        place();
+
+        return new Promise(function (resolve) {
+            function finish(result) {
+                box.textContent = '';
+                box.hidden = true;
+                resolve(result);
+            }
+            toastEl.hidden = true;
+            box.textContent = '';
+            box.hidden = false;
+            box.appendChild(h('div', { class: 'field-hint', style: 'margin:0 0 8px' }, 'Zieh die Ecken um die Rechnung, damit nichts vom Tisch mitgelesen wird.'));
+            box.appendChild(stage);
+            box.appendChild(h('div', { class: 'actions' },
+                h('button', { class: 'btn', type: 'button', onclick: function () { finish(null); } }, 'Abbrechen'),
+                h('button', {
+                    class: 'btn', type: 'button',
+                    onclick: function () {
+                        Object.assign(area, { x: 0, y: 0, w: 1, h: 1 });
+                        place();
+                    }
+                }, 'Ganzes Foto'),
+                h('button', { class: 'btn btn-primary', type: 'button', onclick: function () { finish(area); } }, 'Bereich lesen')));
+        });
+    }
+
+    /** Summed-Area-Tables über Werte und deren Quadrate, für Mittelwerte beliebiger Fenster. */
+    function areaTables(values, width, height) {
+        const size = (width + 1) * (height + 1);
+        const sums = new Float64Array(size);
+        const squares = new Float64Array(size);
+        for (let y = 0; y < height; y++) {
+            let row = 0;
+            let rowSquares = 0;
+            for (let x = 0; x < width; x++) {
+                const value = values[y * width + x];
+                row += value;
+                rowSquares += value * value;
+                sums[(y + 1) * (width + 1) + x + 1] = sums[y * (width + 1) + x + 1] + row;
+                squares[(y + 1) * (width + 1) + x + 1] = squares[y * (width + 1) + x + 1] + rowSquares;
+            }
+        }
+        return { sums: sums, squares: squares };
+    }
+
+    function windowMean(table, width, height, x, y, radius) {
+        const left = Math.max(0, x - radius);
+        const right = Math.min(width, x + radius + 1);
+        const top = Math.max(0, y - radius);
+        const bottom = Math.min(height, y + radius + 1);
+        const line = width + 1;
+        return (table[bottom * line + right] - table[top * line + right]
+            - table[bottom * line + left] + table[top * line + left]) / ((right - left) * (bottom - top));
+    }
+
+    /**
+     * Schwarz-weiß nach Sauvola: Die Schwelle hängt an der Helligkeit der Umgebung, so
+     * bleibt Text auch im Schatten der Hand lesbar. Das leichte Weichzeichnen davor
+     * nimmt das Bildrauschen, das sonst als Sprenkel übrig bliebe.
+     */
+    function binarize(ctx, width, height) {
+        const image = ctx.getImageData(0, 0, width, height);
+        const data = image.data;
+        const gray = new Float32Array(width * height);
+        for (let i = 0; i < gray.length; i++) {
+            gray[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
+        }
+        const raw = areaTables(gray, width, height).sums;
+        const soft = new Float32Array(width * height);
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) soft[y * width + x] = windowMean(raw, width, height, x, y, 1);
+        }
+        const tables = areaTables(soft, width, height);
+        const radius = Math.max(16, Math.round(Math.max(width, height) / 50));
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const mean = windowMean(tables.sums, width, height, x, y, radius);
+                const deviation = Math.sqrt(Math.max(0, windowMean(tables.squares, width, height, x, y, radius) - mean * mean));
+                const value = soft[y * width + x] > mean * (1 + 0.2 * (deviation / 128 - 1)) ? 255 : 0;
+                const i = (y * width + x) * 4;
+                data[i] = data[i + 1] = data[i + 2] = value;
+            }
+        }
+        ctx.putImageData(image, 0, 0);
+    }
+
+    function receiptSum(receipt) {
+        return receipt.items.reduce(function (acc, item) { return acc + item.amount; }, 0);
+    }
+
+    /** Positionen und Summe passen zusammen; der Rest darf Trinkgeld oder Service sein. */
+    function receiptAddsUp(receipt) {
+        const sum = receiptSum(receipt);
+        return receipt.total > 0 && sum <= receipt.total && sum >= receipt.total * 0.7;
+    }
+
+    function betterReceipt(a, b) {
+        if (!a) return b;
+        if (receiptAddsUp(a) !== receiptAddsUp(b)) return receiptAddsUp(a) ? a : b;
+        return receiptSum(b) > receiptSum(a) ? b : a;
+    }
+
+    /**
+     * Die Texterkennung läuft komplett im Browser, das Foto wird nirgends hochgeladen.
+     * Die Bibliothek (rund 5 MB) wird erst beim ersten Scan geladen, danach kommt sie
+     * aus dem Cache des Service Workers.
+     */
+    async function readReceipt(img, area, currency, onStatus) {
+        onStatus('Lade Texterkennung …');
+        await loadOcrLibrary();
+        const base = new URL(OCR_DIR, location.href).href;
+        let label = 'Lese Rechnung';
+        const worker = await Tesseract.createWorker('deu', Tesseract.OEM.LSTM_ONLY, {
+            workerPath: base + 'worker.min.js',
+            corePath: base + 'tesseract-core-simd-lstm.wasm.js',
+            langPath: base,
+            workerBlobURL: false,
+            cacheMethod: 'none',
+            logger: function (m) {
+                if (m.status === 'recognizing text') onStatus(label + ' … ' + Math.round(m.progress * 100) + ' %');
+            }
+        });
+        try {
+            await worker.setParameters({
+                tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+                preserve_interword_spaces: '1'
+            });
+            let best = null;
+            for (let i = 0; i < OCR_SIDES.length && !(best && receiptAddsUp(best)); i++) {
+                if (i) label = 'Lese genauer';
+                onStatus(label + ' …');
+                const result = await worker.recognize(preparePhoto(img, area, OCR_SIDES[i]));
+                best = betterReceipt(best, C.parseReceipt(result.data.text, currency));
+            }
+            return best;
+        } finally {
+            await worker.terminate();
+        }
+    }
+
     /* ---------- Ausgabe anlegen/bearbeiten ---------- */
 
-    const SPLIT_LABELS = { equal: 'Gleich', exact: 'Beträge', percent: 'Prozent', shares: 'Anteile', adjust: 'Korrektur' };
+    const SPLIT_LABELS = { equal: 'Gleich', exact: 'Beträge', percent: 'Prozent', shares: 'Anteile', adjust: 'Korrektur', items: 'Positionen' };
     const SPLIT_HINTS = {
         equal: 'Alle Angehakten zahlen gleich viel.',
         exact: 'Trag ein, wie viel jede Person genau trägt.',
         percent: 'Trag den Prozentsatz pro Person ein, zusammen 100 %.',
         shares: 'Zum Beispiel 2 für ein Paar und 1 für eine einzelne Person. 0 heißt: nicht beteiligt.',
-        adjust: 'Erst kommt die Korrektur (z. B. +5 für ein extra Getränk, -5 für einen Rabatt), der Rest wird gleich geteilt.'
+        adjust: 'Erst kommt die Korrektur (z. B. +5 für ein extra Getränk, -5 für einen Rabatt), der Rest wird gleich geteilt.',
+        items: 'Tipp an, wer was hatte. Mehrere Namen teilen sich eine Position. Was niemand antippt, zählt als allgemeine Kosten.'
     };
     const REPEAT_LABELS = { none: 'Nicht wiederholen', weekly: 'Jede Woche', biweekly: 'Alle zwei Wochen', monthly: 'Jeden Monat', yearly: 'Jedes Jahr' };
+
+    /** Einklappbarer Abschnitt. `value` zeigt auch im zugeklappten Zustand den aktuellen Stand. */
+    function fold(title, value, body, open) {
+        return h('details', { class: 'fold', open: open },
+            h('summary', null, h('span', { class: 'fold-title' }, title), value),
+            h('div', { class: 'fold-body' }, body));
+    }
+
+    /** Ein Knopf pro Person. Mehrere dürfen an sein, dann teilen sie sich die Position. */
+    function personChips(doc, ids, me, isOn, onToggle) {
+        return h('div', { class: 'chips', role: 'group', 'aria-label': 'Wer hatte das?' }, ids.map(function (id) {
+            return h('button', {
+                class: 'chip', type: 'button', 'aria-pressed': String(isOn(id)),
+                onclick: function (e) {
+                    const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
+                    e.currentTarget.setAttribute('aria-pressed', String(on));
+                    onToggle(id, on);
+                }
+            }, id === me ? 'Du' : memberName(doc, id));
+        }));
+    }
 
     function viewExpenseForm(doc, existing) {
         state.formActive = true;
@@ -1432,11 +1759,12 @@
         // Personen aus einer alten Ausgabe bleiben auswählbar, auch wenn sie die Gruppe verlassen haben.
         const memberIds = activeMembers(doc).map(function (m) { return m.id; });
         if (existing) {
-            Object.keys(existing.payers).concat(Object.keys(existing.split.values)).forEach(function (id) {
+            Object.keys(existing.payers).concat(Object.keys(existing.split.values), claimedMembers(existing)).forEach(function (id) {
                 if (memberIds.indexOf(id) === -1) memberIds.push(id);
             });
         }
 
+        const existingItems = existing && existing.items ? existing.items : [];
         const form = {
             desc: existing ? existing.desc : '',
             amountText: existing ? C.amountToInput(existing.amount, existing.currency) : '',
@@ -1450,8 +1778,22 @@
             paid: {},
             type: existing ? existing.split.type : 'equal',
             included: {},
-            values: { exact: {}, percent: {}, shares: {}, adjust: {} }
+            values: { exact: {}, percent: {}, shares: {}, adjust: {} },
+            items: existingItems.map(function (item) {
+                return { id: item.id, name: item.name, amountText: C.amountToInput(item.amount, existing.currency) };
+            }),
+            picked: {},
+            // Solange niemand einen Betrag vorgibt, ist er die Summe der Positionen.
+            amountFollowsItems: !existing
         };
+        let nextItemId = existingItems.reduce(function (max, item) { return Math.max(max, item.id); }, 0) + 1;
+
+        existingItems.forEach(function (item) {
+            form.picked[item.id] = {};
+            C.claimantsOf(existing, item.id).forEach(function (id) { form.picked[item.id][id] = true; });
+        });
+        const pickedBefore = JSON.parse(JSON.stringify(form.picked));
+
         memberIds.forEach(function (id) {
             form.included[id] = !existing || existing.split.type === 'exact' || existing.split.type === 'percent'
                 || existing.split.type === 'shares' || id in existing.split.values;
@@ -1480,26 +1822,70 @@
 
         const error = h('div', { class: 'form-error', hidden: true });
         const payArea = h('div', null);
+        const itemsArea = h('div', null);
+        const generalLabel = h('span', { class: 'field-label', style: 'margin-top:12px' }, 'Allgemeine Kosten teilen sich');
         const splitRows = h('div', null);
         const splitHint = h('div', { class: 'split-hint' });
         const splitSum = h('div', { class: 'sum-line' });
         const paySum = h('div', { class: 'sum-line' });
         const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Art der Aufteilung' });
+        const payValue = h('span', { class: 'fold-value' });
+        const splitValue = h('span', { class: 'fold-value' });
+        const moreValue = h('span', { class: 'fold-value' });
+        const adoptSum = h('button', {
+            class: 'link-btn small', type: 'button', hidden: true,
+            onclick: function () { form.amountFollowsItems = true; refresh(); }
+        }, 'Betrag auf die Summe setzen');
         const previews = {};
+
+        const descInput = h('input', {
+            id: 'expDesc', type: 'text', maxlength: 120, value: form.desc, placeholder: 'Pizza, Tanken, Miete …', autocomplete: 'off',
+            oninput: function (e) { form.desc = e.target.value; }
+        });
+        const amountInput = h('input', {
+            id: 'expAmount', type: 'text', inputmode: 'decimal', value: form.amountText, placeholder: '0,00', autocomplete: 'off',
+            oninput: function (e) {
+                form.amountText = e.target.value;
+                form.amountFollowsItems = !e.target.value.trim();
+                refresh();
+            }
+        });
+        const dateInput = h('input', {
+            id: 'expDate', type: 'date', value: form.date,
+            onchange: function (e) { form.date = e.target.value; refresh(); }
+        });
 
         function amount() {
             const value = C.parseAmount(form.amountText, form.currency);
             return value && value > 0 ? value : 0;
         }
 
-        /** Liest die Aufteilung aus dem Formular. Liefert {values} oder {error}. */
+        function itemSum() {
+            return form.items.reduce(function (acc, item) { return acc + (C.parseAmount(item.amountText, form.currency) || 0); }, 0);
+        }
+
+        /** Liest die Positionen. Leere Zeilen zählen nicht. Liefert {items} oder {error}. */
+        function readItems() {
+            const items = [];
+            for (let i = 0; i < form.items.length; i++) {
+                const item = form.items[i];
+                const name = item.name.trim();
+                if (!name && !item.amountText.trim()) continue;
+                const value = C.parseAmount(item.amountText, form.currency);
+                if (!value) return { error: 'Bitte prüf die Preise der Positionen.' };
+                items.push({ id: item.id, name: name || 'Position', amount: value });
+            }
+            return items.length ? { items: items } : { error: 'Trag mindestens eine Position ein.' };
+        }
+
+        /** Liest die Aufteilung aus dem Formular. Liefert {values} oder {error}, bei Positionen auch {items}. */
         function readSplit() {
             const values = {};
             let bad = null;
             memberIds.forEach(function (id) {
                 if (bad) return;
                 const text = (form.values[form.type] && form.values[form.type][id]) || '';
-                if (form.type === 'equal') {
+                if (form.type === 'equal' || form.type === 'items') {
                     if (form.included[id]) values[id] = 1;
                 } else if (form.type === 'exact') {
                     if (!text.trim()) return;
@@ -1520,7 +1906,9 @@
             });
             if (bad) return { error: bad };
             if (!Object.keys(values).length) return { error: 'Wähle mindestens eine Person aus.' };
-            return { values: values };
+            if (form.type !== 'items') return { values: values };
+            const read = readItems();
+            return read.error ? read : { values: values, items: read.items };
         }
 
         function readPayers(total) {
@@ -1546,22 +1934,66 @@
             return { payers: payers };
         }
 
+        function formClaims() {
+            const claims = {};
+            Object.keys(form.picked).forEach(function (itemId) {
+                Object.keys(form.picked[itemId]).forEach(function (id) {
+                    if (form.picked[itemId][id]) claims[itemId + '|' + id] = { t: 0, on: true };
+                });
+            });
+            return claims;
+        }
+
+        /**
+         * Nur was in diesem Formular geändert wurde, bekommt einen neuen Zeitstempel.
+         * So bleibt erhalten, was andere währenddessen auf ihrem Gerät angetippt haben.
+         */
+        function savedClaims(items) {
+            const current = doc.expenses[eid];
+            const target = { claims: Object.assign({}, current && current.claims) };
+            items.forEach(function (item) {
+                memberIds.forEach(function (id) {
+                    const before = !!(pickedBefore[item.id] && pickedBefore[item.id][id]);
+                    const now = !!(form.picked[item.id] && form.picked[item.id][id]);
+                    if (before !== now) C.setClaim(target, item.id, id, now);
+                });
+            });
+            return target.claims;
+        }
+
         function setSum(el, text, status) {
             el.textContent = text;
             el.className = 'sum-line' + (status ? ' ' + status : '');
         }
 
+        function setFoldValue(el, text, source) {
+            el.textContent = text;
+            el.className = 'fold-value' + (source && source.classList.contains('bad') ? ' bad' : '');
+        }
+
+        function detailsText() {
+            const parts = [form.date ? (form.date === C.todayStr() ? 'Heute' : formatDate(form.date)) : 'Kein Datum', category(form.category).emoji + ' ' + category(form.category).label];
+            if (form.repeat !== 'none' && form.type !== 'items') parts.push('🔁');
+            if (form.note.trim()) parts.push('📝');
+            return parts.join(' · ');
+        }
+
         function refresh() {
+            if (form.type === 'items' && form.amountFollowsItems) {
+                const sum = itemSum();
+                form.amountText = sum ? C.amountToInput(sum, form.currency) : '';
+                amountInput.value = form.amountText;
+            }
             const total = amount();
             const cur = form.currency;
             const read = readSplit();
-            const owed = total && read.values
-                ? C.computeOwed({ id: eid, amount: total, split: { type: form.type, values: read.values } })
-                : null;
+            const draft = { id: eid, amount: total, split: { type: form.type, values: read.values }, items: read.items, claims: formClaims() };
+            const owed = total && read.values ? C.computeOwed(draft) : null;
 
             memberIds.forEach(function (id) {
                 if (previews[id]) previews[id].textContent = owed && owed[id] ? money(owed[id], cur) : '';
             });
+            adoptSum.hidden = true;
 
             if (form.type === 'exact' && read.values) {
                 const sum = Object.keys(read.values).reduce(function (acc, id) { return acc + read.values[id]; }, 0);
@@ -1579,7 +2011,15 @@
                 else setSum(splitSum, restText + ' % zu viel', 'bad');
             } else if (form.type === 'adjust' && read.values && total && !owed) {
                 setSum(splitSum, 'Die Korrekturen passen nicht zum Betrag', 'bad');
-            } else if (form.type === 'equal' && read.values && total) {
+            } else if (form.type === 'items' && read.values) {
+                const sum = read.items.reduce(function (acc, item) { return acc + item.amount; }, 0);
+                if (sum > total) {
+                    setSum(splitSum, 'Positionen: ' + money(sum, cur) + ', das sind ' + money(sum - total, cur) + ' zu viel', 'bad');
+                    adoptSum.hidden = false;
+                } else {
+                    setSum(splitSum, 'Allgemein: ' + money(C.itemShares(draft).general, cur));
+                }
+            } else if (form.type === 'equal' && read.values) {
                 const count = Object.keys(read.values).length;
                 setSum(splitSum, count + (count === 1 ? ' Person' : ' Personen'));
             } else {
@@ -1596,31 +2036,35 @@
             } else {
                 setSum(paySum, '');
             }
+
+            setFoldValue(payValue, form.payMode === 'single'
+                ? (form.payer === me ? 'Du' : memberName(doc, form.payer))
+                : 'Mehrere' + (paySum.textContent ? ' · ' + paySum.textContent : ''), paySum);
+            setFoldValue(splitValue, SPLIT_LABELS[form.type] + (splitSum.textContent ? ' · ' + splitSum.textContent : ''), splitSum);
+            setFoldValue(moreValue, detailsText());
         }
 
         function drawPayers() {
             payArea.textContent = '';
             if (form.payMode === 'single') {
-                payArea.appendChild(h('div', { class: 'field' },
-                    h('label', { for: 'payer' }, 'Bezahlt von'),
-                    h('select', {
-                        id: 'payer', value: form.payer,
-                        onchange: function (e) {
-                            if (e.target.value === '__multi') {
-                                form.payMode = 'multi';
-                                drawPayers();
-                                refresh();
-                                return;
-                            }
-                            form.payer = e.target.value;
+                payArea.appendChild(h('select', {
+                    id: 'payer', value: form.payer, 'aria-label': 'Bezahlt von',
+                    onchange: function (e) {
+                        if (e.target.value === '__multi') {
+                            form.payMode = 'multi';
+                            drawPayers();
+                            refresh();
+                            return;
                         }
-                    },
-                        memberIds.map(function (id) { return h('option', { value: id }, id === me ? memberName(doc, id) + ' (du)' : memberName(doc, id)); }),
-                        h('option', { value: '__multi' }, 'Mehrere Personen …'))));
+                        form.payer = e.target.value;
+                        refresh();
+                    }
+                },
+                    memberIds.map(function (id) { return h('option', { value: id }, id === me ? memberName(doc, id) + ' (du)' : memberName(doc, id)); }),
+                    h('option', { value: '__multi' }, 'Mehrere Personen …')));
                 return;
             }
-            payArea.appendChild(h('div', { class: 'field' },
-                h('span', { class: 'field-label' }, 'Bezahlt von'),
+            payArea.appendChild(h('div', null,
                 memberIds.map(function (id) {
                     return h('div', { class: 'split-row compact' },
                         h('span', { class: 'name' }, memberName(doc, id)),
@@ -1637,22 +2081,75 @@
                 }, 'Nur eine Person hat bezahlt')));
         }
 
+        function addItem(name, amountText) {
+            const item = { id: nextItemId++, name: name, amountText: amountText };
+            form.items.push(item);
+            return item;
+        }
+
+        function drawItems() {
+            itemsArea.textContent = '';
+            if (form.type !== 'items') return;
+            form.items.forEach(function (item) {
+                if (!form.picked[item.id]) form.picked[item.id] = {};
+                itemsArea.appendChild(h('div', { class: 'bill-item' },
+                    h('div', { class: 'bill-row' },
+                        h('input', {
+                            type: 'text', maxlength: 60, value: item.name, placeholder: 'Position', 'aria-label': 'Bezeichnung',
+                            oninput: function (e) { item.name = e.target.value; refresh(); }
+                        }),
+                        h('input', {
+                            type: 'text', inputmode: 'decimal', value: item.amountText, placeholder: '0,00', 'aria-label': 'Preis',
+                            oninput: function (e) { item.amountText = e.target.value; refresh(); }
+                        }),
+                        h('button', {
+                            class: 'icon-btn', type: 'button', 'aria-label': 'Position entfernen',
+                            onclick: function () {
+                                form.items = form.items.filter(function (other) { return other !== item; });
+                                drawItems();
+                                refresh();
+                            }
+                        }, '✕')),
+                    personChips(doc, memberIds, me,
+                        function (id) { return !!form.picked[item.id][id]; },
+                        function (id, on) { form.picked[item.id][id] = on; refresh(); })));
+            });
+            itemsArea.appendChild(h('button', {
+                class: 'btn btn-small', type: 'button',
+                onclick: function () {
+                    addItem('', '');
+                    drawItems();
+                    refresh();
+                    const inputs = itemsArea.querySelectorAll('.bill-row input[type="text"]:first-child');
+                    if (inputs.length) inputs[inputs.length - 1].focus();
+                }
+            }, '+ Position'));
+        }
+
         function drawSplit() {
             seg.textContent = '';
             C.SPLIT_TYPES.forEach(function (type) {
                 seg.appendChild(h('button', {
                     type: 'button',
                     'aria-pressed': String(type === form.type),
-                    onclick: function () { form.type = type; drawSplit(); refresh(); }
+                    onclick: function () {
+                        form.type = type;
+                        if (type === 'items' && !form.items.length) addItem('', '');
+                        drawSplit();
+                        refresh();
+                    }
                 }, SPLIT_LABELS[type]));
             });
             splitHint.textContent = SPLIT_HINTS[form.type];
+            generalLabel.hidden = form.type !== 'items';
+            repeatField.hidden = form.type === 'items' || !!(existing && existing.parent);
+            drawItems();
 
             splitRows.textContent = '';
             memberIds.forEach(function (id) {
                 const name = memberName(doc, id);
                 previews[id] = h('span', { class: 'preview' });
-                const useCheck = form.type === 'equal' || form.type === 'adjust';
+                const useCheck = form.type === 'equal' || form.type === 'adjust' || form.type === 'items';
                 const labelEl = useCheck
                     ? h('label', null,
                         h('input', {
@@ -1663,7 +2160,7 @@
                     : h('span', { class: 'name' }, name);
 
                 let input = h('span');
-                if (form.type !== 'equal') {
+                if (form.type !== 'equal' && form.type !== 'items') {
                     const placeholder = { exact: '0,00', percent: '0 %', shares: '0', adjust: '+/-' }[form.type];
                     input = h('input', {
                         type: 'text',
@@ -1678,22 +2175,89 @@
             });
         }
 
+        /* Rechnung fotografieren */
+
+        const scanStatus = h('div', { class: 'scan-status', role: 'status', hidden: true });
+        const cropBox = h('div', { hidden: true });
+        const scanText = h('span', null, '📷 Rechnung fotografieren');
+        const scanButton = h('label', { class: 'btn btn-block' }, scanText,
+            h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: onPhoto }));
+
+        function applyReceipt(receipt) {
+            receipt.items.forEach(function (item) {
+                addItem(item.name, C.amountToInput(item.amount, form.currency));
+            });
+            form.type = 'items';
+            if (!form.items.length) addItem('', '');
+
+            // Ein zweites Foto ergänzt das erste, die Summe steht meist nur auf dem letzten.
+            const sum = itemSum();
+            const total = Math.max(receipt.total, sum);
+            form.amountFollowsItems = !total;
+            if (total) {
+                form.amountText = C.amountToInput(total, form.currency);
+                amountInput.value = form.amountText;
+            }
+            if (!form.desc.trim() && receipt.title) {
+                form.desc = receipt.title.slice(0, 120);
+                descInput.value = form.desc;
+            }
+            if (receipt.date && receipt.date <= C.todayStr()) {
+                form.date = receipt.date;
+                dateInput.value = form.date;
+            }
+
+            scanText.textContent = '📷 Weiteres Foto ergänzen';
+            splitFold.open = true;
+            drawSplit();
+            refresh();
+            splitFold.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            toast(receipt.items.length
+                ? receipt.items.length + (receipt.items.length === 1 ? ' Position' : ' Positionen') + ' erkannt. Bitte kurz prüfen.'
+                : 'Keine Positionen erkannt. Du kannst sie von Hand eintragen.');
+        }
+
+        async function onPhoto(e) {
+            const file = e.target.files[0];
+            e.target.value = '';
+            if (!file) return;
+            scanButton.hidden = true;
+            let photo = null;
+            try {
+                photo = await loadPhoto(file);
+                const area = await askPhotoArea(cropBox, photo.url, suggestArea(photo.img));
+                if (area) {
+                    scanStatus.hidden = false;
+                    applyReceipt(await readReceipt(photo.img, area, form.currency, function (message) { scanStatus.textContent = message; }));
+                }
+            } catch (err) {
+                console.warn('Quitt: Foto nicht lesbar.', err);
+                toast(navigator.onLine === false
+                    ? 'Die Texterkennung muss einmal online geladen werden.'
+                    : 'Das Foto konnte nicht gelesen werden.');
+            }
+            if (photo) URL.revokeObjectURL(photo.url);
+            scanButton.hidden = false;
+            scanStatus.hidden = true;
+        }
+
         function submit(e) {
             e.preventDefault();
-            function fail(message) {
+            function fail(message, section) {
                 error.textContent = message;
                 error.hidden = false;
+                if (section) section.open = true;
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             }
             const desc = form.desc.trim();
             const total = amount();
             if (!desc) return fail('Bitte gib eine Beschreibung ein.');
             if (!total) return fail('Bitte gib einen gültigen Betrag ein.');
-            if (!form.date) return fail('Bitte wähle ein Datum.');
+            if (!form.date) return fail('Bitte wähle ein Datum.', moreFold);
             const paid = readPayers(total);
-            if (paid.error) return fail(paid.error);
+            if (paid.error) return fail(paid.error, payFold);
             const read = readSplit();
-            if (read.error) return fail(read.error);
+            if (read.error) return fail(read.error, splitFold);
 
             const record = {
                 id: eid,
@@ -1707,22 +2271,54 @@
                 note: form.note.trim(),
                 payers: paid.payers,
                 split: { type: form.type, values: read.values },
-                repeat: existing && existing.parent ? 'none' : form.repeat,
+                repeat: form.type === 'items' || (existing && existing.parent) ? 'none' : form.repeat,
                 del: false
             };
             if (existing && existing.parent) record.parent = existing.parent;
+            if (form.type === 'items') {
+                record.items = read.items;
+                record.claims = savedClaims(read.items);
+            }
             if (!C.computeOwed(record)) {
                 return fail(form.type === 'percent' ? 'Die Prozente müssen zusammen 100 ergeben.'
                     : form.type === 'exact' ? 'Die Beträge müssen zusammen die Gesamtsumme ergeben.'
-                        : 'Diese Aufteilung geht nicht auf.');
+                        : form.type === 'items' ? 'Die Positionen ergeben mehr als den Betrag.'
+                            : 'Diese Aufteilung geht nicht auf.', splitFold);
             }
 
             doc.expenses[eid] = record;
             logActivity(doc, existing ? 'expense-edit' : 'expense-add', eid, desc, total, form.currency);
             commit(doc);
             state.formActive = false;
-            go('/g/' + doc.id);
+            go('/g/' + doc.id + (form.type === 'items' ? '/expense/' + eid : ''));
         }
+
+        const repeatField = h('div', { class: 'field' },
+            h('label', { for: 'expRepeat' }, 'Wiederholen'),
+            h('select', {
+                id: 'expRepeat', value: form.repeat,
+                onchange: function (e) { form.repeat = e.target.value; refresh(); }
+            }, C.REPEATS.map(function (r) { return h('option', { value: r }, REPEAT_LABELS[r]); })));
+
+        const payFold = fold('Bezahlt von', payValue, payArea);
+        const splitFold = fold('Aufteilung', splitValue, [seg, splitHint, itemsArea, generalLabel, splitRows, splitSum, adoptSum]);
+        const moreFold = fold('Mehr', moreValue, [
+            h('div', { class: 'field-row' },
+                h('div', { class: 'field' }, h('label', { for: 'expDate' }, 'Datum'), dateInput),
+                h('div', { class: 'field' },
+                    h('label', { for: 'expCategory' }, 'Kategorie'),
+                    h('select', {
+                        id: 'expCategory', value: form.category,
+                        onchange: function (e) { form.category = e.target.value; refresh(); }
+                    }, C.CATEGORIES.map(function (c) { return h('option', { value: c.id }, c.emoji + ' ' + c.label); })))),
+            repeatField,
+            h('div', { class: 'field', style: 'margin-bottom:0' },
+                h('label', { for: 'expNote' }, 'Notiz'),
+                h('textarea', {
+                    id: 'expNote', maxlength: 1000, value: form.note,
+                    oninput: function (e) { form.note = e.target.value; refresh(); }
+                }))
+        ]);
 
         drawPayers();
         drawSplit();
@@ -1732,53 +2328,77 @@
             h('form', { class: 'panel', onsubmit: submit, novalidate: true },
                 h('h2', null, existing ? 'Ausgabe bearbeiten' : 'Neue Ausgabe'),
                 error,
-                h('div', { class: 'field' },
-                    h('label', { for: 'expDesc' }, 'Beschreibung'),
-                    h('input', {
-                        id: 'expDesc', type: 'text', maxlength: 120, value: form.desc, placeholder: 'Pizza, Tanken, Miete …', autocomplete: 'off',
-                        oninput: function (e) { form.desc = e.target.value; }
-                    })),
+                existing ? null : h('div', { class: 'field' },
+                    scanButton, cropBox, scanStatus,
+                    h('div', { class: 'field-hint' }, 'Teilt die Rechnung in einzelne Positionen auf. Das Foto bleibt auf deinem Gerät.')),
+                h('div', { class: 'field' }, h('label', { for: 'expDesc' }, 'Beschreibung'), descInput),
                 h('div', { class: 'field' },
                     h('label', { for: 'expAmount' }, 'Betrag'),
                     h('div', { class: 'amount-row' },
-                        h('input', {
-                            id: 'expAmount', type: 'text', inputmode: 'decimal', value: form.amountText, placeholder: '0,00', autocomplete: 'off',
-                            oninput: function (e) { form.amountText = e.target.value; refresh(); }
-                        }),
+                        amountInput,
                         currencySelect(form.currency, function (e) { form.currency = e.target.value; refresh(); }, { 'aria-label': 'Währung' }))),
-                h('div', { class: 'field-row' },
-                    h('div', { class: 'field' },
-                        h('label', { for: 'expDate' }, 'Datum'),
-                        h('input', {
-                            id: 'expDate', type: 'date', value: form.date,
-                            onchange: function (e) { form.date = e.target.value; }
-                        })),
-                    h('div', { class: 'field' },
-                        h('label', { for: 'expCategory' }, 'Kategorie'),
-                        h('select', {
-                            id: 'expCategory', value: form.category,
-                            onchange: function (e) { form.category = e.target.value; }
-                        }, C.CATEGORIES.map(function (c) { return h('option', { value: c.id }, c.emoji + ' ' + c.label); })))),
-                payArea,
-                h('div', { class: 'field' },
-                    h('span', { class: 'field-label' }, 'Aufteilung'),
-                    seg, splitHint, splitRows, splitSum),
-                existing && existing.parent ? null : h('div', { class: 'field' },
-                    h('label', { for: 'expRepeat' }, 'Wiederholen'),
-                    h('select', {
-                        id: 'expRepeat', value: form.repeat,
-                        onchange: function (e) { form.repeat = e.target.value; }
-                    }, C.REPEATS.map(function (r) { return h('option', { value: r }, REPEAT_LABELS[r]); }))),
-                h('div', { class: 'field' },
-                    h('label', { for: 'expNote' }, 'Notiz'),
-                    h('textarea', {
-                        id: 'expNote', maxlength: 1000, value: form.note,
-                        oninput: function (e) { form.note = e.target.value; }
-                    })),
+                h('div', { class: 'folds' }, payFold, splitFold, moreFold),
                 h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, existing ? 'Änderungen speichern' : 'Ausgabe speichern')));
 
         refresh();
         return view;
+    }
+
+    function claimedMembers(e) {
+        const ids = [];
+        Object.keys(e.claims || {}).forEach(function (key) {
+            const id = key.split('|')[1];
+            if (e.claims[key].on && ids.indexOf(id) === -1) ids.push(id);
+        });
+        return ids;
+    }
+
+    /** Viele Antipper hintereinander sind ein Eintrag im Verlauf, nicht zehn. */
+    function logClaim(doc, e) {
+        const me = meId(doc.id);
+        const recent = Object.keys(doc.activity)
+            .map(function (id) { return doc.activity[id]; })
+            .filter(function (a) { return a.kind === 'claim' && a.ref === e.id && a.by === me && Date.now() - a.t < 600000; })[0];
+        if (recent) doc.activity[recent.id] = Object.assign({}, recent, { t: C.nextT(doc) });
+        else logActivity(doc, 'claim', e.id, e.desc);
+    }
+
+    /** Hier wählt jede Person selbst aus, auch auf dem eigenen Gerät. */
+    function viewItemsPanel(doc, e, me) {
+        const ids = activeMembers(doc).map(function (m) { return m.id; });
+        claimedMembers(e).forEach(function (id) {
+            if (ids.indexOf(id) === -1) ids.push(id);
+        });
+        const shares = C.itemShares(e);
+        const openCount = e.items.filter(function (item) { return !C.claimantsOf(e, item.id).length; }).length;
+
+        function toggle(item, id, on) {
+            const current = doc.expenses[e.id];
+            C.setClaim(current, item.id, id, on);
+            logClaim(doc, current);
+            commit(doc);
+            softRender();
+        }
+
+        return h('section', { class: 'panel' },
+            h('h2', null, 'Wer hatte was?'),
+            e.del ? null : h('p', { class: 'small muted', style: 'margin-bottom:6px' }, 'Tippt bei jeder Position an, wer sie hatte. Mehrere Namen teilen sie sich. Was niemand antippt, teilen sich alle als allgemeine Kosten.'),
+            e.items.map(function (item) {
+                const claimants = C.claimantsOf(e, item.id);
+                return h('div', { class: 'bill-item' },
+                    h('div', { class: 'kv' }, h('span', null, item.name), h('span', null, money(item.amount, e.currency))),
+                    e.del ? null : personChips(doc, ids, me,
+                        function (id) { return claimants.indexOf(id) !== -1; },
+                        function (id, on) { toggle(item, id, on); }));
+            }),
+            h('div', { class: 'kv bill-general' },
+                h('span', null, 'Allgemeine Kosten' + (openCount ? ' (' + openCount + ' offen)' : '')),
+                h('span', null, money(shares ? shares.general : 0, e.currency))),
+            e.del ? null : h('div', { class: 'actions' },
+                h('button', {
+                    class: 'btn', type: 'button',
+                    onclick: function () { shareInvite(doc, e.id); }
+                }, 'Link zum Auswählen schicken')));
     }
 
     /* ---------- Ausgabe-Detail ---------- */
@@ -1867,6 +2487,7 @@
                             });
                         }
                     }, 'Löschen'))),
+            e.items ? viewItemsPanel(doc, e, me) : null,
             h('section', { class: 'panel' },
                 h('h2', null, 'Kommentare'),
                 comments.length ? null : h('div', { class: 'small muted' }, 'Noch keine Kommentare.'),
@@ -1917,6 +2538,12 @@
         };
 
         const error = h('div', { class: 'form-error', hidden: true });
+        const moreValue = h('span', { class: 'fold-value' });
+
+        function refreshMore() {
+            moreValue.textContent = (form.date ? formatDate(form.date, true) : 'Kein Datum') + (form.note.trim() ? ' · 📝' : '');
+        }
+        refreshMore();
 
         function personSelect(id, key, labelText) {
             return h('div', { class: 'field' },
@@ -1933,6 +2560,21 @@
             return memberName(doc, form.from) + ' an ' + memberName(doc, form.to);
         }
 
+        const moreFold = fold('Mehr', moreValue, [
+            h('div', { class: 'field' },
+                h('label', { for: 'payDate' }, 'Datum'),
+                h('input', {
+                    id: 'payDate', type: 'date', value: form.date,
+                    onchange: function (e) { form.date = e.target.value; refreshMore(); }
+                })),
+            h('div', { class: 'field', style: 'margin-bottom:0' },
+                h('label', { for: 'payNote' }, 'Notiz'),
+                h('input', {
+                    id: 'payNote', type: 'text', maxlength: 300, value: form.note,
+                    oninput: function (e) { form.note = e.target.value; refreshMore(); }
+                }))
+        ]);
+
         function submit(e) {
             e.preventDefault();
             function fail(message) {
@@ -1942,7 +2584,10 @@
             const amount = C.parseAmount(form.amountText, form.currency);
             if (!amount) return fail('Bitte gib einen gültigen Betrag ein.');
             if (form.from === form.to) return fail('Wähle zwei verschiedene Personen.');
-            if (!form.date) return fail('Bitte wähle ein Datum.');
+            if (!form.date) {
+                moreFold.open = true;
+                return fail('Bitte wähle ein Datum.');
+            }
             const id = payment ? payment.id : C.newId();
             doc.payments[id] = {
                 id: id, t: C.nextT(doc), by: me, from: form.from, to: form.to, amount: amount,
@@ -1986,18 +2631,7 @@
                             oninput: function (e) { form.amountText = e.target.value; }
                         }),
                         currencySelect(form.currency, function (e) { form.currency = e.target.value; }, { 'aria-label': 'Währung' }))),
-                h('div', { class: 'field' },
-                    h('label', { for: 'payDate' }, 'Datum'),
-                    h('input', {
-                        id: 'payDate', type: 'date', value: form.date,
-                        onchange: function (e) { form.date = e.target.value; }
-                    })),
-                h('div', { class: 'field' },
-                    h('label', { for: 'payNote' }, 'Notiz'),
-                    h('input', {
-                        id: 'payNote', type: 'text', maxlength: 300, value: form.note,
-                        oninput: function (e) { form.note = e.target.value; }
-                    })),
+                h('div', { class: 'folds' }, moreFold),
                 h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, payment ? 'Änderungen speichern' : 'Zahlung speichern'),
                 payment && !payment.del ? h('div', { class: 'actions' },
                     h('button', { class: 'btn btn-danger', type: 'button', onclick: removePayment }, 'Zahlung löschen')) : null));
@@ -2024,12 +2658,25 @@
         }, 300);
     });
 
+    // Ein Tab im Hintergrund bekommt auf dem Handy keine storage-Events. Ohne das hier
+    // würde er beim nächsten Speichern überschreiben, was ein anderer Tab angelegt hat.
     document.addEventListener('visibilitychange', function () {
-        if (!document.hidden) Sync.wake();
+        if (document.hidden) return;
+        if (!state.unsaved && adoptStored()) softRender();
+        Sync.wake();
     });
     window.addEventListener('online', function () { Sync.wake(); });
     window.addEventListener('offline', function () { updateSyncPill(); });
 
     store = readStored();
+    askToKeepData();
+    if (!location.hash && store.groups[store.last]) history.replaceState(null, '', '#/g/' + store.last);
     handleJoin().then(render);
+
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js').catch(function (e) {
+            // Normal bei file://, die App läuft dann ohne Offline-Modus.
+            console.info('Quitt: Kein Service Worker.', e);
+        });
+    }
 })();

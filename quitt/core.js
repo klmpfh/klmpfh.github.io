@@ -39,15 +39,17 @@
     var CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF', 'SEK', 'NOK', 'DKK', 'PLN', 'CZK', 'HUF',
         'TRY', 'JPY', 'CAD', 'AUD', 'THB'];
 
-    var SPLIT_TYPES = ['equal', 'exact', 'percent', 'shares', 'adjust'];
+    var SPLIT_TYPES = ['equal', 'exact', 'percent', 'shares', 'adjust', 'items'];
     var REPEATS = ['none', 'weekly', 'biweekly', 'monthly', 'yearly'];
 
     var MAX_AMOUNT = 1e12;
+    var MAX_ITEMS = 200;
 
     var RE_GROUP_ID = /^[0-9a-f]{32}$/;
     var RE_ID = /^[0-9a-f]{16}$/;
     var RE_EXPENSE_ID = /^[0-9a-f]{16}(~\d{4}-\d{2}-\d{2})?$/;
     var RE_DATE = /^\d{4}-\d{2}-\d{2}$/;
+    var RE_CLAIM_KEY = /^\d{1,4}\|[0-9a-f]{16}$/;
 
     /* ---------- IDs & kleine Helfer ---------- */
 
@@ -201,6 +203,7 @@
      *   percent  id → Prozent (Summe 100)
      *   shares   id → Anteile (> 0)
      *   adjust   id → Korrektur in Cent (±), der Rest wird gleich geteilt
+     *   items    id → 1 (wer die allgemeinen Kosten mitträgt, siehe itemShares)
      */
     function computeOwed(expense) {
         var split = expense.split || {};
@@ -268,9 +271,67 @@
                 }
                 return adjusted;
 
+            case 'items':
+                var shares = itemShares(expense);
+                if (!shares) return null;
+                ids.forEach(function (x) { weights[x] = 1; });
+                var general = distribute(weights, shares.general, seed);
+                Object.keys(general).forEach(function (x) {
+                    shares.owed[x] = (shares.owed[x] || 0) + general[x];
+                });
+                return shares.owed;
+
             default:
                 return null;
         }
+    }
+
+    /* ---------- Positionen einer Rechnung ---------- */
+
+    /**
+     * Wer hatte diese Position? Eine Zuordnung ist ein eigener kleiner Datensatz
+     * pro Position und Person (expense.claims["<position>|<person>"] = {t, on}).
+     * Tippen zwei Personen gleichzeitig an, überlebt beides: Die Position wird
+     * dann einfach geteilt, statt dass ein Gerät das andere überschreibt.
+     */
+    function claimantsOf(expense, itemId) {
+        var claims = expense.claims || {};
+        var prefix = itemId + '|';
+        return Object.keys(claims)
+            .filter(function (key) { return key.indexOf(prefix) === 0 && claims[key].on; })
+            .map(function (key) { return key.slice(prefix.length); })
+            .sort();
+    }
+
+    /** {owed, general}: Zugeordnetes pro Person, und was als allgemeine Kosten übrig bleibt. */
+    function itemShares(expense) {
+        var items = expense.items;
+        if (!Array.isArray(items) || !items.length) return null;
+        var owed = {};
+        var sum = 0;
+        var general = expense.amount;
+        for (var i = 0; i < items.length; i++) {
+            var item = items[i];
+            if (!isMoney(item.amount)) return null;
+            sum += item.amount;
+            var ids = claimantsOf(expense, item.id);
+            if (!ids.length) continue;
+            general -= item.amount;
+            var weights = {};
+            ids.forEach(function (id) { weights[id] = 1; });
+            var part = distribute(weights, item.amount, (expense.id || '') + '|' + item.id);
+            ids.forEach(function (id) { owed[id] = (owed[id] || 0) + part[id]; });
+        }
+        // Hängt nur an den Positionen, nie an den Zuordnungen: Eine Zuordnung, die
+        // erst beim Abgleich dazukommt, kann eine gültige Ausgabe nicht ungültig machen.
+        return sum > expense.amount ? null : { owed: owed, general: general };
+    }
+
+    /** Zeitstempel je Zuordnung, damit ein Antippen nie an einem älteren Stand scheitert. */
+    function setClaim(expense, itemId, memberId, on) {
+        var key = itemId + '|' + memberId;
+        var prev = expense.claims[key];
+        expense.claims[key] = { t: Math.max(Date.now(), prev ? prev.t + 1 : 0), on: !!on };
     }
 
     function payersValid(expense) {
@@ -510,7 +571,7 @@
     function emptyGroup(id) {
         return {
             id: id,
-            meta: { t: 0, name: '', emoji: '💸', currency: 'EUR', simplify: true },
+            meta: { t: 0, name: '', currency: 'EUR', simplify: true },
             members: {}, expenses: {}, payments: {}, comments: {}, activity: {}
         };
     }
@@ -535,6 +596,35 @@
         return JSON.stringify(incoming) > JSON.stringify(current);
     }
 
+    function withoutClaims(record) {
+        var copy = Object.assign({}, record);
+        delete copy.claims;
+        return copy;
+    }
+
+    /**
+     * Sieger von zwei Ständen eines Datensatzes (`cur`, falls nichts Neues dabei ist).
+     * Zuordnungen laufen quer dazu: Sie ändern nicht den Zeitstempel der Ausgabe und
+     * werden einzeln zusammengeführt, so geht weder eine gleichzeitige Bearbeitung
+     * der Ausgabe noch die Auswahl einer anderen Person verloren.
+     */
+    function mergeRecord(cur, incoming) {
+        if (!cur.claims && !incoming.claims) return isNewer(incoming, cur) ? incoming : cur;
+        var base = isNewer(withoutClaims(incoming), withoutClaims(cur)) ? incoming : cur;
+        if (base.split.type !== 'items') return base;
+        var claims = Object.assign({}, cur.claims);
+        var changed = base !== cur;
+        Object.keys(incoming.claims || {}).forEach(function (key) {
+            var mine = claims[key];
+            var theirs = incoming.claims[key];
+            if (!mine || theirs.t > mine.t || (theirs.t === mine.t && theirs.on && !mine.on)) {
+                claims[key] = theirs;
+                changed = true;
+            }
+        });
+        return changed ? Object.assign({}, base, { claims: claims }) : cur;
+    }
+
     /** Führt `incoming` in `target` zusammen. Liefert, ob sich `target` geändert hat. */
     function mergeGroups(target, incoming) {
         var changed = false;
@@ -545,8 +635,9 @@
         COLLECTIONS.forEach(function (coll) {
             Object.keys(incoming[coll]).forEach(function (id) {
                 var cur = target[coll][id];
-                if (!cur || isNewer(incoming[coll][id], cur)) {
-                    target[coll][id] = incoming[coll][id];
+                var next = cur ? mergeRecord(cur, incoming[coll][id]) : incoming[coll][id];
+                if (next !== cur) {
+                    target[coll][id] = next;
                     changed = true;
                 }
             });
@@ -589,6 +680,29 @@
         return { id: m.id, t: m.t, name: name, left: !!m.left };
     }
 
+    function cleanItems(raw) {
+        if (!Array.isArray(raw)) return [];
+        var seen = {};
+        return raw.slice(0, MAX_ITEMS).filter(function (item) {
+            if (!item || !Number.isSafeInteger(item.id) || item.id < 0 || item.id > 9999) return false;
+            if (seen[item.id] || !isMoney(item.amount)) return false;
+            seen[item.id] = true;
+            return true;
+        }).map(function (item) {
+            return { id: item.id, name: clip(item.name, 60).trim() || 'Position', amount: item.amount };
+        });
+    }
+
+    function cleanClaims(raw) {
+        var out = {};
+        if (!raw || typeof raw !== 'object') return out;
+        Object.keys(raw).forEach(function (key) {
+            var claim = raw[key];
+            if (RE_CLAIM_KEY.test(key) && claim && isT(claim.t)) out[key] = { t: claim.t, on: !!claim.on };
+        });
+        return out;
+    }
+
     function cleanExpense(e) {
         if (!RE_EXPENSE_ID.test(e.id) || !isT(e.t)) return null;
         if (!isMoney(e.amount) || !isCurrency(e.currency) || !RE_DATE.test(String(e.date))) return null;
@@ -611,6 +725,10 @@
             del: !!e.del
         };
         if (typeof e.parent === 'string' && RE_ID.test(e.parent)) out.parent = e.parent;
+        if (out.split.type === 'items') {
+            out.items = cleanItems(e.items);
+            out.claims = cleanClaims(e.claims);
+        }
         return payersValid(out) && computeOwed(out) ? out : null;
     }
 
@@ -653,7 +771,6 @@
             meta: {
                 t: m.t,
                 name: clip(m.name, 60).trim(),
-                emoji: clip(m.emoji, 12) || '💸',
                 currency: isCurrency(m.currency) ? m.currency : 'EUR',
                 simplify: m.simplify !== false
             },
@@ -673,6 +790,131 @@
         });
         ids.slice(activityLimit).forEach(function (id) { delete copy.activity[id]; });
         return copy;
+    }
+
+    /* ---------- Gruppensymbol ---------- */
+
+    var EMOJI_UNIT = '(?:\\p{RI}\\p{RI}|[0-9#*]\\uFE0F?\\u20E3|(?![©®™])\\p{Extended_Pictographic}' +
+        '(?:\\p{EMod}|\\uFE0F)?(?:[\\u{E0020}-\\u{E007E}]+\\u{E007F})?)';
+    var RE_EMOJI = new RegExp(EMOJI_UNIT + '(?:\\u200D' + EMOJI_UNIT + ')*', 'u');
+
+    /**
+     * Das erste Emoji im Namen, sonst die Anfangsbuchstaben der ersten zwei Wörter
+     * ("Sommer in Lissabon" → SI) bzw. die ersten zwei Buchstaben eines einzelnen
+     * Worts ("Mallorca" → MA).
+     */
+    function groupSymbol(name) {
+        var text = String(name || '').normalize('NFC');
+        var emoji = text.match(RE_EMOJI);
+        if (emoji) return { text: emoji[0], emoji: true };
+        var words = text.match(/[\p{L}\p{M}\p{N}]+/gu) || [];
+        var letters = words.length > 1
+            ? words.slice(0, 2).map(function (w) { return Array.from(w)[0]; }).join('')
+            : Array.from(words[0] || '?').slice(0, 2).join('');
+        return { text: Array.from(letters.toLocaleUpperCase('de')).slice(0, 2).join(''), emoji: false };
+    }
+
+    /* ---------- Rechnungen lesen ---------- */
+
+    var RE_RECEIPT_SUBTOTAL = /(zwischen|sub)[\s-]*(summe|total)/i;
+    var RE_RECEIPT_TOTAL = /gesamt|summe|total|endbetrag|rechnungsbetrag|zahlbetrag|zu\s*zahlen|^\W*betrag/i;
+    var RE_RECEIPT_SKIP = new RegExp('\\b(?:m\\.?w\\.?st|ust|tax|vat|bar|ec|tip|tisch|kellner|kasse|beleg|tel|fax)\\b|' +
+        'steuer|netto|brutto|gegeben|r(?:ü|ue?)ckgeld|zur(?:ü|ue?)ck|wechselgeld|kartenzahlung|girocard|visa|mastercard|trinkgeld', 'i');
+    // Gruppen: Text davor, Minus davor, Betrag, Minus dahinter (Rabattzeilen)
+    var RE_RECEIPT_AMOUNT = /^(|.*?[^\d.,])([-−]?)((?:\d{1,3}(?:[.,\s]\d{3})+|\d+)[.,]\s?\d\d)\s*(?:€|eur|[a-z])?\s*(-?)$/i;
+    var RE_RECEIPT_WHOLE = /^(|.*?\s)([-−]?)((?:\d{1,3}(?:[.,]\d{3})+|\d+))\s*(?:[¥円]|[a-z]{3})?\s*(-?)$/i;
+
+    function receiptDate(text) {
+        var m = text.match(/\b(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4}|\d{2})\b/);
+        if (!m) return null;
+        var year = m[3].length === 2 ? '20' + m[3] : m[3];
+        if (+m[2] < 1 || +m[2] > 12 || +m[1] < 1 || +m[1] > 31 || year < '2000') return null;
+        return year + '-' + pad2(+m[2]) + '-' + pad2(+m[1]);
+    }
+
+    function cleanReceiptName(text) {
+        return text.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N})%]+$/gu, '').replace(/\s+/g, ' ').slice(0, 60);
+    }
+
+    /** "2 x Bier 7,00" und "2 Bier 3,50 7,00" werden zwei Positionen, damit jede Person ihr Bier antippen kann. */
+    function pushReceiptItems(items, rawName, amount, cur, amountRe) {
+        // Am Zeilenanfang liest die Erkennung gern Bon-Kante oder "1" als Zeichensalat.
+        var name = rawName.trim().replace(/\s+(?:[àa@]|je)$/i, '')
+            .replace(/^(?:\d{1,3}|\S)\s+(?=(?:\d{1,2}(?:\s*[xX×*])?|[lIıł|!\[\]]|1[^\d\s])\s+\p{L})/u, '')
+            .replace(/^(?:[lIıł|!\[\]]|1[lIıłi]|1[^\p{L}\d\s])\s+(?=\p{L})/u, '1 ');
+        var qty = 1;
+        var unit = null;
+        var tail = name.match(amountRe);
+        if (tail) {
+            unit = parseAmount(tail[3], cur);
+            name = tail[1].trim().replace(/\s+(?:[àa@]|je)$/i, '');
+        }
+        var explicit = name.match(/^(\d{1,2})\s*[xX×*]\s*(.+)$/);
+        var implicit = name.match(/^(\d{1,2})\s+(\D.*)$/);
+        if (explicit) {
+            qty = +explicit[1];
+            name = explicit[2];
+        } else if (implicit && (+implicit[1] === 1 || (unit && +implicit[1] * unit === amount))) {
+            qty = +implicit[1];
+            name = implicit[2];
+        }
+        name = cleanReceiptName(name);
+        if (Array.from(name.replace(/[^\p{L}]/gu, '')).length < 2) return false;
+        if (qty < 1 || qty > 20) qty = 1;
+        var base = Math.floor(amount / qty);
+        for (var i = 0; i < qty; i++) {
+            items.push({ name: name, amount: base + (i < amount - base * qty ? 1 : 0) });
+        }
+        return true;
+    }
+
+    /**
+     * Macht aus dem OCR-Text einer Rechnung {title, date, items, total}. Das Ergebnis
+     * ist ein Vorschlag: Bis zur Gesamtsumme zählt jede Zeile mit Preis am Ende als
+     * Position, danach kommen nur noch Steuer und Zahlungsart.
+     */
+    function parseReceipt(text, cur) {
+        var amountRe = currencyDecimals(cur) === 0 ? RE_RECEIPT_WHOLE : RE_RECEIPT_AMOUNT;
+        var items = [];
+        var total = 0;
+        var title = '';
+        var pendingName = '';
+        var afterTotal = false;
+
+        String(text).split(/\r?\n/).forEach(function (raw) {
+            var line = raw.replace(/[|_~^`]+/g, ' ').replace(/[\s.,:;'"’‘*]+$/, '').trim();
+            if (!line) return;
+            line = line.replace(/(\d[.,]\s?\d)[oO]$/, '$10').replace(/(\d[.,]\s?)[oO](\d)$/, '$10$2');
+            var match = line.match(amountRe);
+            var value = match ? parseAmount(match[3], cur) : null;
+            var name = match ? match[1].trim() : line;
+
+            if (RE_RECEIPT_SUBTOTAL.test(line)) return;
+            if (RE_RECEIPT_TOTAL.test(name) && !RE_RECEIPT_SKIP.test(name)) {
+                afterTotal = true;
+                if (value) total = Math.max(total, value);
+                return;
+            }
+            if (afterTotal || RE_RECEIPT_SKIP.test(name)) return;
+
+            if (!value) {
+                pendingName = /\p{L}{2}/u.test(line) ? line : '';
+                if (!items.length && !title && /\p{L}{3}/u.test(line)) title = cleanReceiptName(line);
+                return;
+            }
+            if (match[2] || match[4]) {
+                // Rabattzeile: gehört zur Position direkt darüber.
+                var last = items[items.length - 1];
+                if (last && last.amount > value) last.amount -= value;
+                return;
+            }
+            if (!pushReceiptItems(items, name, value, cur, amountRe) && pendingName) {
+                pushReceiptItems(items, pendingName, value, cur, amountRe);
+            }
+            pendingName = '';
+        });
+
+        return { title: title, date: receiptDate(String(text)), items: items, total: total };
     }
 
     /* ---------- CSV ---------- */
@@ -730,6 +972,7 @@
         SPLIT_TYPES: SPLIT_TYPES,
         REPEATS: REPEATS,
         RE_GROUP_ID: RE_GROUP_ID,
+        RE_EXPENSE_ID: RE_EXPENSE_ID,
         newId: newId,
         newGroupId: newGroupId,
         todayStr: todayStr,
@@ -740,6 +983,9 @@
         parseQuantity: parseQuantity,
         distribute: distribute,
         computeOwed: computeOwed,
+        claimantsOf: claimantsOf,
+        itemShares: itemShares,
+        setClaim: setClaim,
         payersValid: payersValid,
         liveExpenses: liveExpenses,
         livePayments: livePayments,
@@ -758,6 +1004,8 @@
         mergeGroups: mergeGroups,
         sanitizeGroup: sanitizeGroup,
         snapshotForLink: snapshotForLink,
+        groupSymbol: groupSymbol,
+        parseReceipt: parseReceipt,
         toCsv: toCsv
     };
 });
