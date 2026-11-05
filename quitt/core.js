@@ -11,7 +11,7 @@
  *    unabhängig voneinander arbeiten und später beliebig oft in beliebiger
  *    Reihenfolge abgleichen, ohne dass etwas verloren geht oder wieder auftaucht.
  * 
- * sudo!
+ * sudo!2
  */
 (function (root, factory) {
     var api = factory();
