@@ -1,0 +1,2035 @@
+/**
+ * Quitt – Oberfläche, Speicherung und Abgleich zwischen Geräten.
+ *
+ * Es gibt keinen Server: Jede Gruppe liegt als Dokument im localStorage des
+ * jeweiligen Browsers. Geräte gleichen sich auf zwei Wegen ab, beide nutzen
+ * dasselbe verlustfreie Zusammenführen aus core.js (mergeGroups):
+ *  - Link: Der Einladungslink trägt den kompletten Stand im #-Teil der URL, der
+ *    nie an einen Server geschickt wird.
+ *  - Live: Wer eine Gruppe geöffnet hat, verbindet sich per WebRTC (PeerJS wie in
+ *    /fileshare/) mit den anderen Geräten, die sie gerade auch geöffnet haben.
+ *
+ * Alle Texte werden über h()/Textknoten eingefügt, nie als HTML: Namen und
+ * Beschreibungen stammen von anderen Personen.
+ */
+(function () {
+    'use strict';
+
+    const C = window.QuittCore;
+    const STORE_KEY = 'quitt-v1';
+    const PEER_PREFIX = 'klmpfh-quitt-';
+    const MAX_DECOMPRESSED = 8 * 1024 * 1024;
+    const LINK_ACTIVITY_LIMIT = 60;
+
+    const app = document.getElementById('app');
+    const toastEl = document.getElementById('toast');
+
+    let store = { groups: {}, me: {} };
+    const state = { formActive: false, pendingRender: false, search: '', statsCur: null, lastPath: null };
+
+    /* ---------- Helfer ---------- */
+
+    function h(tag, attrs) {
+        const el = document.createElement(tag);
+        const kids = Array.prototype.slice.call(arguments, 2);
+        let value;
+        if (attrs) {
+            Object.keys(attrs).forEach(function (key) {
+                const v = attrs[key];
+                if (v === null || v === undefined || v === false) return;
+                if (key.slice(0, 2) === 'on') el.addEventListener(key.slice(2), v);
+                else if (key === 'class') el.className = v;
+                else if (key === 'value') value = v;
+                else if (key === 'checked' || key === 'disabled' || key === 'selected' || key === 'required') el[key] = !!v;
+                else el.setAttribute(key, v === true ? '' : v);
+            });
+        }
+        (function add(list) {
+            list.forEach(function (kid) {
+                if (kid === null || kid === undefined || kid === false) return;
+                if (Array.isArray(kid)) add(kid);
+                else el.appendChild(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+            });
+        })(kids);
+        if (value !== undefined) el.value = value; // erst nach den <option>-Kindern
+        return el;
+    }
+
+    function money(minor, cur) { return C.formatMoney(minor, cur); }
+
+    function formatDate(dateStr, withYear) {
+        const p = dateStr.split('-').map(Number);
+        const opts = { day: 'numeric', month: 'short' };
+        if (withYear) opts.year = 'numeric';
+        return new Date(p[0], p[1] - 1, p[2]).toLocaleDateString('de-DE', opts);
+    }
+
+    function monthLabel(dateStr) {
+        const p = dateStr.split('-').map(Number);
+        return new Date(p[0], p[1] - 1, 1).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+    }
+
+    function timeAgo(t) {
+        const rtf = new Intl.RelativeTimeFormat('de', { numeric: 'auto' });
+        const seconds = Math.round((t - Date.now()) / 1000);
+        const steps = [[60, 'second'], [3600, 'minute'], [86400, 'hour'], [2592000, 'day'], [31536000, 'month']];
+        let divisor = 1;
+        for (let i = 0; i < steps.length; i++) {
+            if (Math.abs(seconds) < steps[i][0]) return rtf.format(Math.round(seconds / divisor), steps[i][1]);
+            divisor = steps[i][0];
+        }
+        return rtf.format(Math.round(seconds / divisor), 'year');
+    }
+
+    function category(id) {
+        return C.CATEGORIES.filter(function (c) { return c.id === id; })[0] || C.CATEGORIES[0];
+    }
+
+    let toastTimer = null;
+    function toast(text, actionLabel, action) {
+        clearTimeout(toastTimer);
+        toastEl.textContent = '';
+        toastEl.appendChild(document.createTextNode(text));
+        if (actionLabel) {
+            toastEl.appendChild(h('button', {
+                type: 'button',
+                onclick: function () { toastEl.hidden = true; action(); }
+            }, actionLabel));
+        }
+        toastEl.hidden = false;
+        toastTimer = setTimeout(function () { toastEl.hidden = true; }, actionLabel ? 7000 : 3000);
+    }
+
+    async function copyText(text) {
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch (e) {
+            // Fallback ohne Clipboard-API (http, file://, ältere Browser)
+            const area = h('textarea', { style: 'position:fixed;opacity:0' });
+            area.value = text;
+            document.body.appendChild(area);
+            area.select();
+            let ok = false;
+            try { ok = document.execCommand('copy'); } catch (err) { /* Rückmeldung per Rückgabewert */ }
+            area.remove();
+            return ok;
+        }
+    }
+
+    /** Text teilen: Über das System-Menü, sonst in die Zwischenablage. */
+    async function shareText(title, text) {
+        if (navigator.share) {
+            try {
+                await navigator.share({ title: title, text: text });
+                return;
+            } catch (e) {
+                if (e && e.name === 'AbortError') return;
+            }
+        }
+        toast(await copyText(text) ? 'In die Zwischenablage kopiert.' : 'Kopieren hat nicht geklappt.');
+    }
+
+    function download(filename, mime, text) {
+        const url = URL.createObjectURL(new Blob([text], { type: mime }));
+        const a = h('a', { href: url, download: filename });
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+    }
+
+    function fileSafe(name) {
+        return (name || 'gruppe').replace(/[^\p{L}\p{N}_-]+/gu, '-').replace(/^-+|-+$/g, '') || 'gruppe';
+    }
+
+    /* ---------- Speicher ---------- */
+
+    function readStored() {
+        const out = { groups: {}, me: {} };
+        try {
+            const raw = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+            if (raw && raw.groups) {
+                Object.keys(raw.groups).forEach(function (gid) {
+                    const doc = C.sanitizeGroup(raw.groups[gid]);
+                    if (doc) out.groups[gid] = doc;
+                });
+                Object.keys(raw.me || {}).forEach(function (gid) {
+                    if (typeof raw.me[gid] === 'string') out.me[gid] = raw.me[gid];
+                });
+            }
+        } catch (e) {
+            console.warn('Quitt: Gespeicherte Daten nicht lesbar.', e);
+        }
+        return out;
+    }
+
+    function persist() {
+        try {
+            localStorage.setItem(STORE_KEY, JSON.stringify(store));
+        } catch (e) {
+            console.error('Quitt: Speichern fehlgeschlagen.', e);
+            toast('Speichern fehlgeschlagen. Bitte ein Backup sichern.');
+        }
+    }
+
+    /** Fremde Stände einmischen, statt zu ersetzen: Offene Formulare halten Referenzen auf die Dokumente. */
+    function adoptStored() {
+        const loaded = readStored();
+        let changed = false;
+        Object.keys(loaded.groups).forEach(function (gid) {
+            if (!store.groups[gid]) {
+                store.groups[gid] = loaded.groups[gid];
+                changed = true;
+            } else if (C.mergeGroups(store.groups[gid], loaded.groups[gid])) {
+                changed = true;
+            }
+        });
+        Object.keys(store.groups).forEach(function (gid) {
+            if (!loaded.groups[gid]) {
+                delete store.groups[gid];
+                changed = true;
+            }
+        });
+        store.me = loaded.me;
+        return changed;
+    }
+
+    function meId(gid) {
+        const id = store.me[gid];
+        const doc = store.groups[gid];
+        return id && doc && doc.members[id] && !doc.members[id].left ? id : null;
+    }
+
+    function logActivity(doc, kind, ref, label, amount, currency) {
+        const id = C.newId();
+        const entry = { id: id, t: C.nextT(doc), by: meId(doc.id) || '', kind: kind, ref: ref || '', label: label || '' };
+        if (amount) {
+            entry.amount = amount;
+            entry.currency = currency;
+        }
+        doc.activity[id] = entry;
+    }
+
+    function commit(doc) {
+        persist();
+        Sync.broadcast(doc);
+    }
+
+    /* ---------- Link-Kodierung ---------- */
+
+    function toBase64Url(bytes) {
+        let bin = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) {
+            bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+        }
+        return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    function fromBase64Url(text) {
+        const bin = atob(text.replace(/-/g, '+').replace(/_/g, '/'));
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return bytes;
+    }
+
+    async function readAll(stream) {
+        const reader = stream.getReader();
+        const chunks = [];
+        let size = 0;
+        for (;;) {
+            const part = await reader.read();
+            if (part.done) break;
+            size += part.value.length;
+            if (size > MAX_DECOMPRESSED) {
+                await reader.cancel();
+                throw new Error('Link-Inhalt zu groß');
+            }
+            chunks.push(part.value);
+        }
+        const out = new Uint8Array(size);
+        let offset = 0;
+        chunks.forEach(function (c) { out.set(c, offset); offset += c.length; });
+        return out;
+    }
+
+    async function encodeSnapshot(doc) {
+        const json = new TextEncoder().encode(JSON.stringify(C.snapshotForLink(doc, LINK_ACTIVITY_LIMIT)));
+        if (typeof CompressionStream === 'undefined') return 'j' + toBase64Url(json);
+        const stream = new Blob([json]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+        return 'z' + toBase64Url(await readAll(stream));
+    }
+
+    async function decodeSnapshot(text) {
+        let bytes = fromBase64Url(text.slice(1));
+        if (text.charAt(0) === 'z') {
+            bytes = await readAll(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw')));
+        }
+        return JSON.parse(new TextDecoder().decode(bytes));
+    }
+
+    function baseUrl() { return location.href.split('#')[0]; }
+
+    async function inviteLink(doc) {
+        return baseUrl() + '#join=' + doc.id + '&d=' + await encodeSnapshot(doc);
+    }
+
+    /* ---------- Live-Abgleich ---------- */
+
+    /**
+     * Sternförmig: Wer die Gruppe zuerst öffnet, belegt die feste Peer-ID der Gruppe
+     * (Host), alle anderen verbinden sich mit ihm. Geht der Host, übernimmt das
+     * nächste Gerät beim erneuten Verbinden automatisch.
+     */
+    const Sync = {
+        gid: null,
+        peer: null,
+        conns: new Map(),
+        run: 0,
+        timer: null,
+        status: 'off',
+        deviceCount: 0,
+
+        start: function (gid) {
+            if (this.gid === gid) return;
+            this.stop();
+            this.gid = gid;
+            this.connect();
+        },
+
+        stop: function () {
+            this.run++;
+            clearTimeout(this.timer);
+            this.teardown();
+            this.gid = null;
+            this.setStatus('off');
+        },
+
+        teardown: function () {
+            this.conns.forEach(function (conn) { try { conn.close(); } catch (e) { /* schon zu */ } });
+            this.conns.clear();
+            if (this.peer) {
+                try { this.peer.destroy(); } catch (e) { /* schon zerstört */ }
+            }
+            this.peer = null;
+        },
+
+        retry: function (delay) {
+            const self = this;
+            this.run++;
+            clearTimeout(this.timer);
+            this.teardown();
+            this.setStatus(navigator.onLine === false ? 'offline' : 'connecting');
+            this.timer = setTimeout(function () { self.connect(); }, delay);
+        },
+
+        connect: function () {
+            if (!this.gid) return;
+            if (typeof Peer === 'undefined') {
+                this.setStatus('offline');
+                return;
+            }
+            const self = this;
+            const run = ++this.run;
+            const stale = function () { return run !== self.run; };
+            this.setStatus('connecting');
+
+            const peer = new Peer(PEER_PREFIX + this.gid, { debug: 0 });
+            this.peer = peer;
+            peer.on('open', function () {
+                if (stale()) return;
+                self.setStatus('waiting');
+            });
+            peer.on('connection', function (conn) {
+                if (stale()) { conn.close(); return; }
+                self.attach(conn, run);
+            });
+            peer.on('error', function (err) {
+                if (stale()) return;
+                // Eigener Lauf für den Client: PeerJS meldet für die abgelehnte ID direkt
+                // danach noch "disconnected", das darf den neuen Versuch nicht abbrechen.
+                if (err.type === 'unavailable-id') self.joinHost(++self.run);
+                else self.retry(8000 + Math.random() * 8000);
+            });
+            peer.on('disconnected', function () {
+                if (stale()) return;
+                // Bestehende Datenverbindungen laufen ohne Signaling-Server weiter.
+                if (self.conns.size) { try { peer.reconnect(); } catch (e) { /* Neustart beim nächsten Fehler */ } }
+                else self.retry(5000);
+            });
+        },
+
+        joinHost: function (run) {
+            const self = this;
+            const stale = function () { return run !== self.run; };
+            const peer = new Peer({ debug: 0 });
+            this.peer = peer;
+            let giveUp = null;
+            peer.on('open', function () {
+                if (stale()) return;
+                const conn = peer.connect(PEER_PREFIX + self.gid, { reliable: true });
+                giveUp = setTimeout(function () {
+                    if (!stale() && !conn.open) self.retry(1000 + Math.random() * 3000);
+                }, 12000);
+                conn.on('open', function () { clearTimeout(giveUp); });
+                self.attach(conn, run);
+            });
+            peer.on('error', function () {
+                clearTimeout(giveUp);
+                if (!stale()) self.retry(1000 + Math.random() * 3000);
+            });
+        },
+
+        attach: function (conn, run) {
+            const self = this;
+            const stale = function () { return run !== self.run; };
+
+            function greet() {
+                if (stale()) return;
+                self.conns.set(conn.peer, conn);
+                self.send(conn);
+                self.announce();
+                self.refreshStatus();
+            }
+            if (conn.open) greet();
+            else conn.on('open', greet);
+
+            conn.on('data', function (msg) {
+                if (!stale()) self.receive(conn, msg);
+            });
+
+            function lost() {
+                if (stale()) return;
+                self.conns.delete(conn.peer);
+                if (self.isHost()) {
+                    self.announce();
+                    self.refreshStatus();
+                } else {
+                    self.retry(500 + Math.random() * 2500);
+                }
+            }
+            conn.on('close', lost);
+            conn.on('error', lost);
+        },
+
+        isHost: function () {
+            return !!this.peer && this.peer.id === PEER_PREFIX + this.gid;
+        },
+
+        send: function (conn) {
+            const doc = store.groups[this.gid];
+            if (doc && conn.open) conn.send({ app: 'quitt', type: 'state', doc: doc });
+        },
+
+        /** Host teilt allen mit, wie viele Geräte gerade dabei sind. */
+        announce: function () {
+            if (!this.isHost()) return;
+            const count = this.conns.size + 1;
+            this.deviceCount = count;
+            this.conns.forEach(function (conn) {
+                if (conn.open) conn.send({ app: 'quitt', type: 'count', count: count });
+            });
+        },
+
+        receive: function (from, msg) {
+            if (!msg || msg.app !== 'quitt') return;
+            if (msg.type === 'count') {
+                if (Number.isInteger(msg.count)) this.deviceCount = msg.count;
+                this.refreshStatus();
+                return;
+            }
+            if (msg.type !== 'state') return;
+            const incoming = C.sanitizeGroup(msg.doc);
+            const doc = store.groups[this.gid];
+            if (!incoming || !doc || incoming.id !== this.gid) return;
+            if (C.mergeGroups(doc, incoming)) {
+                persist();
+                softRender();
+                const self = this;
+                this.conns.forEach(function (conn) {
+                    if (conn !== from) self.send(conn);
+                });
+            }
+        },
+
+        broadcast: function (doc) {
+            if (doc.id !== this.gid) return;
+            const self = this;
+            this.conns.forEach(function (conn) { self.send(conn); });
+        },
+
+        refreshStatus: function () {
+            if (this.conns.size) this.setStatus('live');
+            else this.setStatus('waiting');
+        },
+
+        setStatus: function (status) {
+            this.status = status;
+            updateSyncPill();
+        },
+
+        wake: function () {
+            if (this.gid && !this.conns.size && this.status !== 'waiting') this.retry(0);
+        }
+    };
+
+    function syncLabel() {
+        switch (Sync.status) {
+            case 'live':
+                return Sync.deviceCount > 2
+                    ? 'Live mit ' + (Sync.deviceCount - 1) + ' anderen Geräten'
+                    : 'Live mit einem anderen Gerät';
+            case 'waiting': return 'Kein anderes Gerät online';
+            case 'connecting': return 'Verbinde …';
+            default: return 'Offline';
+        }
+    }
+
+    function syncPillClass() {
+        return 'pill' + (Sync.status === 'live' ? ' live' : Sync.status === 'waiting' ? ' waiting' : '');
+    }
+
+    function updateSyncPill() {
+        const pill = document.getElementById('syncPill');
+        if (!pill) return;
+        pill.textContent = syncLabel();
+        pill.className = syncPillClass();
+    }
+
+    /* ---------- Routing ---------- */
+
+    function go(path) { location.hash = path; }
+
+    function parseRoute() {
+        const raw = location.hash.replace(/^#/, '');
+        const qIndex = raw.indexOf('?');
+        const path = qIndex === -1 ? raw : raw.slice(0, qIndex);
+        const params = new URLSearchParams(qIndex === -1 ? '' : raw.slice(qIndex + 1));
+        const parts = path.split('/').filter(Boolean);
+        if (parts[0] === 'new') return { name: 'new' };
+        if (parts[0] !== 'g' || !C.RE_GROUP_ID.test(parts[1] || '')) return { name: 'home' };
+        return {
+            name: 'group',
+            gid: parts[1],
+            section: parts[2] || 'expenses',
+            id: parts[3] || null,
+            mode: parts[4] || null,
+            params: params
+        };
+    }
+
+    function isEditing() {
+        if (state.formActive) return true;
+        const el = document.activeElement;
+        return !!el && app.contains(el) && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
+    }
+
+    /** Neu zeichnen nach Daten von außen, ohne jemandem das Formular unter den Fingern wegzuziehen. */
+    function softRender() {
+        if (isEditing()) {
+            state.pendingRender = true;
+            return;
+        }
+        const y = window.scrollY;
+        render();
+        window.scrollTo(0, y);
+    }
+
+    function render() {
+        state.formActive = false;
+        state.pendingRender = false;
+        const route = parseRoute();
+        const pathNow = location.hash;
+        if (pathNow !== state.lastPath) {
+            state.lastPath = pathNow;
+            window.scrollTo(0, 0);
+        }
+
+        app.textContent = '';
+        if (route.name === 'group') {
+            const doc = store.groups[route.gid];
+            if (!doc) {
+                go('/');
+                return;
+            }
+            if (Sync.gid !== route.gid) state.search = '';
+            Sync.start(route.gid);
+            if (C.expandRecurring(doc, C.todayStr())) commit(doc);
+            app.appendChild(viewGroupRoute(doc, route));
+            return;
+        }
+
+        Sync.stop();
+        app.appendChild(route.name === 'new' ? viewNewGroup() : viewHome());
+    }
+
+    async function handleJoin() {
+        if (location.hash.indexOf('#join=') !== 0) return false;
+        const params = new URLSearchParams(location.hash.slice(1));
+        const gid = params.get('join') || '';
+        if (!C.RE_GROUP_ID.test(gid)) {
+            toast('Dieser Einladungslink ist ungültig.');
+            history.replaceState(null, '', '#/');
+            return false;
+        }
+
+        let incoming = null;
+        const data = params.get('d');
+        if (data) {
+            try {
+                incoming = C.sanitizeGroup(await decodeSnapshot(data));
+            } catch (e) {
+                console.warn('Quitt: Link nicht lesbar.', e);
+            }
+            if (!incoming || incoming.id !== gid) {
+                incoming = null;
+                toast('Der Link enthält keine lesbaren Daten, es wird online gesucht.');
+            }
+        }
+
+        if (!store.groups[gid]) store.groups[gid] = C.emptyGroup(gid);
+        if (incoming && C.mergeGroups(store.groups[gid], incoming)) toast('Gruppe aktualisiert.');
+        persist();
+        history.replaceState(null, '', '#/g/' + gid);
+        return true;
+    }
+
+    /* ---------- Startseite ---------- */
+
+    function myBalances(doc, balances) {
+        const me = meId(doc.id);
+        const out = [];
+        if (!me) return out;
+        Object.keys(balances).forEach(function (cur) {
+            const amount = balances[cur][me] || 0;
+            if (amount) out.push({ cur: cur, amount: amount });
+        });
+        return out;
+    }
+
+    function balanceSpan(amount, cur) {
+        return h('span', { class: amount > 0 ? 'pos' : 'neg' }, money(Math.abs(amount), cur));
+    }
+
+    function viewHome() {
+        const docs = Object.keys(store.groups).map(function (gid) { return store.groups[gid]; });
+        docs.sort(function (a, b) { return C.lastT(b) - C.lastT(a); });
+
+        const totals = {};
+        const rows = docs.map(function (doc) {
+            const balances = C.computeBalances(doc);
+            const mine = myBalances(doc, balances);
+            mine.forEach(function (b) { totals[b.cur] = (totals[b.cur] || 0) + b.amount; });
+            const memberCount = Object.keys(doc.members).filter(function (id) { return !doc.members[id].left; }).length;
+            return h('a', { class: 'item', href: '#/g/' + doc.id },
+                h('span', { class: 'icon', 'aria-hidden': 'true' }, doc.meta.emoji),
+                h('span', { class: 'body' },
+                    h('div', { class: 'title' }, doc.meta.name || 'Einladung'),
+                    h('div', { class: 'sub' }, doc.meta.t ? memberCount + (memberCount === 1 ? ' Person' : ' Personen') : 'Wartet auf Daten')),
+                h('span', { class: 'side' }, mine.length
+                    ? mine.map(function (b) {
+                        return h('div', null, h('span', { class: 'muted' }, b.amount > 0 ? 'du bekommst ' : 'du schuldest '), balanceSpan(b.amount, b.cur));
+                    })
+                    : doc.meta.t ? h('span', { class: 'muted' }, 'quitt') : null));
+        });
+
+        const totalKeys = Object.keys(totals).filter(function (cur) { return totals[cur]; });
+
+        return h('div', null,
+            h('header', { class: 'page-head' },
+                h('h1', null, 'Quitt'),
+                h('p', null, 'Gemeinsame Ausgaben aufteilen, bis alle quitt sind.')),
+            totalKeys.length ? h('section', { class: 'panel' },
+                h('h2', null, 'Über alle Gruppen'),
+                h('div', { class: 'my-balance' }, totalKeys.map(function (cur) {
+                    return h('div', null, totals[cur] > 0 ? 'Du bekommst ' : 'Du schuldest ', balanceSpan(totals[cur], cur));
+                }))) : null,
+            h('section', { class: 'panel' },
+                h('h2', null, 'Deine Gruppen'),
+                rows.length ? h('div', { class: 'list' }, rows) : h('div', { class: 'empty' },
+                    h('span', { class: 'big', 'aria-hidden': 'true' }, '🧾'),
+                    'Noch keine Gruppe. Leg eine an, zum Beispiel für den nächsten Urlaub, die WG oder den Grillabend. Ein Paar ist einfach eine Gruppe mit zwei Personen.'),
+                h('div', { class: 'actions' },
+                    h('a', { class: 'btn btn-primary', href: '#/new' }, '+ Neue Gruppe'))),
+            h('section', { class: 'panel' },
+                h('h2', null, 'So funktioniert es'),
+                h('p', { class: 'small muted' }, 'Es gibt keine Anmeldung. Deine Gruppen liegen nur in diesem Browser, nicht auf einem Server. Jede Person hat ihre eigene Kopie.'),
+                h('p', { class: 'small muted' }, 'Haben zwei Geräte dieselbe Gruppe gleichzeitig offen, gleichen sie sich live ab. Sonst reicht es, den Link der Gruppe neu zu schicken: Beim Öffnen wird der Stand zusammengeführt, ohne dass etwas verloren geht.'),
+                h('div', { class: 'actions' },
+                    docs.length ? h('button', { class: 'btn btn-small', type: 'button', onclick: exportAll }, 'Backup sichern') : null,
+                    h('label', { class: 'btn btn-small' }, 'Backup laden',
+                        h('input', { type: 'file', accept: 'application/json,.json', hidden: true, onchange: importBackup })))));
+    }
+
+    function exportAll() {
+        const me = {};
+        const groups = Object.keys(store.groups).map(function (gid) {
+            if (store.me[gid]) me[gid] = store.me[gid];
+            return store.groups[gid];
+        });
+        download('quitt-backup-' + C.todayStr() + '.json', 'application/json',
+            JSON.stringify({ app: 'quitt', version: 1, groups: groups, me: me }, null, 1));
+    }
+
+    async function importBackup(e) {
+        const file = e.target.files[0];
+        e.target.value = '';
+        if (!file) return;
+        try {
+            const data = JSON.parse(await file.text());
+            if (!data || data.app !== 'quitt' || !Array.isArray(data.groups)) throw new Error('Kein Quitt-Backup');
+            let count = 0;
+            data.groups.forEach(function (raw) {
+                const doc = C.sanitizeGroup(raw);
+                if (!doc) return;
+                if (store.groups[doc.id]) C.mergeGroups(store.groups[doc.id], doc);
+                else store.groups[doc.id] = doc;
+                const me = data.me && data.me[doc.id];
+                if (typeof me === 'string' && !store.me[doc.id]) store.me[doc.id] = me;
+                count++;
+            });
+            persist();
+            render();
+            toast(count + (count === 1 ? ' Gruppe' : ' Gruppen') + ' geladen.');
+        } catch (err) {
+            console.warn('Quitt: Backup nicht lesbar.', err);
+            toast('Diese Datei ist kein Quitt-Backup.');
+        }
+    }
+
+    /* ---------- Neue Gruppe ---------- */
+
+    const EMOJIS = ['💸', '🏖️', '🏠', '✈️', '🍕', '🎉', '🏕️', '🚗', '⛷️', '🎸'];
+
+    function emojiPicker(current, onPick) {
+        const wrap = h('div', { class: 'emoji-picker', role: 'group', 'aria-label': 'Symbol wählen' });
+        const options = EMOJIS.indexOf(current) === -1 ? [current].concat(EMOJIS) : EMOJIS;
+        options.forEach(function (emoji) {
+            wrap.appendChild(h('button', {
+                type: 'button',
+                'aria-pressed': String(emoji === current),
+                onclick: function (e) {
+                    wrap.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-pressed', 'false'); });
+                    e.currentTarget.setAttribute('aria-pressed', 'true');
+                    onPick(emoji);
+                }
+            }, emoji));
+        });
+        return wrap;
+    }
+
+    function currencySelect(value, onChange, extra) {
+        const list = C.CURRENCIES.indexOf(value) === -1 ? [value].concat(C.CURRENCIES) : C.CURRENCIES;
+        return h('select', Object.assign({ value: value, onchange: onChange }, extra),
+            list.map(function (cur) { return h('option', { value: cur }, cur); }));
+    }
+
+    function viewNewGroup() {
+        state.formActive = true;
+        const form = { emoji: EMOJIS[0], currency: 'EUR' };
+        const friends = h('div', null);
+        const error = h('div', { class: 'form-error', hidden: true });
+
+        function addFriendField() {
+            const input = h('input', {
+                type: 'text', maxlength: 40, placeholder: 'Name', 'aria-label': 'Name',
+                autocomplete: 'off',
+                onkeydown: function (e) {
+                    if (e.key !== 'Enter') return;
+                    e.preventDefault();
+                    if (input.value.trim()) addFriendField();
+                }
+            });
+            friends.appendChild(h('div', { class: 'field' }, input));
+            return input;
+        }
+        addFriendField();
+        addFriendField();
+
+        const nameInput = h('input', { id: 'groupName', type: 'text', maxlength: 60, placeholder: 'Sommer in Lissabon', autocomplete: 'off' });
+        const meInput = h('input', { id: 'myName', type: 'text', maxlength: 40, placeholder: 'Dein Name', autocomplete: 'name' });
+
+        function submit(e) {
+            e.preventDefault();
+            const name = nameInput.value.trim();
+            const myName = meInput.value.trim();
+            if (!name || !myName) {
+                error.textContent = 'Bitte gib einen Gruppennamen und deinen eigenen Namen ein.';
+                error.hidden = false;
+                return;
+            }
+            const gid = C.newGroupId();
+            const doc = C.emptyGroup(gid);
+            doc.meta = { t: Date.now(), name: name, emoji: form.emoji, currency: form.currency, simplify: true };
+            store.groups[gid] = doc;
+
+            const myId = C.newId();
+            doc.members[myId] = { id: myId, t: C.nextT(doc), name: myName, left: false };
+            store.me[gid] = myId;
+            friends.querySelectorAll('input').forEach(function (input) {
+                const friend = input.value.trim();
+                if (!friend) return;
+                const id = C.newId();
+                doc.members[id] = { id: id, t: C.nextT(doc), name: friend, left: false };
+            });
+            logActivity(doc, 'group-create', '', name);
+            persist();
+            go('/g/' + gid);
+        }
+
+        return h('div', null,
+            h('a', { class: 'back', href: '#/' }, '‹ Gruppen'),
+            h('form', { class: 'panel', onsubmit: submit },
+                h('h2', null, 'Neue Gruppe'),
+                error,
+                h('div', { class: 'field' }, h('label', { for: 'groupName' }, 'Name der Gruppe'), nameInput),
+                h('div', { class: 'field' },
+                    h('span', { class: 'field-label' }, 'Symbol'),
+                    emojiPicker(form.emoji, function (emoji) { form.emoji = emoji; })),
+                h('div', { class: 'field' },
+                    h('label', { for: 'groupCurrency' }, 'Währung'),
+                    currencySelect(form.currency, function (e) { form.currency = e.target.value; }, { id: 'groupCurrency' })),
+                h('div', { class: 'field' }, h('label', { for: 'myName' }, 'Dein Name'), meInput),
+                h('span', { class: 'field-label' }, 'Wer ist noch dabei?'),
+                friends,
+                h('button', { class: 'btn btn-small', type: 'button', onclick: function () { addFriendField().focus(); } }, '+ Weitere Person'),
+                h('div', { class: 'actions' },
+                    h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, 'Gruppe anlegen'))));
+    }
+
+    /* ---------- Gruppenansichten ---------- */
+
+    function memberName(doc, id) {
+        return doc.members[id] ? doc.members[id].name : 'Unbekannt';
+    }
+
+    function activeMembers(doc) {
+        return Object.keys(doc.members)
+            .map(function (id) { return doc.members[id]; })
+            .filter(function (m) { return !m.left; })
+            .sort(function (a, b) { return a.name.localeCompare(b.name, 'de'); });
+    }
+
+    function viewGroupRoute(doc, route) {
+        if (!doc.meta.t) return viewWaiting(doc);
+        if (!meId(doc.id)) return viewWhoAmI(doc);
+
+        if (route.section === 'expense') {
+            const existing = route.id ? doc.expenses[route.id] : null;
+            if (route.id && !existing) return viewNotFound(doc);
+            if (route.id && route.mode !== 'edit') return viewExpenseDetail(doc, existing);
+            return viewExpenseForm(doc, existing);
+        }
+        if (route.section === 'pay') {
+            const payment = route.id ? doc.payments[route.id] : null;
+            if (route.id && !payment) return viewNotFound(doc);
+            return viewPaymentForm(doc, payment, route.params);
+        }
+        return viewGroup(doc, route.section);
+    }
+
+    function viewNotFound(doc) {
+        return h('div', null,
+            backLink(doc),
+            h('div', { class: 'panel' }, h('div', { class: 'empty' }, 'Dieser Eintrag ist auf diesem Gerät noch nicht vorhanden.')));
+    }
+
+    function backLink(doc, section, label) {
+        return h('a', { class: 'back', href: '#/g/' + doc.id + (section ? '/' + section : '') }, '‹ ' + (label || doc.meta.name));
+    }
+
+    function viewWaiting(doc) {
+        return h('div', null,
+            h('a', { class: 'back', href: '#/' }, '‹ Gruppen'),
+            h('section', { class: 'panel' },
+                h('div', { class: 'empty' },
+                    h('span', { class: 'big', 'aria-hidden': 'true' }, '📡'),
+                    'Warte auf die Daten der Gruppe. Das klappt, sobald die Person, die dich eingeladen hat, die Gruppe auf ihrem Gerät geöffnet hat.',
+                    h('div', null, h('span', { id: 'syncPill', class: syncPillClass() }, syncLabel()))),
+                h('div', { class: 'actions' },
+                    h('button', {
+                        class: 'btn btn-danger btn-small', type: 'button',
+                        onclick: function () { removeGroup(doc); }
+                    }, 'Einladung verwerfen'))));
+    }
+
+    function removeGroup(doc) {
+        delete store.groups[doc.id];
+        delete store.me[doc.id];
+        persist();
+        go('/');
+    }
+
+    function viewWhoAmI(doc) {
+        const members = activeMembers(doc);
+        const input = h('input', { type: 'text', maxlength: 40, placeholder: 'Dein Name', 'aria-label': 'Dein Name', autocomplete: 'name' });
+
+        function join(e) {
+            e.preventDefault();
+            const name = input.value.trim();
+            if (!name) return;
+            const id = C.newId();
+            doc.members[id] = { id: id, t: C.nextT(doc), name: name, left: false };
+            store.me[doc.id] = id;
+            logActivity(doc, 'member-add', id, name);
+            commit(doc);
+            render();
+        }
+
+        return h('div', null,
+            h('a', { class: 'back', href: '#/' }, '‹ Gruppen'),
+            h('header', { class: 'group-head' },
+                h('div', { class: 'emoji', 'aria-hidden': 'true' }, doc.meta.emoji),
+                h('h1', null, doc.meta.name)),
+            h('section', { class: 'panel' },
+                h('h2', null, 'Wer bist du?'),
+                h('div', { class: 'list' }, members.map(function (m) {
+                    return h('button', {
+                        class: 'btn btn-block', type: 'button', style: 'margin-bottom:8px',
+                        onclick: function () {
+                            store.me[doc.id] = m.id;
+                            persist();
+                            render();
+                        }
+                    }, m.name);
+                })),
+                h('h2', null, 'Nicht dabei?'),
+                h('form', { class: 'add-row', onsubmit: join },
+                    input,
+                    h('button', { class: 'btn', type: 'submit' }, 'Hinzufügen'))));
+    }
+
+    function viewGroup(doc, tab) {
+        const known = ['expenses', 'balances', 'stats', 'activity', 'settings'];
+        if (known.indexOf(tab) === -1) tab = 'expenses';
+        const balances = C.computeBalances(doc);
+        const me = meId(doc.id);
+        const hasEntries = C.liveExpenses(doc).length + C.livePayments(doc).length > 0;
+        const settled = hasEntries && C.isSettled(balances);
+        const mine = myBalances(doc, balances);
+
+        let summary;
+        if (settled) summary = h('div', { class: 'quitt-banner' }, 'Ihr seid quitt! 🎉');
+        else if (mine.length) {
+            summary = h('div', { class: 'my-balance' }, mine.map(function (b) {
+                return h('div', null, b.amount > 0 ? 'Du bekommst ' : 'Du schuldest ', balanceSpan(b.amount, b.cur));
+            }));
+        } else if (hasEntries) summary = h('div', { class: 'my-balance muted' }, 'Für dich ist alles ausgeglichen.');
+
+        const tabs = [['expenses', 'Ausgaben'], ['balances', 'Salden'], ['stats', 'Statistik'], ['activity', 'Verlauf'], ['settings', 'Gruppe']];
+        const content = {
+            expenses: viewExpensesTab,
+            balances: viewBalancesTab,
+            stats: viewStatsTab,
+            activity: viewActivityTab,
+            settings: viewSettingsTab
+        }[tab](doc, balances, me);
+
+        return h('div', null,
+            h('a', { class: 'back', href: '#/' }, '‹ Gruppen'),
+            h('header', { class: 'group-head' },
+                h('div', { class: 'emoji', 'aria-hidden': 'true' }, doc.meta.emoji),
+                h('h1', null, doc.meta.name),
+                h('a', { id: 'syncPill', class: syncPillClass(), href: '#/g/' + doc.id + '/settings' }, syncLabel())),
+            summary ? h('section', { class: 'panel' }, summary) : null,
+            h('nav', { class: 'tabs', 'aria-label': 'Gruppenbereiche' }, tabs.map(function (t) {
+                return h('a', {
+                    href: '#/g/' + doc.id + (t[0] === 'expenses' ? '' : '/' + t[0]),
+                    'aria-current': t[0] === tab ? 'page' : null
+                }, t[1]);
+            })),
+            content,
+            tab === 'expenses' || tab === 'balances'
+                ? h('a', { class: 'btn btn-primary fab', href: '#/g/' + doc.id + '/expense' }, '+ Ausgabe') : null);
+    }
+
+    /* Ausgaben */
+
+    function payerText(doc, e, me) {
+        const payers = Object.keys(e.payers).filter(function (id) { return e.payers[id] > 0; });
+        const amount = money(e.amount, e.currency);
+        if (payers.length > 1) return payers.length + ' Personen haben ' + amount + ' bezahlt';
+        if (payers[0] === me) return 'Du hast ' + amount + ' bezahlt';
+        return memberName(doc, payers[0]) + ' hat ' + amount + ' bezahlt';
+    }
+
+    function paymentText(doc, p, me) {
+        const amount = money(p.amount, p.currency);
+        if (p.from === me) return 'Du hast ' + memberName(doc, p.to) + ' ' + amount + ' gezahlt';
+        if (p.to === me) return memberName(doc, p.from) + ' hat dir ' + amount + ' gezahlt';
+        return memberName(doc, p.from) + ' hat ' + memberName(doc, p.to) + ' ' + amount + ' gezahlt';
+    }
+
+    function expenseEffect(e, me) {
+        const owed = C.computeOwed(e) || {};
+        const net = (e.payers[me] || 0) - (owed[me] || 0);
+        if (net > 0) return h('span', { class: 'side' }, h('span', { class: 'muted' }, 'du bekommst'), h('strong', { class: 'pos' }, money(net, e.currency)));
+        if (net < 0) return h('span', { class: 'side' }, h('span', { class: 'muted' }, 'du schuldest'), h('strong', { class: 'neg' }, money(-net, e.currency)));
+        return h('span', { class: 'side muted' }, e.payers[me] || owed[me] ? 'ausgeglichen' : 'nicht beteiligt');
+    }
+
+    function matchesSearch(doc, entry, term) {
+        if (!term) return true;
+        const parts = entry.kind === 'expense'
+            ? [entry.e.desc, entry.e.note, category(entry.e.category).label]
+                .concat(Object.keys(entry.e.payers).map(function (id) { return memberName(doc, id); }))
+                .concat(Object.keys(entry.e.split.values).map(function (id) { return memberName(doc, id); }))
+            : [entry.p.note, memberName(doc, entry.p.from), memberName(doc, entry.p.to), 'zahlung'];
+        return parts.join(' ').toLowerCase().indexOf(term) !== -1;
+    }
+
+    function renderEntries(container, doc, me) {
+        const term = state.search.trim().toLowerCase();
+        const commentCounts = {};
+        Object.keys(doc.comments).forEach(function (id) {
+            const c = doc.comments[id];
+            if (!c.del) commentCounts[c.expense] = (commentCounts[c.expense] || 0) + 1;
+        });
+
+        const entries = C.liveExpenses(doc).map(function (e) { return { kind: 'expense', date: e.date, t: e.t, e: e }; })
+            .concat(C.livePayments(doc).map(function (p) { return { kind: 'payment', date: p.date, t: p.t, p: p }; }))
+            .filter(function (entry) { return matchesSearch(doc, entry, term); })
+            .sort(function (a, b) {
+                if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+                return b.t - a.t;
+            });
+
+        container.textContent = '';
+        if (!entries.length) {
+            container.appendChild(h('div', { class: 'empty' }, term ? 'Nichts gefunden.' : [
+                h('span', { class: 'big', 'aria-hidden': 'true' }, '🧾'),
+                'Noch keine Ausgaben. Trag die erste ein.'
+            ]));
+            return;
+        }
+
+        let month = null;
+        entries.forEach(function (entry) {
+            const label = monthLabel(entry.date);
+            if (label !== month) {
+                month = label;
+                container.appendChild(h('div', { class: 'month' }, label));
+            }
+            if (entry.kind === 'expense') {
+                const e = entry.e;
+                const isRecurring = e.parent || (e.repeat && e.repeat !== 'none');
+                const comments = commentCounts[e.id];
+                container.appendChild(h('a', { class: 'item', href: '#/g/' + doc.id + '/expense/' + e.id },
+                    h('span', { class: 'icon', 'aria-hidden': 'true' }, category(e.category).emoji),
+                    h('span', { class: 'body' },
+                        h('div', { class: 'title' }, e.desc, isRecurring ? ' 🔁' : ''),
+                        h('div', { class: 'sub' }, formatDate(e.date) + ' · ' + payerText(doc, e, me) + (comments ? ' · 💬 ' + comments : ''))),
+                    expenseEffect(e, me)));
+            } else {
+                const p = entry.p;
+                container.appendChild(h('a', { class: 'item', href: '#/g/' + doc.id + '/pay/' + p.id },
+                    h('span', { class: 'icon', 'aria-hidden': 'true' }, '🤝'),
+                    h('span', { class: 'body' },
+                        h('div', { class: 'title' }, paymentText(doc, p, me)),
+                        h('div', { class: 'sub' }, formatDate(p.date) + (p.note ? ' · ' + p.note : '')))));
+            }
+        });
+    }
+
+    function viewExpensesTab(doc, balances, me) {
+        const list = h('div', { class: 'list' });
+        renderEntries(list, doc, me);
+        const members = activeMembers(doc);
+        return h('section', { class: 'panel' },
+            members.length < 2 ? h('div', { class: 'notice' },
+                'Du bist noch allein hier. ',
+                h('a', { href: '#/g/' + doc.id + '/settings' }, 'Lade deine Freunde ein.')) : null,
+            h('div', { class: 'search' },
+                h('input', {
+                    type: 'text', placeholder: 'Suchen', 'aria-label': 'Ausgaben durchsuchen',
+                    value: state.search,
+                    oninput: function (e) {
+                        state.search = e.target.value;
+                        renderEntries(list, doc, me);
+                    }
+                })),
+            list);
+    }
+
+    /* Salden */
+
+    function summaryText(doc, balances) {
+        const lines = ['Quitt – ' + doc.meta.name, ''];
+        const currencies = Object.keys(balances);
+        currencies.forEach(function (cur) {
+            if (currencies.length > 1) lines.push(cur);
+            Object.keys(balances[cur]).forEach(function (id) {
+                const amount = balances[cur][id];
+                if (amount > 0) lines.push(memberName(doc, id) + ' bekommt ' + money(amount, cur));
+                else if (amount < 0) lines.push(memberName(doc, id) + ' schuldet ' + money(-amount, cur));
+            });
+            const transfers = C.settlements(doc, cur, balances);
+            if (transfers.length) {
+                lines.push('', 'So werdet ihr quitt:');
+                transfers.forEach(function (t) {
+                    lines.push(memberName(doc, t.from) + ' zahlt ' + memberName(doc, t.to) + ' ' + money(t.amount, cur));
+                });
+            }
+            lines.push('');
+        });
+        return lines.join('\n').trim();
+    }
+
+    function viewBalancesTab(doc, balances, me) {
+        const currencies = C.currenciesUsed(doc).filter(function (cur) {
+            return balances[cur] && Object.keys(balances[cur]).some(function (id) { return balances[cur][id] !== 0; });
+        });
+
+        const sections = currencies.map(function (cur) {
+            const rows = Object.keys(balances[cur])
+                .sort(function (a, b) { return balances[cur][b] - balances[cur][a]; })
+                .map(function (id) {
+                    const amount = balances[cur][id];
+                    const isMe = id === me;
+                    let text;
+                    if (amount > 0) text = isMe ? 'Du bekommst' : memberName(doc, id) + ' bekommt';
+                    else if (amount < 0) text = isMe ? 'Du schuldest' : memberName(doc, id) + ' schuldet';
+                    else text = isMe ? 'Du bist quitt' : memberName(doc, id) + ' ist quitt';
+                    return h('div', { class: 'kv' }, h('span', null, text),
+                        amount ? h('span', null, balanceSpan(amount, cur)) : h('span', { class: 'muted' }, '–'));
+                });
+
+            const transfers = C.settlements(doc, cur, balances).map(function (t) {
+                const href = '#/g/' + doc.id + '/pay?' + new URLSearchParams({
+                    from: t.from, to: t.to, amount: t.amount, cur: cur
+                }).toString();
+                const fromText = t.from === me ? 'Du zahlst' : memberName(doc, t.from) + ' zahlt';
+                const toText = t.to === me ? 'dir' : memberName(doc, t.to);
+                return h('div', { class: 'item' },
+                    h('span', { class: 'body' },
+                        h('div', { class: 'title' }, fromText + ' ' + toText),
+                        h('div', { class: 'sub' }, money(t.amount, cur))),
+                    h('a', { class: 'btn btn-small', href: href }, 'Begleichen'));
+            });
+
+            return h('section', { class: 'panel' },
+                h('h2', null, currencies.length > 1 ? 'Salden in ' + cur : 'Salden'),
+                rows,
+                h('h2', null, 'So werdet ihr quitt'),
+                h('div', { class: 'list' }, transfers));
+        });
+
+        return h('div', null,
+            sections.length ? sections : h('section', { class: 'panel' },
+                h('div', { class: 'empty' }, h('span', { class: 'big', 'aria-hidden': 'true' }, '🤝'), 'Niemand schuldet jemandem etwas.')),
+            h('section', { class: 'panel' },
+                h('label', { class: 'switch-row' },
+                    h('input', {
+                        type: 'checkbox', checked: doc.meta.simplify,
+                        onchange: function (e) {
+                            doc.meta = Object.assign({}, doc.meta, { simplify: e.target.checked, t: C.nextT(doc) });
+                            commit(doc);
+                            e.target.blur();
+                            render();
+                        }
+                    }),
+                    h('span', null,
+                        h('strong', null, 'Schulden vereinfachen'),
+                        h('div', { class: 'small muted' }, 'Fasst Schulden zusammen, damit möglichst wenige Überweisungen nötig sind. Dann zahlst du eventuell jemandem, dem du nicht direkt etwas schuldest. Die Beträge unterm Strich bleiben gleich.'))),
+                h('div', { class: 'actions' },
+                    h('a', { class: 'btn', href: '#/g/' + doc.id + '/pay' }, 'Zahlung eintragen'),
+                    sections.length ? h('button', {
+                        class: 'btn', type: 'button',
+                        onclick: function () { shareText('Quitt – ' + doc.meta.name, summaryText(doc, balances)); }
+                    }, 'Stand teilen') : null)));
+    }
+
+    /* Statistik */
+
+    function barRow(label, value, max, cur) {
+        return h('div', { class: 'bar-row' },
+            h('span', { class: 'label' }, label),
+            h('span', { class: 'bar', 'aria-hidden': 'true' }, h('span', { style: 'width:' + (max ? value / max * 100 : 0).toFixed(1) + '%' })),
+            h('span', { class: 'value' }, money(value, cur)));
+    }
+
+    function viewStatsTab(doc) {
+        const currencies = C.currenciesUsed(doc);
+        const cur = currencies.indexOf(state.statsCur) !== -1 ? state.statsCur : currencies[0];
+        const stats = C.statistics(doc, cur);
+        const picker = currencies.length > 1 ? h('div', { class: 'field' },
+            h('label', { for: 'statsCur' }, 'Währung'),
+            h('select', {
+                id: 'statsCur', value: cur,
+                onchange: function (e) {
+                    state.statsCur = e.target.value;
+                    e.target.blur();
+                    render();
+                }
+            }, currencies.map(function (c) { return h('option', { value: c }, c); }))) : null;
+
+        if (!stats.count) {
+            return h('section', { class: 'panel' }, picker, h('div', { class: 'empty' }, 'Noch nichts auszuwerten.'));
+        }
+
+        const maxCategory = stats.byCategory[0].amount;
+        return h('div', null,
+            h('section', { class: 'panel' },
+                picker,
+                h('h2', null, 'Gesamtausgaben'),
+                h('div', { class: 'stat-total' }, money(stats.total, cur)),
+                h('div', { class: 'small muted' }, stats.count + (stats.count === 1 ? ' Ausgabe' : ' Ausgaben'))),
+            h('section', { class: 'panel' },
+                h('h2', null, 'Nach Kategorie'),
+                stats.byCategory.map(function (row) {
+                    const c = category(row.id);
+                    return barRow(c.emoji + ' ' + c.label, row.amount, maxCategory, cur);
+                })),
+            h('section', { class: 'panel' },
+                h('h2', null, 'Nach Person'),
+                h('div', { class: 'table-wrap' },
+                    h('table', { class: 'stat' },
+                        h('thead', null, h('tr', null,
+                            h('th', { scope: 'col' }, 'Person'),
+                            h('th', { scope: 'col' }, 'Bezahlt'),
+                            h('th', { scope: 'col' }, 'Anteil'))),
+                        h('tbody', null, stats.byMember.map(function (m) {
+                            return h('tr', null,
+                                h('td', null, memberName(doc, m.id)),
+                                h('td', null, money(m.paid, cur)),
+                                h('td', null, money(m.share, cur)));
+                        }))))));
+    }
+
+    /* Verlauf */
+
+    function activityText(doc, a) {
+        const who = a.by === meId(doc.id) ? 'Du hast' : (a.by && doc.members[a.by] ? doc.members[a.by].name + ' hat' : 'Jemand hat');
+        const label = '„' + a.label + '“';
+        switch (a.kind) {
+            case 'group-create': return who + ' die Gruppe angelegt';
+            case 'group-edit': return who + ' die Gruppe bearbeitet';
+            case 'expense-add': return who + ' ' + label + ' hinzugefügt';
+            case 'expense-edit': return who + ' ' + label + ' geändert';
+            case 'expense-del': return who + ' ' + label + ' gelöscht';
+            case 'expense-restore': return who + ' ' + label + ' wiederhergestellt';
+            case 'comment': return who + ' ' + label + ' kommentiert';
+            case 'pay-add': return who + ' eine Zahlung eingetragen: ' + a.label;
+            case 'pay-edit': return who + ' eine Zahlung geändert: ' + a.label;
+            case 'pay-del': return who + ' eine Zahlung gelöscht: ' + a.label;
+            case 'member-add': return who + ' ' + a.label + ' hinzugefügt';
+            case 'member-left': return who + ' ' + a.label + ' aus der Gruppe genommen';
+            case 'member-back': return who + ' ' + a.label + ' wieder aufgenommen';
+            default: return who + ' etwas geändert';
+        }
+    }
+
+    function viewActivityTab(doc) {
+        const entries = Object.keys(doc.activity).map(function (id) { return doc.activity[id]; })
+            .sort(function (a, b) { return b.t - a.t; })
+            .slice(0, 150);
+        if (!entries.length) return h('section', { class: 'panel' }, h('div', { class: 'empty' }, 'Noch nichts passiert.'));
+
+        return h('section', { class: 'panel' }, h('div', { class: 'list' }, entries.map(function (a) {
+            const body = [
+                h('span', { class: 'body' },
+                    h('div', { class: 'title' }, activityText(doc, a)),
+                    h('div', { class: 'sub' }, timeAgo(a.t) + (a.amount ? ' · ' + money(a.amount, a.currency) : '')))
+            ];
+            const target = /^expense|^comment/.test(a.kind) && doc.expenses[a.ref]
+                ? '#/g/' + doc.id + '/expense/' + a.ref
+                : /^pay/.test(a.kind) && doc.payments[a.ref] && !doc.payments[a.ref].del
+                    ? '#/g/' + doc.id + '/pay/' + a.ref : null;
+            return target ? h('a', { class: 'item', href: target }, body) : h('div', { class: 'item' }, body);
+        })));
+    }
+
+    /* Gruppe / Einstellungen */
+
+    function saveMeta(doc, patch, withLog) {
+        doc.meta = Object.assign({}, doc.meta, patch, { t: C.nextT(doc) });
+        if (withLog) logActivity(doc, 'group-edit', '', doc.meta.name);
+        commit(doc);
+        softRender();
+    }
+
+    function viewInvitePanel(doc) {
+        const qrBox = h('div', { class: 'qr-card', hidden: true });
+        let qrDrawn = false;
+
+        async function copyLink() {
+            toast(await copyText(await inviteLink(doc)) ? 'Link kopiert.' : 'Kopieren hat nicht geklappt.');
+        }
+        async function shareLink() {
+            const link = await inviteLink(doc);
+            if (navigator.share) {
+                try {
+                    await navigator.share({ title: 'Quitt – ' + doc.meta.name, url: link });
+                    return;
+                } catch (e) {
+                    if (e && e.name === 'AbortError') return;
+                }
+            }
+            toast(await copyText(link) ? 'Link kopiert.' : 'Kopieren hat nicht geklappt.');
+        }
+        function toggleQr() {
+            if (!qrDrawn && typeof QRCode !== 'undefined') {
+                const box = h('div');
+                qrBox.appendChild(box);
+                new QRCode(box, {
+                    text: baseUrl() + '#join=' + doc.id,
+                    width: 200, height: 200,
+                    colorDark: '#14121a', colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.M
+                });
+                qrDrawn = true;
+            }
+            qrBox.hidden = !qrBox.hidden;
+        }
+
+        return h('section', { class: 'panel' },
+            h('h2', null, 'Einladen & abgleichen'),
+            h('p', { class: 'small muted' }, 'Der Link enthält den aktuellen Stand der Gruppe. Schick ihn in euren Chat: Beim Öffnen wird er mit dem Stand der anderen Person zusammengeführt. Das klappt immer wieder, also auch später zum Abgleichen.'),
+            h('p', { class: 'small muted' }, 'Wer den Link hat, kann die Gruppe lesen und bearbeiten. Solange zwei Geräte die Gruppe gleichzeitig offen haben, gleichen sie sich automatisch ab. Für den Verbindungsaufbau wird dabei der öffentliche Dienst PeerJS genutzt, die Daten selbst gehen verschlüsselt von Gerät zu Gerät.'),
+            h('div', { class: 'actions' },
+                navigator.share ? h('button', { class: 'btn btn-primary', type: 'button', onclick: shareLink }, 'Link teilen') : null,
+                h('button', { class: navigator.share ? 'btn' : 'btn btn-primary', type: 'button', onclick: copyLink }, 'Link kopieren'),
+                h('button', { class: 'btn', type: 'button', onclick: toggleQr }, 'QR-Code')),
+            qrBox,
+            h('p', { class: 'small muted', style: 'margin-top:10px' }, 'Der QR-Code enthält nur die Adresse der Gruppe. Er funktioniert, solange du die Gruppe dabei offen hast.'));
+    }
+
+    function viewMembersPanel(doc, balances, me) {
+        const allMembers = Object.keys(doc.members).map(function (id) { return doc.members[id]; })
+            .sort(function (a, b) { return (a.left - b.left) || a.name.localeCompare(b.name, 'de'); });
+
+        function hasOpenBalance(id) {
+            return Object.keys(balances).some(function (cur) { return balances[cur][id]; });
+        }
+        function saveMember(member, patch, kind) {
+            const next = Object.assign({}, member, patch, { t: C.nextT(doc) });
+            doc.members[member.id] = next;
+            if (kind) logActivity(doc, kind, member.id, next.name);
+            commit(doc);
+            render();
+        }
+
+        const rows = allMembers.map(function (m) {
+            let action;
+            if (m.left) {
+                action = h('button', {
+                    class: 'btn btn-small', type: 'button',
+                    onclick: function () { saveMember(m, { left: false }, 'member-back'); }
+                }, 'Zurückholen');
+            } else if (m.id !== me) {
+                action = h('button', {
+                    class: 'btn btn-small', type: 'button',
+                    onclick: function () {
+                        if (hasOpenBalance(m.id)) {
+                            toast(m.name + ' hat noch einen offenen Saldo und kann erst danach raus.');
+                            return;
+                        }
+                        saveMember(m, { left: true }, 'member-left');
+                    }
+                }, 'Entfernen');
+            }
+            return h('div', { class: 'member-row' },
+                h('input', {
+                    type: 'text', maxlength: 40, value: m.name, 'aria-label': 'Name von ' + m.name,
+                    onchange: function (e) {
+                        const name = e.target.value.trim();
+                        if (name && name !== m.name) saveMember(m, { name: name });
+                        else e.target.value = m.name;
+                    }
+                }),
+                h('span', { class: 'state' }, m.id === me ? 'Du' : m.left ? 'Raus' : ''),
+                action || h('span'));
+        });
+
+        const addInput = h('input', { type: 'text', maxlength: 40, placeholder: 'Name', 'aria-label': 'Neue Person' });
+        return h('section', { class: 'panel' },
+            h('h2', null, 'Personen'),
+            rows,
+            h('form', {
+                class: 'add-row',
+                onsubmit: function (e) {
+                    e.preventDefault();
+                    const name = addInput.value.trim();
+                    if (!name) return;
+                    const id = C.newId();
+                    doc.members[id] = { id: id, t: C.nextT(doc), name: name, left: false };
+                    logActivity(doc, 'member-add', id, name);
+                    commit(doc);
+                    addInput.value = '';
+                    addInput.blur();
+                    render();
+                }
+            }, addInput, h('button', { class: 'btn', type: 'submit' }, 'Hinzufügen')),
+            h('div', { class: 'field', style: 'margin:16px 0 0' },
+                h('label', { for: 'whoAmI' }, 'Das bin ich auf diesem Gerät'),
+                h('select', {
+                    id: 'whoAmI', value: me,
+                    onchange: function (e) {
+                        store.me[doc.id] = e.target.value;
+                        persist();
+                        e.target.blur();
+                        render();
+                    }
+                }, activeMembers(doc).map(function (m) { return h('option', { value: m.id }, m.name); }))));
+    }
+
+    function viewSettingsTab(doc, balances, me) {
+        return h('div', null,
+            viewInvitePanel(doc),
+            viewMembersPanel(doc, balances, me),
+            h('section', { class: 'panel' },
+                h('h2', null, 'Einstellungen'),
+                h('div', { class: 'field' },
+                    h('label', { for: 'editName' }, 'Name der Gruppe'),
+                    h('input', {
+                        id: 'editName', type: 'text', maxlength: 60, value: doc.meta.name,
+                        onchange: function (e) {
+                            const name = e.target.value.trim();
+                            if (name && name !== doc.meta.name) saveMeta(doc, { name: name }, true);
+                            e.target.value = doc.meta.name;
+                        }
+                    })),
+                h('div', { class: 'field' },
+                    h('span', { class: 'field-label' }, 'Symbol'),
+                    emojiPicker(doc.meta.emoji, function (emoji) { saveMeta(doc, { emoji: emoji }, true); })),
+                h('div', { class: 'field' },
+                    h('label', { for: 'editCurrency' }, 'Standardwährung'),
+                    currencySelect(doc.meta.currency, function (e) { saveMeta(doc, { currency: e.target.value }, true); }, { id: 'editCurrency' }))),
+            h('section', { class: 'panel' },
+                h('h2', null, 'Daten'),
+                h('div', { class: 'actions', style: 'margin-top:0' },
+                    h('button', {
+                        class: 'btn', type: 'button',
+                        onclick: function () { download('quitt-' + fileSafe(doc.meta.name) + '.csv', 'text/csv;charset=utf-8', C.toCsv(doc)); }
+                    }, 'Als CSV exportieren'),
+                    h('button', {
+                        class: 'btn btn-danger', type: 'button',
+                        onclick: function () {
+                            if (confirm('„' + doc.meta.name + '“ von diesem Gerät entfernen? Die anderen behalten ihre Kopie. Über deren Link kommst du zurück.')) {
+                                removeGroup(doc);
+                            }
+                        }
+                    }, 'Von diesem Gerät entfernen'))));
+    }
+
+    /* ---------- Ausgabe anlegen/bearbeiten ---------- */
+
+    const SPLIT_LABELS = { equal: 'Gleich', exact: 'Beträge', percent: 'Prozent', shares: 'Anteile', adjust: 'Korrektur' };
+    const SPLIT_HINTS = {
+        equal: 'Alle Angehakten zahlen gleich viel.',
+        exact: 'Trag ein, wie viel jede Person genau trägt.',
+        percent: 'Trag den Prozentsatz pro Person ein, zusammen 100 %.',
+        shares: 'Zum Beispiel 2 für ein Paar und 1 für eine einzelne Person. 0 heißt: nicht beteiligt.',
+        adjust: 'Erst kommt die Korrektur (z. B. +5 für ein extra Getränk, -5 für einen Rabatt), der Rest wird gleich geteilt.'
+    };
+    const REPEAT_LABELS = { none: 'Nicht wiederholen', weekly: 'Jede Woche', biweekly: 'Alle zwei Wochen', monthly: 'Jeden Monat', yearly: 'Jedes Jahr' };
+
+    function viewExpenseForm(doc, existing) {
+        state.formActive = true;
+        const me = meId(doc.id);
+        const eid = existing ? existing.id : C.newId();
+
+        // Personen aus einer alten Ausgabe bleiben auswählbar, auch wenn sie die Gruppe verlassen haben.
+        const memberIds = activeMembers(doc).map(function (m) { return m.id; });
+        if (existing) {
+            Object.keys(existing.payers).concat(Object.keys(existing.split.values)).forEach(function (id) {
+                if (memberIds.indexOf(id) === -1) memberIds.push(id);
+            });
+        }
+
+        const form = {
+            desc: existing ? existing.desc : '',
+            amountText: existing ? C.amountToInput(existing.amount, existing.currency) : '',
+            currency: existing ? existing.currency : doc.meta.currency,
+            date: existing ? existing.date : C.todayStr(),
+            category: existing ? existing.category : 'general',
+            note: existing ? existing.note : '',
+            repeat: existing ? existing.repeat : 'none',
+            payMode: 'single',
+            payer: me,
+            paid: {},
+            type: existing ? existing.split.type : 'equal',
+            included: {},
+            values: { exact: {}, percent: {}, shares: {}, adjust: {} }
+        };
+        memberIds.forEach(function (id) {
+            form.included[id] = !existing || existing.split.type === 'exact' || existing.split.type === 'percent'
+                || existing.split.type === 'shares' || id in existing.split.values;
+            form.values.shares[id] = '1';
+        });
+
+        if (existing) {
+            const payers = Object.keys(existing.payers).filter(function (id) { return existing.payers[id] > 0; });
+            if (payers.length === 1) {
+                form.payer = payers[0];
+            } else {
+                form.payMode = 'multi';
+                payers.forEach(function (id) { form.paid[id] = C.amountToInput(existing.payers[id], existing.currency); });
+            }
+            const values = existing.split.values;
+            if (existing.split.type === 'shares') {
+                memberIds.forEach(function (id) { form.values.shares[id] = id in values ? String(values[id]).replace('.', ',') : '0'; });
+            } else if (existing.split.type === 'percent') {
+                Object.keys(values).forEach(function (id) { form.values.percent[id] = String(values[id]).replace('.', ','); });
+            } else if (existing.split.type === 'exact' || existing.split.type === 'adjust') {
+                Object.keys(values).forEach(function (id) {
+                    form.values[existing.split.type][id] = values[id] ? C.amountToInput(values[id], existing.currency) : '';
+                });
+            }
+        }
+
+        const error = h('div', { class: 'form-error', hidden: true });
+        const payArea = h('div', null);
+        const splitRows = h('div', null);
+        const splitHint = h('div', { class: 'split-hint' });
+        const splitSum = h('div', { class: 'sum-line' });
+        const paySum = h('div', { class: 'sum-line' });
+        const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Art der Aufteilung' });
+        const previews = {};
+
+        function amount() {
+            const value = C.parseAmount(form.amountText, form.currency);
+            return value && value > 0 ? value : 0;
+        }
+
+        /** Liest die Aufteilung aus dem Formular. Liefert {values} oder {error}. */
+        function readSplit() {
+            const values = {};
+            let bad = null;
+            memberIds.forEach(function (id) {
+                if (bad) return;
+                const text = (form.values[form.type] && form.values[form.type][id]) || '';
+                if (form.type === 'equal') {
+                    if (form.included[id]) values[id] = 1;
+                } else if (form.type === 'exact') {
+                    if (!text.trim()) return;
+                    const v = C.parseAmount(text, form.currency);
+                    if (v === null) bad = 'Bitte prüf die Beträge.';
+                    else if (v > 0) values[id] = v;
+                } else if (form.type === 'adjust') {
+                    if (!form.included[id]) return;
+                    const v = text.trim() ? C.parseAmount(text, form.currency, true) : 0;
+                    if (v === null) bad = 'Bitte prüf die Korrekturen.';
+                    else values[id] = v;
+                } else {
+                    if (!text.trim()) return;
+                    const v = C.parseQuantity(text);
+                    if (v === null || v < 0) bad = form.type === 'percent' ? 'Bitte prüf die Prozente.' : 'Bitte prüf die Anteile.';
+                    else if (v > 0) values[id] = v;
+                }
+            });
+            if (bad) return { error: bad };
+            if (!Object.keys(values).length) return { error: 'Wähle mindestens eine Person aus.' };
+            return { values: values };
+        }
+
+        function readPayers(total) {
+            if (form.payMode === 'single') {
+                const single = {};
+                single[form.payer] = total;
+                return { payers: single };
+            }
+            const payers = {};
+            let sum = 0;
+            for (let i = 0; i < memberIds.length; i++) {
+                const id = memberIds[i];
+                const text = form.paid[id] || '';
+                if (!text.trim()) continue;
+                const v = C.parseAmount(text, form.currency);
+                if (v === null) return { error: 'Bitte prüf, wer wie viel bezahlt hat.' };
+                if (v > 0) {
+                    payers[id] = v;
+                    sum += v;
+                }
+            }
+            if (sum !== total) return { error: 'Die bezahlten Beträge ergeben nicht die Gesamtsumme.' };
+            return { payers: payers };
+        }
+
+        function setSum(el, text, status) {
+            el.textContent = text;
+            el.className = 'sum-line' + (status ? ' ' + status : '');
+        }
+
+        function refresh() {
+            const total = amount();
+            const cur = form.currency;
+            const read = readSplit();
+            const owed = total && read.values
+                ? C.computeOwed({ id: eid, amount: total, split: { type: form.type, values: read.values } })
+                : null;
+
+            memberIds.forEach(function (id) {
+                if (previews[id]) previews[id].textContent = owed && owed[id] ? money(owed[id], cur) : '';
+            });
+
+            if (form.type === 'exact' && read.values) {
+                const sum = Object.keys(read.values).reduce(function (acc, id) { return acc + read.values[id]; }, 0);
+                const rest = total - sum;
+                if (!total) setSum(splitSum, 'Summe: ' + money(sum, cur));
+                else if (rest > 0) setSum(splitSum, 'Noch ' + money(rest, cur) + ' offen', 'bad');
+                else if (rest < 0) setSum(splitSum, money(-rest, cur) + ' zu viel', 'bad');
+                else setSum(splitSum, 'Passt', 'ok');
+            } else if (form.type === 'percent' && read.values) {
+                const sum = Object.keys(read.values).reduce(function (acc, id) { return acc + read.values[id]; }, 0);
+                const rest = Math.round((100 - sum) * 1000) / 1000;
+                const restText = String(Math.abs(rest)).replace('.', ',');
+                if (Math.abs(rest) <= 0.005) setSum(splitSum, 'Passt', 'ok');
+                else if (rest > 0) setSum(splitSum, 'Noch ' + restText + ' % offen', 'bad');
+                else setSum(splitSum, restText + ' % zu viel', 'bad');
+            } else if (form.type === 'adjust' && read.values && total && !owed) {
+                setSum(splitSum, 'Die Korrekturen passen nicht zum Betrag', 'bad');
+            } else if (form.type === 'equal' && read.values && total) {
+                const count = Object.keys(read.values).length;
+                setSum(splitSum, count + (count === 1 ? ' Person' : ' Personen'));
+            } else {
+                setSum(splitSum, read.error && read.values === undefined && total ? read.error : '', read.error ? 'bad' : '');
+            }
+
+            if (form.payMode === 'multi') {
+                let sum = 0;
+                memberIds.forEach(function (id) { sum += C.parseAmount(form.paid[id] || '', cur) || 0; });
+                const rest = total - sum;
+                if (rest > 0) setSum(paySum, 'Noch ' + money(rest, cur) + ' offen', 'bad');
+                else if (rest < 0) setSum(paySum, money(-rest, cur) + ' zu viel', 'bad');
+                else setSum(paySum, total ? 'Passt' : '', total ? 'ok' : '');
+            } else {
+                setSum(paySum, '');
+            }
+        }
+
+        function drawPayers() {
+            payArea.textContent = '';
+            if (form.payMode === 'single') {
+                payArea.appendChild(h('div', { class: 'field' },
+                    h('label', { for: 'payer' }, 'Bezahlt von'),
+                    h('select', {
+                        id: 'payer', value: form.payer,
+                        onchange: function (e) {
+                            if (e.target.value === '__multi') {
+                                form.payMode = 'multi';
+                                drawPayers();
+                                refresh();
+                                return;
+                            }
+                            form.payer = e.target.value;
+                        }
+                    },
+                        memberIds.map(function (id) { return h('option', { value: id }, id === me ? memberName(doc, id) + ' (du)' : memberName(doc, id)); }),
+                        h('option', { value: '__multi' }, 'Mehrere Personen …'))));
+                return;
+            }
+            payArea.appendChild(h('div', { class: 'field' },
+                h('span', { class: 'field-label' }, 'Bezahlt von'),
+                memberIds.map(function (id) {
+                    return h('div', { class: 'split-row compact' },
+                        h('span', { class: 'name' }, memberName(doc, id)),
+                        h('input', {
+                            type: 'text', inputmode: 'decimal', value: form.paid[id] || '', placeholder: '0,00',
+                            'aria-label': 'Bezahlt von ' + memberName(doc, id),
+                            oninput: function (e) { form.paid[id] = e.target.value; refresh(); }
+                        }));
+                }),
+                paySum,
+                h('button', {
+                    class: 'link-btn small', type: 'button',
+                    onclick: function () { form.payMode = 'single'; drawPayers(); refresh(); }
+                }, 'Nur eine Person hat bezahlt')));
+        }
+
+        function drawSplit() {
+            seg.textContent = '';
+            C.SPLIT_TYPES.forEach(function (type) {
+                seg.appendChild(h('button', {
+                    type: 'button',
+                    'aria-pressed': String(type === form.type),
+                    onclick: function () { form.type = type; drawSplit(); refresh(); }
+                }, SPLIT_LABELS[type]));
+            });
+            splitHint.textContent = SPLIT_HINTS[form.type];
+
+            splitRows.textContent = '';
+            memberIds.forEach(function (id) {
+                const name = memberName(doc, id);
+                previews[id] = h('span', { class: 'preview' });
+                const useCheck = form.type === 'equal' || form.type === 'adjust';
+                const labelEl = useCheck
+                    ? h('label', null,
+                        h('input', {
+                            type: 'checkbox', checked: form.included[id],
+                            onchange: function (e) { form.included[id] = e.target.checked; refresh(); }
+                        }),
+                        h('span', { class: 'name' }, name))
+                    : h('span', { class: 'name' }, name);
+
+                let input = h('span');
+                if (form.type !== 'equal') {
+                    const placeholder = { exact: '0,00', percent: '0 %', shares: '0', adjust: '+/-' }[form.type];
+                    input = h('input', {
+                        type: 'text',
+                        inputmode: form.type === 'adjust' ? 'text' : 'decimal',
+                        placeholder: placeholder,
+                        value: form.values[form.type][id] || '',
+                        'aria-label': SPLIT_LABELS[form.type] + ' für ' + name,
+                        oninput: function (e) { form.values[form.type][id] = e.target.value; refresh(); }
+                    });
+                }
+                splitRows.appendChild(h('div', { class: 'split-row' }, labelEl, input, previews[id]));
+            });
+        }
+
+        function submit(e) {
+            e.preventDefault();
+            function fail(message) {
+                error.textContent = message;
+                error.hidden = false;
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+            const desc = form.desc.trim();
+            const total = amount();
+            if (!desc) return fail('Bitte gib eine Beschreibung ein.');
+            if (!total) return fail('Bitte gib einen gültigen Betrag ein.');
+            if (!form.date) return fail('Bitte wähle ein Datum.');
+            const paid = readPayers(total);
+            if (paid.error) return fail(paid.error);
+            const read = readSplit();
+            if (read.error) return fail(read.error);
+
+            const record = {
+                id: eid,
+                t: C.nextT(doc),
+                by: me,
+                desc: desc,
+                amount: total,
+                currency: form.currency,
+                date: form.date,
+                category: form.category,
+                note: form.note.trim(),
+                payers: paid.payers,
+                split: { type: form.type, values: read.values },
+                repeat: existing && existing.parent ? 'none' : form.repeat,
+                del: false
+            };
+            if (existing && existing.parent) record.parent = existing.parent;
+            if (!C.computeOwed(record)) {
+                return fail(form.type === 'percent' ? 'Die Prozente müssen zusammen 100 ergeben.'
+                    : form.type === 'exact' ? 'Die Beträge müssen zusammen die Gesamtsumme ergeben.'
+                        : 'Diese Aufteilung geht nicht auf.');
+            }
+
+            doc.expenses[eid] = record;
+            logActivity(doc, existing ? 'expense-edit' : 'expense-add', eid, desc, total, form.currency);
+            commit(doc);
+            state.formActive = false;
+            go('/g/' + doc.id);
+        }
+
+        drawPayers();
+        drawSplit();
+
+        const view = h('div', null,
+            existing ? backLink(doc, 'expense/' + existing.id, 'Zurück') : backLink(doc),
+            h('form', { class: 'panel', onsubmit: submit, novalidate: true },
+                h('h2', null, existing ? 'Ausgabe bearbeiten' : 'Neue Ausgabe'),
+                error,
+                h('div', { class: 'field' },
+                    h('label', { for: 'expDesc' }, 'Beschreibung'),
+                    h('input', {
+                        id: 'expDesc', type: 'text', maxlength: 120, value: form.desc, placeholder: 'Pizza, Tanken, Miete …', autocomplete: 'off',
+                        oninput: function (e) { form.desc = e.target.value; }
+                    })),
+                h('div', { class: 'field' },
+                    h('label', { for: 'expAmount' }, 'Betrag'),
+                    h('div', { class: 'amount-row' },
+                        h('input', {
+                            id: 'expAmount', type: 'text', inputmode: 'decimal', value: form.amountText, placeholder: '0,00', autocomplete: 'off',
+                            oninput: function (e) { form.amountText = e.target.value; refresh(); }
+                        }),
+                        currencySelect(form.currency, function (e) { form.currency = e.target.value; refresh(); }, { 'aria-label': 'Währung' }))),
+                h('div', { class: 'field-row' },
+                    h('div', { class: 'field' },
+                        h('label', { for: 'expDate' }, 'Datum'),
+                        h('input', {
+                            id: 'expDate', type: 'date', value: form.date,
+                            onchange: function (e) { form.date = e.target.value; }
+                        })),
+                    h('div', { class: 'field' },
+                        h('label', { for: 'expCategory' }, 'Kategorie'),
+                        h('select', {
+                            id: 'expCategory', value: form.category,
+                            onchange: function (e) { form.category = e.target.value; }
+                        }, C.CATEGORIES.map(function (c) { return h('option', { value: c.id }, c.emoji + ' ' + c.label); })))),
+                payArea,
+                h('div', { class: 'field' },
+                    h('span', { class: 'field-label' }, 'Aufteilung'),
+                    seg, splitHint, splitRows, splitSum),
+                existing && existing.parent ? null : h('div', { class: 'field' },
+                    h('label', { for: 'expRepeat' }, 'Wiederholen'),
+                    h('select', {
+                        id: 'expRepeat', value: form.repeat,
+                        onchange: function (e) { form.repeat = e.target.value; }
+                    }, C.REPEATS.map(function (r) { return h('option', { value: r }, REPEAT_LABELS[r]); }))),
+                h('div', { class: 'field' },
+                    h('label', { for: 'expNote' }, 'Notiz'),
+                    h('textarea', {
+                        id: 'expNote', maxlength: 1000, value: form.note,
+                        oninput: function (e) { form.note = e.target.value; }
+                    })),
+                h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, existing ? 'Änderungen speichern' : 'Ausgabe speichern')));
+
+        refresh();
+        return view;
+    }
+
+    /* ---------- Ausgabe-Detail ---------- */
+
+    function setExpenseDeleted(doc, e, deleted) {
+        const current = doc.expenses[e.id];
+        doc.expenses[e.id] = Object.assign({}, current, { del: deleted, t: C.nextT(doc) });
+        logActivity(doc, deleted ? 'expense-del' : 'expense-restore', e.id, current.desc, current.amount, current.currency);
+        commit(doc);
+    }
+
+    function viewExpenseDetail(doc, e) {
+        const me = meId(doc.id);
+        const owed = C.computeOwed(e) || {};
+        const c = category(e.category);
+        const cur = e.currency;
+
+        const payers = Object.keys(e.payers).filter(function (id) { return e.payers[id] > 0; });
+        const shareIds = Object.keys(owed).filter(function (id) { return owed[id] > 0; })
+            .sort(function (a, b) { return memberName(doc, a).localeCompare(memberName(doc, b), 'de'); });
+
+        const comments = Object.keys(doc.comments).map(function (id) { return doc.comments[id]; })
+            .filter(function (x) { return x.expense === e.id && !x.del; })
+            .sort(function (a, b) { return a.t - b.t; });
+
+        const commentInput = h('input', { type: 'text', maxlength: 1000, placeholder: 'Kommentar schreiben', 'aria-label': 'Kommentar' });
+
+        function addComment(ev) {
+            ev.preventDefault();
+            const text = commentInput.value.trim();
+            if (!text) return;
+            const id = C.newId();
+            doc.comments[id] = { id: id, t: C.nextT(doc), by: me, expense: e.id, text: text, del: false };
+            logActivity(doc, 'comment', e.id, e.desc);
+            commit(doc);
+            commentInput.value = '';
+            commentInput.blur();
+            render();
+        }
+
+        function removeComment(comment) {
+            doc.comments[comment.id] = Object.assign({}, comment, { del: true, t: C.nextT(doc) });
+            commit(doc);
+            render();
+        }
+
+        const repeatInfo = e.parent ? 'Wiederkehrende Ausgabe'
+            : e.repeat && e.repeat !== 'none' ? 'Wiederholt sich: ' + REPEAT_LABELS[e.repeat] : null;
+
+        return h('div', null,
+            backLink(doc),
+            e.del ? h('div', { class: 'notice' }, 'Diese Ausgabe wurde gelöscht und zählt nicht mehr. ',
+                h('button', {
+                    class: 'link-btn', type: 'button',
+                    onclick: function () {
+                        setExpenseDeleted(doc, e, false);
+                        render();
+                    }
+                }, 'Wiederherstellen')) : null,
+            h('section', { class: 'panel' },
+                h('div', { class: 'detail-head' },
+                    h('div', { class: 'emoji', 'aria-hidden': 'true' }, c.emoji),
+                    h('h1', null, e.desc),
+                    h('div', { class: 'amount' }, money(e.amount, cur)),
+                    h('div', { class: 'small muted' }, formatDate(e.date, true) + ' · ' + c.label),
+                    repeatInfo ? h('div', { class: 'small muted' }, '🔁 ' + repeatInfo) : null),
+                h('h2', null, payers.length > 1 ? 'Bezahlt haben' : 'Bezahlt hat'),
+                payers.map(function (id) {
+                    return h('div', { class: 'kv' }, h('span', null, memberName(doc, id)), h('span', null, money(e.payers[id], cur)));
+                }),
+                h('h2', null, 'Anteile'),
+                shareIds.map(function (id) {
+                    return h('div', { class: 'kv' }, h('span', null, memberName(doc, id)), h('span', null, money(owed[id], cur)));
+                }),
+                e.note ? [h('h2', null, 'Notiz'), h('div', { class: 'note-box' }, e.note)] : null,
+                e.del ? null : h('div', { class: 'actions' },
+                    h('a', { class: 'btn', href: '#/g/' + doc.id + '/expense/' + e.id + '/edit' }, 'Bearbeiten'),
+                    h('button', {
+                        class: 'btn btn-danger', type: 'button',
+                        onclick: function () {
+                            setExpenseDeleted(doc, e, true);
+                            go('/g/' + doc.id);
+                            toast('„' + e.desc + '“ gelöscht.', 'Rückgängig', function () {
+                                setExpenseDeleted(doc, e, false);
+                                softRender();
+                            });
+                        }
+                    }, 'Löschen'))),
+            h('section', { class: 'panel' },
+                h('h2', null, 'Kommentare'),
+                comments.length ? null : h('div', { class: 'small muted' }, 'Noch keine Kommentare.'),
+                comments.map(function (comment) {
+                    return h('div', { class: 'comment' },
+                        h('div', { class: 'meta' }, (comment.by === me ? 'Du' : memberName(doc, comment.by)) + ' · ' + timeAgo(comment.t),
+                            comment.by === me ? [' · ', h('button', {
+                                class: 'link-btn', type: 'button',
+                                onclick: function () { removeComment(comment); }
+                            }, 'Löschen')] : null),
+                        h('div', { class: 'text' }, comment.text));
+                }),
+                h('form', { class: 'comment-form', onsubmit: addComment },
+                    commentInput,
+                    h('button', { class: 'btn', type: 'submit' }, 'Senden'))));
+    }
+
+    /* ---------- Zahlung ---------- */
+
+    function viewPaymentForm(doc, payment, params) {
+        state.formActive = true;
+        const me = meId(doc.id);
+        const members = activeMembers(doc);
+        const ids = members.map(function (m) { return m.id; });
+        if (payment) {
+            [payment.from, payment.to].forEach(function (id) {
+                if (ids.indexOf(id) === -1) ids.push(id);
+            });
+        }
+
+        const prefill = {
+            from: params.get('from'),
+            to: params.get('to'),
+            amount: parseInt(params.get('amount'), 10),
+            cur: params.get('cur')
+        };
+        const currency = payment ? payment.currency
+            : /^[A-Z]{3}$/.test(prefill.cur || '') ? prefill.cur : doc.meta.currency;
+
+        const form = {
+            from: payment ? payment.from : ids.indexOf(prefill.from) !== -1 ? prefill.from : me,
+            to: payment ? payment.to : ids.indexOf(prefill.to) !== -1 ? prefill.to : (ids.filter(function (id) { return id !== me; })[0] || me),
+            currency: currency,
+            amountText: payment ? C.amountToInput(payment.amount, currency)
+                : prefill.amount > 0 ? C.amountToInput(prefill.amount, currency) : '',
+            date: payment ? payment.date : C.todayStr(),
+            note: payment ? payment.note : ''
+        };
+
+        const error = h('div', { class: 'form-error', hidden: true });
+
+        function personSelect(id, key, labelText) {
+            return h('div', { class: 'field' },
+                h('label', { for: id }, labelText),
+                h('select', {
+                    id: id, value: form[key],
+                    onchange: function (e) { form[key] = e.target.value; }
+                }, ids.map(function (memberId) {
+                    return h('option', { value: memberId }, memberId === me ? memberName(doc, memberId) + ' (du)' : memberName(doc, memberId));
+                })));
+        }
+
+        function label() {
+            return memberName(doc, form.from) + ' an ' + memberName(doc, form.to);
+        }
+
+        function submit(e) {
+            e.preventDefault();
+            function fail(message) {
+                error.textContent = message;
+                error.hidden = false;
+            }
+            const amount = C.parseAmount(form.amountText, form.currency);
+            if (!amount) return fail('Bitte gib einen gültigen Betrag ein.');
+            if (form.from === form.to) return fail('Wähle zwei verschiedene Personen.');
+            if (!form.date) return fail('Bitte wähle ein Datum.');
+            const id = payment ? payment.id : C.newId();
+            doc.payments[id] = {
+                id: id, t: C.nextT(doc), by: me, from: form.from, to: form.to, amount: amount,
+                currency: form.currency, date: form.date, note: form.note.trim(), del: false
+            };
+            logActivity(doc, payment ? 'pay-edit' : 'pay-add', id, label(), amount, form.currency);
+            commit(doc);
+            state.formActive = false;
+            go('/g/' + doc.id + '/balances');
+        }
+
+        function removePayment() {
+            const before = doc.payments[payment.id];
+            doc.payments[payment.id] = Object.assign({}, before, { del: true, t: C.nextT(doc) });
+            logActivity(doc, 'pay-del', payment.id, label(), before.amount, before.currency);
+            commit(doc);
+            state.formActive = false;
+            go('/g/' + doc.id + '/balances');
+            toast('Zahlung gelöscht.', 'Rückgängig', function () {
+                doc.payments[payment.id] = Object.assign({}, doc.payments[payment.id], { del: false, t: C.nextT(doc) });
+                commit(doc);
+                softRender();
+            });
+        }
+
+        return h('div', null,
+            backLink(doc, 'balances', 'Salden'),
+            payment && payment.del ? h('div', { class: 'notice' }, 'Diese Zahlung wurde gelöscht.') : null,
+            h('form', { class: 'panel', onsubmit: submit, novalidate: true },
+                h('h2', null, payment ? 'Zahlung bearbeiten' : 'Zahlung eintragen'),
+                h('p', { class: 'small muted', style: 'margin-bottom:12px' }, 'Quitt überweist selbst nichts. Trag hier ein, was ihr bar oder per Überweisung schon beglichen habt.'),
+                error,
+                h('div', { class: 'field-row' },
+                    personSelect('payFrom', 'from', 'Wer hat gezahlt?'),
+                    personSelect('payTo', 'to', 'An wen?')),
+                h('div', { class: 'field' },
+                    h('label', { for: 'payAmount' }, 'Betrag'),
+                    h('div', { class: 'amount-row' },
+                        h('input', {
+                            id: 'payAmount', type: 'text', inputmode: 'decimal', value: form.amountText, placeholder: '0,00', autocomplete: 'off',
+                            oninput: function (e) { form.amountText = e.target.value; }
+                        }),
+                        currencySelect(form.currency, function (e) { form.currency = e.target.value; }, { 'aria-label': 'Währung' }))),
+                h('div', { class: 'field' },
+                    h('label', { for: 'payDate' }, 'Datum'),
+                    h('input', {
+                        id: 'payDate', type: 'date', value: form.date,
+                        onchange: function (e) { form.date = e.target.value; }
+                    })),
+                h('div', { class: 'field' },
+                    h('label', { for: 'payNote' }, 'Notiz'),
+                    h('input', {
+                        id: 'payNote', type: 'text', maxlength: 300, value: form.note,
+                        oninput: function (e) { form.note = e.target.value; }
+                    })),
+                h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, payment ? 'Änderungen speichern' : 'Zahlung speichern'),
+                payment && !payment.del ? h('div', { class: 'actions' },
+                    h('button', { class: 'btn btn-danger', type: 'button', onclick: removePayment }, 'Zahlung löschen')) : null));
+    }
+
+    /* ---------- Start ---------- */
+
+    async function onHashChange() {
+        await handleJoin();
+        render();
+    }
+
+    window.addEventListener('hashchange', onHashChange);
+
+    window.addEventListener('storage', function (e) {
+        if (e.key === STORE_KEY && adoptStored()) softRender();
+    });
+
+    // Eine Aktualisierung, die während der Eingabe kam, nachholen. Mit Verzögerung,
+    // damit ein Klick auf "Senden" nicht auf ein bereits ersetztes Element trifft.
+    document.addEventListener('focusout', function () {
+        setTimeout(function () {
+            if (state.pendingRender && !isEditing()) softRender();
+        }, 300);
+    });
+
+    document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) Sync.wake();
+    });
+    window.addEventListener('online', function () { Sync.wake(); });
+    window.addEventListener('offline', function () { updateSyncPill(); });
+
+    store = readStored();
+    handleJoin().then(render);
+})();

@@ -54,6 +54,9 @@ relativ, über die eigene `src`-Angabe.
   links, gerenderter Vorschau rechts und Fehlerkonsole darunter.
 - `/knallbum/` – Berechnet aus Preisen an der Bar die beste Option (ml Alkohol/€).
 - `/laserfeelings/` – Szenario-Generator für Laser & Feelings.
+- `/quitt/` – Teilt gemeinsame Ausgaben in Gruppen auf (gleich, Beträge, Prozent, Anteile, Korrektur).
+  Ohne Server: Daten liegen im Browser, Abgleich per Link oder live per WebRTC (`core.js` ist die Rechenlogik,
+  `app.js` Oberfläche und Sync; PeerJS und QR-Code kommen aus `fileshare/vendor/`).
 - `/zauberkloppen/` – Szenario-Generator für Fantasy-Rollenspiele.
 
 ## Entwicklung
