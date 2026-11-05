@@ -293,8 +293,13 @@
         return baseUrl() + '#join=' + doc.id + '&d=' + await encodeSnapshot(doc) + (expenseId ? '&e=' + expenseId : '');
     }
 
-    async function shareInvite(doc, expenseId) {
-        const link = await inviteLink(doc, expenseId);
+    /** Nur die Adresse: kurz, aber die Daten kommen erst, wenn jemand die Gruppe offen hat. */
+    function shortLink(doc, expenseId) {
+        return baseUrl() + '#join=' + doc.id + (expenseId ? '&e=' + expenseId : '');
+    }
+
+    async function shareInvite(doc, expenseId, short) {
+        const link = short ? shortLink(doc, expenseId) : await inviteLink(doc, expenseId);
         if (navigator.share) {
             try {
                 await navigator.share({ title: 'Quitt – ' + doc.meta.name, url: link });
@@ -757,18 +762,25 @@
         const friends = h('div', null);
         const error = h('div', { class: 'form-error', hidden: true });
 
+        /** Es bleibt immer ein freies Feld: Wird das letzte beschrieben, kommt das nächste dazu. */
+        let lastFriend = null;
         function addFriendField() {
             const input = h('input', {
                 type: 'text', maxlength: 40, placeholder: 'Name', 'aria-label': 'Name',
                 autocomplete: 'off',
+                oninput: function () {
+                    if (input === lastFriend && input.value.trim()) addFriendField();
+                },
                 onkeydown: function (e) {
                     if (e.key !== 'Enter') return;
                     e.preventDefault();
-                    if (input.value.trim()) addFriendField();
+                    const inputs = Array.from(friends.querySelectorAll('input'));
+                    const next = inputs[inputs.indexOf(input) + 1];
+                    if (next) next.focus();
                 }
             });
+            lastFriend = input;
             friends.appendChild(h('div', { class: 'field' }, input));
-            return input;
         }
         addFriendField();
         addFriendField();
@@ -826,7 +838,6 @@
                 h('div', { class: 'field' }, h('label', { for: 'myName' }, 'Dein Name'), meInput),
                 h('span', { class: 'field-label' }, 'Wer ist noch dabei?'),
                 friends,
-                h('button', { class: 'btn btn-small', type: 'button', onclick: function () { addFriendField().focus(); } }, '+ Weitere Person'),
                 h('div', { class: 'actions' },
                     h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, 'Gruppe anlegen'))));
     }
@@ -967,15 +978,16 @@
                 h('h1', null, doc.meta.name),
                 h('a', { id: 'syncPill', class: syncPillClass(), href: '#/g/' + doc.id + '/settings' }, syncLabel())),
             summary ? h('section', { class: 'panel' }, summary) : null,
+            h('div', { class: 'group-actions' },
+                h('a', { class: 'btn btn-primary', href: '#/g/' + doc.id + '/expense' }, '+ Ausgabe'),
+                h('a', { class: 'btn', href: '#/g/' + doc.id + '/pay' }, '+ Zahlung')),
             h('nav', { class: 'tabs', 'aria-label': 'Gruppenbereiche' }, tabs.map(function (t) {
                 return h('a', {
                     href: '#/g/' + doc.id + (t[0] === 'expenses' ? '' : '/' + t[0]),
                     'aria-current': t[0] === tab ? 'page' : null
                 }, t[1]);
             })),
-            content,
-            tab === 'expenses' || tab === 'balances'
-                ? h('a', { class: 'btn btn-primary fab', href: '#/g/' + doc.id + '/expense' }, '+ Ausgabe') : null);
+            content);
     }
 
     /* Ausgaben */
@@ -1168,7 +1180,6 @@
                         h('strong', null, 'Schulden vereinfachen'),
                         h('div', { class: 'small muted' }, 'Fasst Schulden zusammen, damit möglichst wenige Überweisungen nötig sind. Dann zahlst du eventuell jemandem, dem du nicht direkt etwas schuldest. Die Beträge unterm Strich bleiben gleich.'))),
                 h('div', { class: 'actions' },
-                    h('a', { class: 'btn', href: '#/g/' + doc.id + '/pay' }, 'Zahlung eintragen'),
                     sections.length ? h('button', {
                         class: 'btn', type: 'button',
                         onclick: function () { shareText('Quitt – ' + doc.meta.name, summaryText(doc, balances)); }
@@ -1297,7 +1308,7 @@
                 const box = h('div');
                 qrBox.appendChild(box);
                 new QRCode(box, {
-                    text: baseUrl() + '#join=' + doc.id,
+                    text: shortLink(doc),
                     width: 200, height: 200,
                     colorDark: '#14121a', colorLight: '#ffffff',
                     correctLevel: QRCode.CorrectLevel.M
@@ -1314,9 +1325,10 @@
             h('div', { class: 'actions' },
                 navigator.share ? h('button', { class: 'btn btn-primary', type: 'button', onclick: function () { shareInvite(doc); } }, 'Link teilen') : null,
                 h('button', { class: navigator.share ? 'btn' : 'btn btn-primary', type: 'button', onclick: copyLink }, 'Link kopieren'),
+                h('button', { class: 'btn', type: 'button', onclick: function () { shareInvite(doc, null, true); } }, 'Kurzer Link'),
                 h('button', { class: 'btn', type: 'button', onclick: toggleQr }, 'QR-Code')),
             qrBox,
-            h('p', { class: 'small muted', style: 'margin-top:10px' }, 'Der QR-Code enthält nur die Adresse der Gruppe. Er funktioniert, solange du die Gruppe dabei offen hast.'));
+            h('p', { class: 'small muted', style: 'margin-top:10px' }, 'Kurzer Link und QR-Code enthalten nur die Adresse der Gruppe. Sie funktionieren nur, solange jemand die Gruppe gerade offen hat.'));
     }
 
     function viewMembersPanel(doc, balances, me) {
@@ -2398,7 +2410,11 @@
                 h('button', {
                     class: 'btn', type: 'button',
                     onclick: function () { shareInvite(doc, e.id); }
-                }, 'Link zum Auswählen schicken')));
+                }, 'Link zum Auswählen schicken'),
+                h('button', {
+                    class: 'btn', type: 'button',
+                    onclick: function () { shareInvite(doc, e.id, true); }
+                }, 'Kurzer Link')));
     }
 
     /* ---------- Ausgabe-Detail ---------- */
@@ -2618,7 +2634,7 @@
             payment && payment.del ? h('div', { class: 'notice' }, 'Diese Zahlung wurde gelöscht.') : null,
             h('form', { class: 'panel', onsubmit: submit, novalidate: true },
                 h('h2', null, payment ? 'Zahlung bearbeiten' : 'Zahlung eintragen'),
-                h('p', { class: 'small muted', style: 'margin-bottom:12px' }, 'Quitt überweist selbst nichts. Trag hier ein, was ihr bar oder per Überweisung schon beglichen habt.'),
+                h('p', { class: 'small muted', style: 'margin-bottom:12px' }, 'Quitt überweist selbst nichts. Trag hier ein, was eine Person einer anderen gegeben hat, egal ob alles, nur einen Teil oder einfach so.'),
                 error,
                 h('div', { class: 'field-row' },
                     personSelect('payFrom', 'from', 'Wer hat gezahlt?'),

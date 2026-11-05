@@ -11,7 +11,7 @@
  */
 'use strict';
 
-const CACHE = 'quitt-v1';
+const CACHE = 'quitt-v2';
 const NETWORK_TIMEOUT = 3000;
 const SHELL = [
     './',
@@ -28,7 +28,9 @@ const SHELL = [
 self.addEventListener('install', function (event) {
     event.waitUntil(
         caches.open(CACHE)
-            .then(function (cache) { return cache.addAll(SHELL); })
+            .then(function (cache) {
+                return cache.addAll(SHELL.map(function (url) { return new Request(url, { cache: 'reload' }); }));
+            })
             .then(function () { return self.skipWaiting(); })
     );
 });
@@ -46,7 +48,11 @@ self.addEventListener('activate', function (event) {
 });
 
 function remember(cache, request, response) {
-    if (response.ok) cache.put(request, response.clone());
+    if (response.ok) {
+        // Pro Datei nur ein Eintrag, egal mit welchem ?v= sie angefragt wurde.
+        const copy = response.clone();
+        cache.delete(request, { ignoreSearch: true }).then(function () { cache.put(request, copy); });
+    }
     return response;
 }
 
@@ -59,7 +65,8 @@ async function networkFirst(request) {
     const cache = await caches.open(CACHE);
     const cached = await cache.match(request, { ignoreSearch: true })
         || (request.mode === 'navigate' ? await cache.match('./') : undefined);
-    const network = fetch(request).then(function (response) { return remember(cache, request, response); });
+    // no-cache: Auch der HTTP-Cache des Browsers muss beim Server nachfragen.
+    const network = fetch(request.url, { cache: 'no-cache' }).then(function (response) { return remember(cache, request, response); });
     if (!cached) return network;
 
     // Nach dem Timeout antwortet der Cache, die Antwort aus dem Netz landet trotzdem darin.
