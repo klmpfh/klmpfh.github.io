@@ -10,6 +10,8 @@
  *    Marker (`del`) statt einer echten Entfernung. So können zwei Geräte
  *    unabhängig voneinander arbeiten und später beliebig oft in beliebiger
  *    Reihenfolge abgleichen, ohne dass etwas verloren geht oder wieder auftaucht.
+ * 
+ * sudo!
  */
 (function (root, factory) {
     var api = factory();
