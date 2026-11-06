@@ -20,8 +20,9 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
+    // 'general' ist der Standard und heißt: keine Kategorie, also auch kein Symbol.
     var CATEGORIES = [
-        { id: 'general',   emoji: '🧾', label: 'Allgemein' },
+        { id: 'general',   emoji: '',   label: 'Keine Kategorie' },
         { id: 'food',      emoji: '🍕', label: 'Essen & Trinken' },
         { id: 'groceries', emoji: '🛒', label: 'Einkauf' },
         { id: 'bar',       emoji: '🍻', label: 'Bar & Ausgehen' },
@@ -377,6 +378,71 @@
         return out;
     }
 
+    /* ---------- Kategorien ---------- */
+
+    function isBuiltinCategory(id) {
+        return CATEGORIES.some(function (c) { return c.id === id; });
+    }
+
+    /**
+     * Die Vorgaben gelten für jede Gruppe. doc.categories hält nur die Abweichungen:
+     * eigene Kategorien (ID wie alle Datensätze) und entfernte Vorgaben (Marker unter
+     * deren ID). "Keine Kategorie" lässt sich nicht entfernen und steht immer vorne.
+     */
+    function groupCategories(doc) {
+        var records = doc.categories || {};
+        var builtin = CATEGORIES.filter(function (c) {
+            return !(records[c.id] && records[c.id].del);
+        });
+        var own = Object.keys(records)
+            .map(function (id) { return records[id]; })
+            .filter(function (c) { return !c.del && !isBuiltinCategory(c.id); })
+            .sort(function (a, b) { return a.label.localeCompare(b.label, 'de'); });
+        return builtin.concat(own);
+    }
+
+    /** Entfernte Kategorien zählen wie "keine", die Ausgabe behält trotzdem ihre Zuordnung. */
+    function findCategory(doc, id) {
+        return groupCategories(doc).filter(function (c) { return c.id === id; })[0] || CATEGORIES[0];
+    }
+
+    /** "🐶 Haustier" → Symbol und Name. Ohne Emoji gibt es kein Symbol. */
+    function parseCategoryName(text) {
+        var clean = String(text).replace(/\s+/g, ' ').trim();
+        var emoji = clean.match(RE_EMOJI);
+        var label = emoji ? clean.replace(emoji[0], ' ').replace(/\s+/g, ' ').trim() : clean;
+        return { emoji: emoji ? emoji[0] : '', label: label.slice(0, 30) };
+    }
+
+    /**
+     * Legt eine Kategorie an oder holt eine entfernte zurück, dann gehören ihre alten
+     * Ausgaben auch wieder dazu. Liefert {category}, {exists: true} oder null.
+     */
+    function addCategory(doc, text) {
+        var parts = parseCategoryName(text);
+        if (!parts.label) return null;
+        function same(c) { return c.label.toLowerCase() === parts.label.toLowerCase(); }
+        if (groupCategories(doc).some(same)) return { exists: true };
+
+        var removedBuiltin = CATEGORIES.filter(same)[0];
+        var removedOwn = Object.keys(doc.categories)
+            .map(function (id) { return doc.categories[id]; })
+            .filter(function (c) { return c.del && same(c); })[0];
+        var id = removedBuiltin ? removedBuiltin.id : removedOwn ? removedOwn.id : newId();
+        var record = {
+            id: id, t: nextT(doc), label: removedBuiltin ? removedBuiltin.label : parts.label,
+            emoji: removedBuiltin ? removedBuiltin.emoji : parts.emoji || (removedOwn ? removedOwn.emoji : ''), del: false
+        };
+        doc.categories[id] = record;
+        return { category: record };
+    }
+
+    function removeCategory(doc, id) {
+        var current = findCategory(doc, id);
+        if (current.id !== id || id === CATEGORIES[0].id) return;
+        doc.categories[id] = { id: id, t: nextT(doc), label: current.label, emoji: current.emoji, del: true };
+    }
+
     function byAmountDesc(a, b) {
         return b.amount - a.amount || (a.id < b.id ? -1 : 1);
     }
@@ -484,7 +550,8 @@
             if (!owed) return;
             total += e.amount;
             count++;
-            categories[e.category] = (categories[e.category] || 0) + e.amount;
+            var categoryId = findCategory(doc, e.category).id;
+            categories[categoryId] = (categories[categoryId] || 0) + e.amount;
             Object.keys(e.payers).forEach(function (id) { member(id).paid += e.payers[id]; });
             Object.keys(owed).forEach(function (id) { member(id).share += owed[id]; });
         });
@@ -609,13 +676,13 @@
 
     /* ---------- Gruppen-Dokument ---------- */
 
-    var COLLECTIONS = ['members', 'expenses', 'payments', 'comments', 'activity'];
+    var COLLECTIONS = ['members', 'expenses', 'payments', 'comments', 'activity', 'categories'];
 
     function emptyGroup(id) {
         return {
             id: id,
             meta: { t: 0, name: '', currency: 'EUR', simplify: true },
-            members: {}, expenses: {}, payments: {}, comments: {}, activity: {}
+            members: {}, expenses: {}, payments: {}, comments: {}, activity: {}, categories: {}
         };
     }
 
@@ -762,7 +829,7 @@
             amount: e.amount,
             currency: e.currency,
             date: e.date,
-            category: CATEGORIES.some(function (c) { return c.id === e.category; }) ? e.category : 'general',
+            category: isBuiltinCategory(e.category) || RE_ID.test(String(e.category)) ? e.category : 'general',
             note: clip(e.note, 1000),
             payers: payers,
             split: { type: e.split.type, values: values },
@@ -791,6 +858,13 @@
     function cleanComment(c) {
         if (!RE_ID.test(c.id) || !isT(c.t) || !RE_EXPENSE_ID.test(String(c.expense))) return null;
         return { id: c.id, t: c.t, by: clip(c.by, 16), expense: c.expense, text: clip(c.text, 1000), del: !!c.del };
+    }
+
+    function cleanCategory(c) {
+        if (!(RE_ID.test(c.id) || isBuiltinCategory(c.id)) || c.id === CATEGORIES[0].id || !isT(c.t)) return null;
+        var label = clip(c.label, 30).trim();
+        if (!label && !c.del) return null;
+        return { id: c.id, t: c.t, label: label, emoji: clip(c.emoji, 16), del: !!c.del };
     }
 
     function cleanActivity(a) {
@@ -824,7 +898,8 @@
             expenses: cleanMap(raw.expenses, cleanExpense),
             payments: cleanMap(raw.payments, cleanPayment),
             comments: cleanMap(raw.comments, cleanComment),
-            activity: cleanMap(raw.activity, cleanActivity)
+            activity: cleanMap(raw.activity, cleanActivity),
+            categories: cleanMap(raw.categories, cleanCategory)
         };
     }
 
@@ -867,6 +942,9 @@
         });
         livePayments(doc).forEach(function (p) {
             lines.push(JSON.stringify(['payment', p.id, p.from, p.to, p.amount, p.currency, p.date, p.note]));
+        });
+        groupCategories(doc).forEach(function (c) {
+            lines.push(JSON.stringify(['category', c.id, c.label, c.emoji]));
         });
         Object.keys(doc.comments).forEach(function (id) {
             var c = doc.comments[id];
@@ -1374,10 +1452,10 @@
 
         liveExpenses(doc).forEach(function (e) {
             var owed = computeOwed(e) || {};
-            var category = CATEGORIES.filter(function (c) { return c.id === e.category; })[0];
+            var category = findCategory(doc, e.category);
             rows.push({
                 date: e.date,
-                cells: [e.date, 'Ausgabe', e.desc, category ? category.label : '', csvAmount(e.amount, e.currency), e.currency,
+                cells: [e.date, 'Ausgabe', e.desc, category.id === 'general' ? '' : category.label, csvAmount(e.amount, e.currency), e.currency,
                     Object.keys(e.payers).filter(function (id) { return e.payers[id] > 0; }).map(name).join(', ')
                 ].concat(memberIds.map(function (id) {
                     return owed[id] ? csvAmount(owed[id], e.currency) : '';
@@ -1399,7 +1477,10 @@
     }
 
     return {
-        CATEGORIES: CATEGORIES,
+        groupCategories: groupCategories,
+        findCategory: findCategory,
+        addCategory: addCategory,
+        removeCategory: removeCategory,
         CURRENCIES: CURRENCIES,
         SPLIT_TYPES: SPLIT_TYPES,
         REPEATS: REPEATS,

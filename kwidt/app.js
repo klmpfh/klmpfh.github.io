@@ -87,8 +87,18 @@
         return rtf.format(Math.round(seconds / divisor), 'year');
     }
 
-    function category(id) {
-        return C.CATEGORIES.filter(function (c) { return c.id === id; })[0] || C.CATEGORIES[0];
+    function categoryLabel(c) {
+        return c.emoji ? c.emoji + ' ' + c.label : c.label;
+    }
+
+    function categoryText(doc, id) {
+        return categoryLabel(C.findCategory(doc, id));
+    }
+
+    /** Ohne gewählte Kategorie gibt es kein Symbol. */
+    function categoryIcon(doc, id) {
+        const emoji = C.findCategory(doc, id).emoji;
+        return emoji ? h('span', { class: 'icon', 'aria-hidden': 'true' }, emoji) : null;
     }
 
     let toastTimer = null;
@@ -1149,7 +1159,7 @@
     function matchesSearch(doc, entry, term) {
         if (!term) return true;
         const parts = entry.kind === 'expense'
-            ? [entry.e.desc, entry.e.note, category(entry.e.category).label]
+            ? [entry.e.desc, entry.e.note, C.findCategory(doc, entry.e.category).label]
                 .concat(Object.keys(entry.e.payers).map(function (id) { return memberName(doc, id); }))
                 .concat(Object.keys(entry.e.split.values).map(function (id) { return memberName(doc, id); }))
                 .concat((entry.e.items || []).map(function (item) { return item.name; }))
@@ -1194,7 +1204,7 @@
                 const isRecurring = e.parent || (e.repeat && e.repeat !== 'none');
                 const comments = commentCounts[e.id];
                 container.appendChild(h('a', { class: 'item', href: '#/g/' + doc.id + '/expense/' + e.id },
-                    h('span', { class: 'icon', 'aria-hidden': 'true' }, category(e.category).emoji),
+                    categoryIcon(doc, e.category),
                     h('span', { class: 'body' },
                         h('div', { class: 'title' }, e.desc, isRecurring ? ' 🔁' : ''),
                         h('div', { class: 'sub' }, formatDate(e.date) + ' · ' + payerText(doc, e, me) + (comments ? ' · 💬 ' + comments : ''))),
@@ -1232,7 +1242,7 @@
             h('h2', null, 'Wiederkehrend'),
             h('div', { class: 'list' }, series.map(function (e) {
                 return h('a', { class: 'item', href: '#/g/' + doc.id + '/expense/' + e.id },
-                    h('span', { class: 'icon', 'aria-hidden': 'true' }, category(e.category).emoji),
+                    categoryIcon(doc, e.category),
                     h('span', { class: 'body' },
                         h('div', { class: 'title' }, e.desc),
                         h('div', { class: 'sub' }, REPEAT_LABELS[e.repeat] + ' · ' + nextBookingText(doc, e))),
@@ -1385,8 +1395,7 @@
             h('section', { class: 'panel' },
                 h('h2', null, 'Nach Kategorie'),
                 stats.byCategory.map(function (row) {
-                    const c = category(row.id);
-                    return barRow(c.emoji + ' ' + c.label, row.amount, maxCategory, cur);
+                    return barRow(categoryText(doc, row.id), row.amount, maxCategory, cur);
                 })),
             h('section', { class: 'panel' },
                 h('h2', null, 'Nach Person'),
@@ -1419,6 +1428,8 @@
             case 'comment': return who + ' ' + label + ' kommentiert';
             case 'claim': return who + ' bei ' + label + ' Positionen zugeordnet';
             case 'import': return who + ' ' + a.label + ' aus Splid importiert';
+            case 'category-add': return who + ' die Kategorie ' + label + ' hinzugefügt';
+            case 'category-del': return who + ' die Kategorie ' + label + ' entfernt';
             case 'pay-add': return who + ' eine Zahlung eingetragen: ' + a.label;
             case 'pay-edit': return who + ' eine Zahlung geändert: ' + a.label;
             case 'pay-del': return who + ' eine Zahlung gelöscht: ' + a.label;
@@ -1580,10 +1591,62 @@
                 }, activeMembers(doc).map(function (m) { return h('option', { value: m.id }, m.name); }))));
     }
 
+    function viewCategoriesPanel(doc) {
+        const list = C.groupCategories(doc).filter(function (c) { return c.id !== 'general'; });
+        const addInput = h('input', { type: 'text', maxlength: 40, placeholder: '🐶 Haustier', 'aria-label': 'Neue Kategorie', autocomplete: 'off' });
+
+        function save(kind, label) {
+            logActivity(doc, kind, '', label);
+            commit(doc);
+            render();
+        }
+
+        function remove(c) {
+            C.removeCategory(doc, c.id);
+            save('category-del', c.label);
+            toast('„' + c.label + '“ entfernt.', 'Rückgängig', function () {
+                C.addCategory(doc, c.label);
+                save('category-add', c.label);
+            });
+        }
+
+        const body = [
+            h('p', { class: 'small muted', style: 'margin-bottom:6px' }, 'Gelten für die ganze Gruppe. Ein Emoji im Namen wird zum Symbol. Entfernst du eine Kategorie, zeigen ihre Ausgaben keine Kategorie mehr, bis du sie wieder ergänzt.'),
+            list.map(function (c) {
+                return h('div', { class: 'category-row' },
+                    h('span', null, categoryLabel(c)),
+                    h('button', {
+                        class: 'btn btn-small', type: 'button',
+                        onclick: function () { remove(c); }
+                    }, 'Entfernen'));
+            }),
+            h('form', {
+                class: 'add-row',
+                onsubmit: function (e) {
+                    e.preventDefault();
+                    const result = C.addCategory(doc, addInput.value);
+                    if (!result) return;
+                    if (result.exists) {
+                        toast('Diese Kategorie gibt es schon.');
+                        return;
+                    }
+                    addInput.value = '';
+                    addInput.blur();
+                    save('category-add', result.category.label);
+                }
+            }, addInput, h('button', { class: 'btn', type: 'submit' }, 'Hinzufügen'))
+        ];
+
+        const section = fold('Kategorien', h('span', { class: 'fold-value' }, String(list.length)), body, state.categoriesOpen);
+        section.addEventListener('toggle', function () { state.categoriesOpen = section.open; });
+        return h('section', { class: 'panel panel-fold' }, section);
+    }
+
     function viewSettingsTab(doc, balances, me) {
         return h('div', null,
             viewInvitePanel(doc),
             viewMembersPanel(doc, balances, me),
+            viewCategoriesPanel(doc),
             h('section', { class: 'panel' },
                 h('h2', null, 'Einstellungen'),
                 h('div', { class: 'field' },
@@ -1952,7 +2015,7 @@
             amountText: existing ? C.amountToInput(existing.amount, existing.currency) : '',
             currency: existing ? existing.currency : doc.meta.currency,
             date: existing ? existing.date : C.todayStr(),
-            category: existing ? existing.category : 'general',
+            category: existing ? C.findCategory(doc, existing.category).id : 'general',
             note: existing ? existing.note : '',
             repeat: existing ? existing.repeat : 'none',
             payMode: 'single',
@@ -2154,7 +2217,8 @@
         }
 
         function detailsText() {
-            const parts = [form.date ? (form.date === C.todayStr() ? 'Heute' : formatDate(form.date)) : 'Kein Datum', category(form.category).emoji + ' ' + category(form.category).label];
+            const parts = [form.date ? (form.date === C.todayStr() ? 'Heute' : formatDate(form.date)) : 'Kein Datum'];
+            if (form.category !== 'general') parts.push(categoryText(doc, form.category));
             if (form.repeat !== 'none' && form.type !== 'items') parts.push('🔁');
             if (form.note.trim()) parts.push('📝');
             return parts.join(' · ');
@@ -2495,7 +2559,7 @@
                     h('select', {
                         id: 'expCategory', value: form.category,
                         onchange: function (e) { form.category = e.target.value; refresh(); }
-                    }, C.CATEGORIES.map(function (c) { return h('option', { value: c.id }, c.emoji + ' ' + c.label); })))),
+                    }, C.groupCategories(doc).map(function (c) { return h('option', { value: c.id }, categoryLabel(c)); })))),
             repeatField,
             h('div', { class: 'field', style: 'margin-bottom:0' },
                 h('label', { for: 'expNote' }, 'Notiz'),
@@ -2618,7 +2682,7 @@
     function viewExpenseDetail(doc, e) {
         const me = meId(doc.id);
         const owed = C.computeOwed(e) || {};
-        const c = category(e.category);
+        const c = C.findCategory(doc, e.category);
         const cur = e.currency;
 
         const payers = Object.keys(e.payers).filter(function (id) { return e.payers[id] > 0; });
@@ -2666,10 +2730,10 @@
                 }, e.series ? 'Wieder aufnehmen' : 'Wiederherstellen')) : null,
             h('section', { class: 'panel' },
                 h('div', { class: 'detail-head' },
-                    h('div', { class: 'emoji', 'aria-hidden': 'true' }, c.emoji),
+                    c.emoji ? h('div', { class: 'emoji', 'aria-hidden': 'true' }, c.emoji) : null,
                     h('h1', null, e.desc),
                     h('div', { class: 'amount' }, money(e.amount, cur)),
-                    h('div', { class: 'small muted' }, (e.series ? 'Seit ' : '') + formatDate(e.date, true) + ' · ' + c.label),
+                    h('div', { class: 'small muted' }, (e.series ? 'Seit ' : '') + formatDate(e.date, true) + (c.id !== 'general' ? ' · ' + c.label : '')),
                     repeatInfo ? h('div', { class: 'small muted' }, '🔁 ' + repeatInfo) : null,
                     series ? h('div', { class: 'small' }, h('a', { href: '#/g/' + doc.id + '/expense/' + series.id }, '🔁 Zur Serie')) : null),
                 h('h2', null, payers.length > 1 ? 'Bezahlt haben' : 'Bezahlt hat'),

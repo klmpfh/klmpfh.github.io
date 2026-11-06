@@ -489,6 +489,20 @@
     .add-row { display: flex; gap: 8px; margin-top: 8px; }
     .add-row input { flex: 1; }
 
+    .panel-fold { padding-top: 6px; padding-bottom: 6px; }
+    .panel-fold .fold { border-top: none; }
+    .category-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 6px 0;
+        border-top: 1px solid var(--border);
+        font-size: 15px;
+        overflow-wrap: anywhere;
+    }
+    .category-row .btn { flex: none; }
+
     .import-box { margin-bottom: 14px; padding: 12px; border-radius: 8px; background: var(--primary-soft); }
 
     .link-option { padding: 12px 0; border-top: 1px solid var(--border); }
@@ -532,14 +546,14 @@
 <div class="container">
     <main id="app"></main>
     <noscript>Kwidt braucht JavaScript.</noscript>
-    <div class="footer-info">v<span id="versionNumber">1.4</span></div>
+    <div class="footer-info">v<span id="versionNumber">1.5</span></div>
 </div>
 <div id="toast" role="status" hidden></div>
 
 <script src="../fileshare/vendor/peerjs.min.js"></script>
 <script src="../fileshare/vendor/qrcode.min.js"></script>
 <!-- ?v= immer zusammen mit der Versionsnummer oben ändern: Sonst läuft die neue Seite mit alten Skripten aus dem Browser-Cache. -->
-<script src="core.js?v=1.4"></script>
-<script src="app.js?v=1.4"></script>
+<script src="core.js?v=1.5"></script>
+<script src="app.js?v=1.5"></script>
 </body>
 </html>
