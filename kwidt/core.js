@@ -985,109 +985,6 @@
         return { text: Array.from(letters.toLocaleUpperCase('de')).slice(0, 2).join(''), emoji: false };
     }
 
-    /* ---------- Rechnungen lesen ---------- */
-
-    var RE_RECEIPT_SUBTOTAL = /(zwischen|sub)[\s-]*(summe|total)/i;
-    var RE_RECEIPT_TOTAL = /gesamt|summe|total|endbetrag|rechnungsbetrag|zahlbetrag|zu\s*zahlen|^\W*betrag/i;
-    var RE_RECEIPT_SKIP = new RegExp('\\b(?:m\\.?w\\.?st|ust|tax|vat|bar|ec|tip|tisch|kellner|kasse|beleg|tel|fax)\\b|' +
-        'steuer|netto|brutto|gegeben|r(?:ü|ue?)ckgeld|zur(?:ü|ue?)ck|wechselgeld|kartenzahlung|girocard|visa|mastercard|trinkgeld', 'i');
-    // Gruppen: Text davor, Minus davor, Betrag, Minus dahinter (Rabattzeilen)
-    var RE_RECEIPT_AMOUNT = /^(|.*?[^\d.,])([-−]?)((?:\d{1,3}(?:[.,\s]\d{3})+|\d+)[.,]\s?\d\d)\s*(?:€|eur|[a-z])?\s*(-?)$/i;
-    var RE_RECEIPT_WHOLE = /^(|.*?\s)([-−]?)((?:\d{1,3}(?:[.,]\d{3})+|\d+))\s*(?:[¥円]|[a-z]{3})?\s*(-?)$/i;
-
-    function receiptDate(text) {
-        var m = text.match(/\b(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4}|\d{2})\b/);
-        if (!m) return null;
-        var year = m[3].length === 2 ? '20' + m[3] : m[3];
-        if (+m[2] < 1 || +m[2] > 12 || +m[1] < 1 || +m[1] > 31 || year < '2000') return null;
-        return year + '-' + pad2(+m[2]) + '-' + pad2(+m[1]);
-    }
-
-    function cleanReceiptName(text) {
-        return text.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N})%]+$/gu, '').replace(/\s+/g, ' ').slice(0, 60);
-    }
-
-    /** "2 x Bier 7,00" und "2 Bier 3,50 7,00" werden zwei Positionen, damit jede Person ihr Bier antippen kann. */
-    function pushReceiptItems(items, rawName, amount, cur, amountRe) {
-        // Am Zeilenanfang liest die Erkennung gern Bon-Kante oder "1" als Zeichensalat.
-        var name = rawName.trim().replace(/\s+(?:[àa@]|je)$/i, '')
-            .replace(/^(?:\d{1,3}|\S)\s+(?=(?:\d{1,2}(?:\s*[xX×*])?|[lIıł|!\[\]]|1[^\d\s])\s+\p{L})/u, '')
-            .replace(/^(?:[lIıł|!\[\]]|1[lIıłi]|1[^\p{L}\d\s])\s+(?=\p{L})/u, '1 ');
-        var qty = 1;
-        var unit = null;
-        var tail = name.match(amountRe);
-        if (tail) {
-            unit = parseAmount(tail[3], cur);
-            name = tail[1].trim().replace(/\s+(?:[àa@]|je)$/i, '');
-        }
-        var explicit = name.match(/^(\d{1,2})\s*[xX×*]\s*(.+)$/);
-        var implicit = name.match(/^(\d{1,2})\s+(\D.*)$/);
-        if (explicit) {
-            qty = +explicit[1];
-            name = explicit[2];
-        } else if (implicit && (+implicit[1] === 1 || (unit && +implicit[1] * unit === amount))) {
-            qty = +implicit[1];
-            name = implicit[2];
-        }
-        name = cleanReceiptName(name);
-        if (Array.from(name.replace(/[^\p{L}]/gu, '')).length < 2) return false;
-        if (qty < 1 || qty > 20) qty = 1;
-        var base = Math.floor(amount / qty);
-        for (var i = 0; i < qty; i++) {
-            items.push({ name: name, amount: base + (i < amount - base * qty ? 1 : 0) });
-        }
-        return true;
-    }
-
-    /**
-     * Macht aus dem OCR-Text einer Rechnung {title, date, items, total}. Das Ergebnis
-     * ist ein Vorschlag: Bis zur Gesamtsumme zählt jede Zeile mit Preis am Ende als
-     * Position, danach kommen nur noch Steuer und Zahlungsart.
-     */
-    function parseReceipt(text, cur) {
-        var amountRe = currencyDecimals(cur) === 0 ? RE_RECEIPT_WHOLE : RE_RECEIPT_AMOUNT;
-        var items = [];
-        var total = 0;
-        var title = '';
-        var pendingName = '';
-        var afterTotal = false;
-
-        String(text).split(/\r?\n/).forEach(function (raw) {
-            var line = raw.replace(/[|_~^`]+/g, ' ').replace(/[\s.,:;'"’‘*]+$/, '').trim();
-            if (!line) return;
-            line = line.replace(/(\d[.,]\s?\d)[oO]$/, '$10').replace(/(\d[.,]\s?)[oO](\d)$/, '$10$2');
-            var match = line.match(amountRe);
-            var value = match ? parseAmount(match[3], cur) : null;
-            var name = match ? match[1].trim() : line;
-
-            if (RE_RECEIPT_SUBTOTAL.test(line)) return;
-            if (RE_RECEIPT_TOTAL.test(name) && !RE_RECEIPT_SKIP.test(name)) {
-                afterTotal = true;
-                if (value) total = Math.max(total, value);
-                return;
-            }
-            if (afterTotal || RE_RECEIPT_SKIP.test(name)) return;
-
-            if (!value) {
-                pendingName = /\p{L}{2}/u.test(line) ? line : '';
-                if (!items.length && !title && /\p{L}{3}/u.test(line)) title = cleanReceiptName(line);
-                return;
-            }
-            if (match[2] || match[4]) {
-                // Rabattzeile: gehört zur Position direkt darüber.
-                var last = items[items.length - 1];
-                if (last && last.amount > value) last.amount -= value;
-                return;
-            }
-            if (!pushReceiptItems(items, name, value, cur, amountRe) && pendingName) {
-                pushReceiptItems(items, pendingName, value, cur, amountRe);
-            }
-            pendingName = '';
-        });
-
-        return { title: title, date: receiptDate(String(text)), items: items, total: total };
-    }
-
     /* ---------- Excel-Dateien (.xls) lesen ---------- */
 
     var CFB_END = 0xFFFFFFFC;
@@ -1306,14 +1203,22 @@
         if (typeof value === 'number' && value > 30000 && value < 80000) {
             return new Date(Math.round((value - 25569) * 86400000)).toISOString().slice(0, 10);
         }
-        return receiptDate(String(value));
+        var m = String(value).match(/\b(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4}|\d{2})\b/);
+        if (!m) return null;
+        var year = m[3].length === 2 ? '20' + m[3] : m[3];
+        if (+m[2] < 1 || +m[2] > 12 || +m[1] < 1 || +m[1] > 31 || year < '2000') return null;
+        return year + '-' + pad2(+m[2]) + '-' + pad2(+m[1]);
     }
 
     /**
      * Ein Splid-Export hat pro Person zwei Spalten: bezahlt und Anteil (negativ). Die
      * Anteile sind ungerundet, deshalb entscheiden sie nur über die Verteilung. Die Summen-
      * und Ausgleichszeilen bleiben draußen, die ergeben sich aus den Ausgaben von selbst.
-     * Liefert {name, currency, members, expenses, skipped} oder null.
+     *
+     * Eine direkte Zahlung ist im Export nicht markiert und heißt je nach Sprache und
+     * Eingabe anders. Erkennbar ist sie am Aufbau: Eine Person zahlt, und nur eine andere
+     * trägt den Anteil. Für die Salden macht das keinen Unterschied.
+     * Liefert {name, currency, members, expenses, payments, skipped} oder null.
      */
     function parseSplid(sheets, today) {
         for (var s = 0; s < sheets.length; s++) {
@@ -1339,6 +1244,7 @@
         }
 
         var expenses = [];
+        var payments = [];
         var skipped = 0;
         var currencyCount = {};
 
@@ -1385,6 +1291,16 @@
 
             var date = splidDate(row[4]) || splidDate(row[5]) || today;
             currencyCount[currency] = (currencyCount[currency] || 0) + 1;
+
+            var shareNames = Object.keys(shares);
+            if (payerNames.length === 1 && shareNames.length === 1 && payerNames[0] !== shareNames[0]) {
+                payments.push({
+                    from: payerNames[0], to: shareNames[0], amount: amount, currency: currency, date: date,
+                    note: /^(zahlung|payment)$/i.test(desc) ? '' : desc.slice(0, 300)
+                });
+                return;
+            }
+
             expenses.push({
                 desc: desc.slice(0, 120),
                 amount: amount,
@@ -1402,11 +1318,12 @@
             currency: main || 'EUR',
             members: people.map(function (p) { return p.name; }),
             expenses: expenses,
+            payments: payments,
             skipped: skipped
         };
     }
 
-    /** Trägt die gelesenen Ausgaben in die Gruppe ein. `ids` ordnet Namen den Personen zu. */
+    /** Trägt die gelesenen Ausgaben und Zahlungen in die Gruppe ein. `ids` ordnet Namen den Personen zu. */
     function importSplid(doc, data, ids, by) {
         function mapped(names, value) {
             var out = {};
@@ -1423,6 +1340,13 @@
                     ? { type: 'equal', values: mapped(e.shares, function () { return 1; }) }
                     : { type: 'exact', values: mapped(e.shares, function (v) { return v; }) },
                 repeat: 'none', del: false
+            };
+        });
+        data.payments.forEach(function (p) {
+            var id = newId();
+            doc.payments[id] = {
+                id: id, t: nextT(doc), by: by, from: ids[p.from], to: ids[p.to], amount: p.amount,
+                currency: p.currency, date: p.date, note: p.note, del: false
             };
         });
     }
@@ -1525,7 +1449,6 @@
         readXls: readXls,
         parseSplid: parseSplid,
         importSplid: importSplid,
-        parseReceipt: parseReceipt,
         toCsv: toCsv
     };
 });

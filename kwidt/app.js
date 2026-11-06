@@ -22,10 +22,8 @@
     const PEER_PREFIX = 'klmpfh-quitt-';
     const MAX_DECOMPRESSED = 8 * 1024 * 1024;
     const LINK_ACTIVITY_LIMIT = 60;
-    const OCR_DIR = 'vendor/tesseract/';
-    // Mehr ist nicht besser: Bei zu großer Schrift liest die Erkennung schlechter. Der
-    // zweite Wert ist für Bons, die klein im Bild liegen, und läuft nur bei Bedarf.
-    const OCR_SIDES = [1400, 2000];
+    const HEARTBEAT = 10000;
+    const PEER_TIMEOUT = 30000;
 
     const app = document.getElementById('app');
     const toastEl = document.getElementById('toast');
@@ -351,6 +349,7 @@
         gid: null,
         peer: null,
         conns: new Map(),
+        heard: new Map(),
         run: 0,
         timer: null,
         status: 'off',
@@ -375,6 +374,7 @@
             if (this.gid && this.conns.size) markSeen(this.gid, true);
             this.conns.forEach(function (conn) { try { conn.close(); } catch (e) { /* schon zu */ } });
             this.conns.clear();
+            this.heard.clear();
             if (this.peer) {
                 try { this.peer.destroy(); } catch (e) { /* schon zerstört */ }
             }
@@ -454,6 +454,7 @@
             function greet() {
                 if (stale()) return;
                 self.conns.set(conn.peer, conn);
+                self.heard.set(conn.peer, { at: Date.now(), lost: lost });
                 markSeen(self.gid);
                 self.send(conn);
                 self.announce();
@@ -466,10 +467,13 @@
                 if (!stale()) self.receive(conn, msg);
             });
 
+            let gone = false;
             function lost() {
-                if (stale()) return;
+                if (stale() || gone) return;
+                gone = true;
                 markSeen(self.gid, true);
                 self.conns.delete(conn.peer);
+                self.heard.delete(conn.peer);
                 if (self.isHost()) {
                     self.announce();
                     self.refreshStatus();
@@ -502,6 +506,8 @@
 
         receive: function (from, msg) {
             if (!msg || msg.app !== 'quitt') return;
+            const known = this.heard.get(from.peer);
+            if (known) known.at = Date.now();
             if (msg.type === 'count') {
                 if (Number.isInteger(msg.count)) this.deviceCount = msg.count;
                 this.refreshStatus();
@@ -519,6 +525,23 @@
                     if (conn !== from) self.send(conn);
                 });
             }
+        },
+
+        /**
+         * Der Browser meldet nicht jede Trennung, etwa bei leerem Akku oder Funkloch. Darum
+         * schicken sich die Geräte Lebenszeichen: Bleiben sie aus, gilt die Verbindung als weg.
+         */
+        heartbeat: function () {
+            const self = this;
+            this.conns.forEach(function (conn, id) {
+                const known = self.heard.get(id);
+                if (known && Date.now() - known.at > PEER_TIMEOUT) {
+                    try { conn.close(); } catch (e) { /* schon zu */ }
+                    known.lost();
+                } else if (conn.open) {
+                    conn.send({ app: 'quitt', type: 'ping' });
+                }
+            });
         },
 
         broadcast: function (doc) {
@@ -718,7 +741,7 @@
                     ? mine.map(function (b) {
                         return h('div', null, h('span', { class: 'muted' }, b.amount > 0 ? 'du bekommst ' : 'du schuldest '), balanceSpan(b.amount, b.cur));
                     })
-                    : doc.meta.t ? h('span', { class: 'muted' }, 'quitt') : null));
+                    : doc.meta.t ? h('span', { class: 'muted' }, 'kwidt') : null));
         });
 
         const totalKeys = Object.keys(totals).filter(function (cur) { return totals[cur]; });
@@ -726,7 +749,7 @@
         return h('div', null,
             h('header', { class: 'page-head' },
                 h('h1', null, 'Kwidt'),
-                h('p', null, 'Gemeinsame Ausgaben aufteilen, bis alle quitt sind.')),
+                h('p', null, 'Gemeinsame Ausgaben aufteilen, bis alle kwidt sind.')),
             totalKeys.length ? h('section', { class: 'panel' },
                 h('h2', null, 'Über alle Gruppen'),
                 h('div', { class: 'my-balance' }, totalKeys.map(function (cur) {
@@ -844,16 +867,22 @@
             manualPeople.hidden = false;
         }
 
+        function importCounts(data) {
+            const parts = [];
+            if (data.expenses.length) parts.push(data.expenses.length + (data.expenses.length === 1 ? ' Ausgabe' : ' Ausgaben'));
+            if (data.payments.length) parts.push(data.payments.length + (data.payments.length === 1 ? ' Zahlung' : ' Zahlungen'));
+            return parts.join(' · ');
+        }
+
         function showImport() {
             const totals = {};
             imported.expenses.forEach(function (x) { totals[x.currency] = (totals[x.currency] || 0) + x.amount; });
-            const count = imported.expenses.length;
             importSummary.textContent = '';
             importSummary.hidden = false;
             importSummary.appendChild(h('div', { class: 'link-title' }, 'Aus Splid'));
-            importSummary.appendChild(h('p', { class: 'small muted' }, imported.members.length + ' Personen · '
-                + count + (count === 1 ? ' Ausgabe' : ' Ausgaben') + ' · '
-                + Object.keys(totals).map(function (cur) { return money(totals[cur], cur); }).join(' + ')));
+            const parts = [imported.members.length + ' Personen', importCounts(imported)];
+            if (Object.keys(totals).length) parts.push(Object.keys(totals).map(function (cur) { return money(totals[cur], cur); }).join(' + '));
+            importSummary.appendChild(h('p', { class: 'small muted' }, parts.join(' · ')));
             if (imported.skipped) {
                 importSummary.appendChild(h('div', { class: 'notice', style: 'margin:8px 0 0' },
                     imported.skipped + (imported.skipped === 1 ? ' Zeile konnte' : ' Zeilen konnten') + ' nicht gelesen werden und fehlt in der Gruppe.'));
@@ -881,7 +910,7 @@
             } catch (err) {
                 console.warn('Kwidt: Datei nicht lesbar.', err);
             }
-            if (!data || !data.members.length || !data.expenses.length) {
+            if (!data || !data.members.length || !(data.expenses.length + data.payments.length)) {
                 error.textContent = 'Das sieht nicht nach einer Excel-Datei aus Splid aus (.xls).';
                 error.hidden = false;
                 return;
@@ -912,7 +941,7 @@
             store.me[gid] = ids[imported.me];
             C.importSplid(doc, imported, ids, ids[imported.me]);
             logActivity(doc, 'group-create', '', name);
-            logActivity(doc, 'import', '', imported.expenses.length + ' Ausgaben');
+            logActivity(doc, 'import', '', importCounts(imported).replace(' · ', ' und '));
             persist();
             go('/g/' + gid);
         }
@@ -1094,7 +1123,7 @@
         const mine = myBalances(doc, balances);
 
         let summary;
-        if (settled) summary = h('div', { class: 'quitt-banner' }, 'Ihr seid quitt! 🎉');
+        if (settled) summary = h('div', { class: 'kwidt-banner' }, 'Ihr seid kwidt! 🎉');
         else if (mine.length) {
             summary = h('div', { class: 'my-balance' }, mine.map(function (b) {
                 return h('div', null, b.amount > 0 ? 'Du bekommst ' : 'Du schuldest ', balanceSpan(b.amount, b.cur));
@@ -1284,7 +1313,7 @@
             });
             const transfers = C.settlements(doc, cur, balances);
             if (transfers.length) {
-                lines.push('', 'So werdet ihr quitt:');
+                lines.push('', 'So werdet ihr kwidt:');
                 transfers.forEach(function (t) {
                     lines.push(memberName(doc, t.from) + ' zahlt ' + memberName(doc, t.to) + ' ' + money(t.amount, cur));
                 });
@@ -1308,7 +1337,7 @@
                     let text;
                     if (amount > 0) text = isMe ? 'Du bekommst' : memberName(doc, id) + ' bekommt';
                     else if (amount < 0) text = isMe ? 'Du schuldest' : memberName(doc, id) + ' schuldet';
-                    else text = isMe ? 'Du bist quitt' : memberName(doc, id) + ' ist quitt';
+                    else text = isMe ? 'Du bist kwidt' : memberName(doc, id) + ' ist kwidt';
                     return h('div', { class: 'kv' }, h('span', null, text),
                         amount ? h('span', null, balanceSpan(amount, cur)) : h('span', { class: 'muted' }, '–'));
                 });
@@ -1329,7 +1358,7 @@
             return h('section', { class: 'panel' },
                 h('h2', null, currencies.length > 1 ? 'Salden in ' + cur : 'Salden'),
                 rows,
-                h('h2', null, 'So werdet ihr quitt'),
+                h('h2', null, 'So werdet ihr kwidt'),
                 h('div', { class: 'list' }, transfers));
         });
 
@@ -1677,289 +1706,6 @@
                             }
                         }
                     }, 'Von diesem Gerät entfernen'))));
-    }
-
-    /* ---------- Rechnung lesen ---------- */
-
-    function loadOcrLibrary() {
-        if (window.Tesseract) return Promise.resolve();
-        return new Promise(function (resolve, reject) {
-            document.head.appendChild(h('script', { src: OCR_DIR + 'tesseract.min.js', onload: resolve, onerror: reject }));
-        });
-    }
-
-    async function loadPhoto(file) {
-        const url = URL.createObjectURL(file);
-        const img = new Image();
-        img.src = url;
-        await img.decode();
-        return { url: url, img: img };
-    }
-
-    /** Schneidet den Bereich aus, verkleinert ihn und macht ihn schwarz-weiß. */
-    function preparePhoto(img, area, maxSide) {
-        const left = area.x * img.naturalWidth;
-        const top = area.y * img.naturalHeight;
-        const width = area.w * img.naturalWidth;
-        const height = area.h * img.naturalHeight;
-        const scale = Math.min(1, maxSide / Math.max(width, height));
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.round(width * scale);
-        canvas.height = Math.round(height * scale);
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        ctx.drawImage(img, left, top, width, height, 0, 0, canvas.width, canvas.height);
-        binarize(ctx, canvas.width, canvas.height);
-        return canvas;
-    }
-
-    /** Längster zusammenhängender Abschnitt, in dem `flags` gilt: [Anfang, Ende). */
-    function longestRun(flags) {
-        let best = [0, flags.length];
-        let bestLength = 0;
-        let start = -1;
-        flags.concat([false]).forEach(function (flag, i) {
-            if (flag && start === -1) start = i;
-            if (!flag && start !== -1) {
-                if (i - start > bestLength) {
-                    bestLength = i - start;
-                    best = [start, i];
-                }
-                start = -1;
-            }
-        });
-        return best;
-    }
-
-    /**
-     * Vorschlag für den Rahmen: Ein Bon ist meist die größte helle Fläche im Bild.
-     * Das ist nur ein Startwert, bei hellem Tisch bleibt es einfach das ganze Foto.
-     */
-    function suggestArea(img) {
-        const whole = { x: 0, y: 0, w: 1, h: 1 };
-        const width = 160;
-        const height = Math.max(1, Math.round(width * img.naturalHeight / img.naturalWidth));
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        ctx.drawImage(img, 0, 0, width, height);
-        const data = ctx.getImageData(0, 0, width, height).data;
-        const gray = [];
-        for (let i = 0; i < width * height; i++) gray.push(0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2]);
-        const sorted = gray.slice().sort(function (a, b) { return a - b; });
-        const threshold = (sorted[Math.floor(sorted.length * 0.05)] + sorted[Math.floor(sorted.length * 0.95)]) / 2;
-
-        let rows = [0, height];
-        let cols = [0, width];
-        function brightShare(index, other, range) {
-            let count = 0;
-            for (let i = range[0]; i < range[1]; i++) {
-                const position = other === 'row' ? i * width + index : index * width + i;
-                if (gray[position] > threshold) count++;
-            }
-            return count / (range[1] - range[0]);
-        }
-        for (let round = 0; round < 2; round++) {
-            cols = longestRun(Array.from({ length: width }, function (_, x) { return brightShare(x, 'row', rows) > 0.3; }));
-            rows = longestRun(Array.from({ length: height }, function (_, y) { return brightShare(y, 'col', cols) > 0.3; }));
-        }
-
-        const margin = 0.02;
-        const x = Math.max(0, cols[0] / width - margin);
-        const y = Math.max(0, rows[0] / height - margin);
-        const area = {
-            x: x, y: y,
-            w: Math.min(1, cols[1] / width + margin) - x,
-            h: Math.min(1, rows[1] / height + margin) - y
-        };
-        return area.w * area.h < 0.05 ? whole : area;
-    }
-
-    /** Zeigt das Foto mit einem Rahmen. Liefert den Bereich in Anteilen von 0 bis 1, oder null. */
-    function askPhotoArea(box, url, start) {
-        const MIN_SIZE = 0.1;
-        const area = Object.assign({}, start);
-        const frame = h('div', { class: 'crop-frame' });
-        const stage = h('div', { class: 'crop-stage' }, h('img', { src: url, alt: 'Foto der Rechnung' }), frame);
-
-        function place() {
-            frame.style.left = area.x * 100 + '%';
-            frame.style.top = area.y * 100 + '%';
-            frame.style.width = area.w * 100 + '%';
-            frame.style.height = area.h * 100 + '%';
-        }
-
-        function moveCorner(corner, e) {
-            const rect = stage.getBoundingClientRect();
-            const px = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-            const py = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
-            if (corner.charAt(1) === 'l') {
-                const right = area.x + area.w;
-                area.x = Math.min(px, right - MIN_SIZE);
-                area.w = right - area.x;
-            } else {
-                area.w = Math.max(px - area.x, MIN_SIZE);
-            }
-            if (corner.charAt(0) === 't') {
-                const bottom = area.y + area.h;
-                area.y = Math.min(py, bottom - MIN_SIZE);
-                area.h = bottom - area.y;
-            } else {
-                area.h = Math.max(py - area.y, MIN_SIZE);
-            }
-            place();
-        }
-
-        ['tl', 'tr', 'bl', 'br'].forEach(function (corner) {
-            frame.appendChild(h('span', {
-                class: 'crop-handle ' + corner,
-                onpointerdown: function (e) {
-                    e.preventDefault();
-                    e.currentTarget.setPointerCapture(e.pointerId);
-                },
-                onpointermove: function (e) {
-                    if (e.currentTarget.hasPointerCapture(e.pointerId)) moveCorner(corner, e);
-                }
-            }));
-        });
-        place();
-
-        return new Promise(function (resolve) {
-            function finish(result) {
-                box.textContent = '';
-                box.hidden = true;
-                resolve(result);
-            }
-            toastEl.hidden = true;
-            box.textContent = '';
-            box.hidden = false;
-            box.appendChild(h('div', { class: 'field-hint', style: 'margin:0 0 8px' }, 'Zieh die Ecken um die Rechnung, damit nichts vom Tisch mitgelesen wird.'));
-            box.appendChild(stage);
-            box.appendChild(h('div', { class: 'actions' },
-                h('button', { class: 'btn', type: 'button', onclick: function () { finish(null); } }, 'Abbrechen'),
-                h('button', {
-                    class: 'btn', type: 'button',
-                    onclick: function () {
-                        Object.assign(area, { x: 0, y: 0, w: 1, h: 1 });
-                        place();
-                    }
-                }, 'Ganzes Foto'),
-                h('button', { class: 'btn', type: 'button', onclick: function () { finish(area); } }, 'Bereich lesen')));
-        });
-    }
-
-    /** Summed-Area-Tables über Werte und deren Quadrate, für Mittelwerte beliebiger Fenster. */
-    function areaTables(values, width, height) {
-        const size = (width + 1) * (height + 1);
-        const sums = new Float64Array(size);
-        const squares = new Float64Array(size);
-        for (let y = 0; y < height; y++) {
-            let row = 0;
-            let rowSquares = 0;
-            for (let x = 0; x < width; x++) {
-                const value = values[y * width + x];
-                row += value;
-                rowSquares += value * value;
-                sums[(y + 1) * (width + 1) + x + 1] = sums[y * (width + 1) + x + 1] + row;
-                squares[(y + 1) * (width + 1) + x + 1] = squares[y * (width + 1) + x + 1] + rowSquares;
-            }
-        }
-        return { sums: sums, squares: squares };
-    }
-
-    function windowMean(table, width, height, x, y, radius) {
-        const left = Math.max(0, x - radius);
-        const right = Math.min(width, x + radius + 1);
-        const top = Math.max(0, y - radius);
-        const bottom = Math.min(height, y + radius + 1);
-        const line = width + 1;
-        return (table[bottom * line + right] - table[top * line + right]
-            - table[bottom * line + left] + table[top * line + left]) / ((right - left) * (bottom - top));
-    }
-
-    /**
-     * Schwarz-weiß nach Sauvola: Die Schwelle hängt an der Helligkeit der Umgebung, so
-     * bleibt Text auch im Schatten der Hand lesbar. Das leichte Weichzeichnen davor
-     * nimmt das Bildrauschen, das sonst als Sprenkel übrig bliebe.
-     */
-    function binarize(ctx, width, height) {
-        const image = ctx.getImageData(0, 0, width, height);
-        const data = image.data;
-        const gray = new Float32Array(width * height);
-        for (let i = 0; i < gray.length; i++) {
-            gray[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
-        }
-        const raw = areaTables(gray, width, height).sums;
-        const soft = new Float32Array(width * height);
-        for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) soft[y * width + x] = windowMean(raw, width, height, x, y, 1);
-        }
-        const tables = areaTables(soft, width, height);
-        const radius = Math.max(16, Math.round(Math.max(width, height) / 50));
-        for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-                const mean = windowMean(tables.sums, width, height, x, y, radius);
-                const deviation = Math.sqrt(Math.max(0, windowMean(tables.squares, width, height, x, y, radius) - mean * mean));
-                const value = soft[y * width + x] > mean * (1 + 0.2 * (deviation / 128 - 1)) ? 255 : 0;
-                const i = (y * width + x) * 4;
-                data[i] = data[i + 1] = data[i + 2] = value;
-            }
-        }
-        ctx.putImageData(image, 0, 0);
-    }
-
-    function receiptSum(receipt) {
-        return receipt.items.reduce(function (acc, item) { return acc + item.amount; }, 0);
-    }
-
-    /** Positionen und Summe passen zusammen; der Rest darf Trinkgeld oder Service sein. */
-    function receiptAddsUp(receipt) {
-        const sum = receiptSum(receipt);
-        return receipt.total > 0 && sum <= receipt.total && sum >= receipt.total * 0.7;
-    }
-
-    function betterReceipt(a, b) {
-        if (!a) return b;
-        if (receiptAddsUp(a) !== receiptAddsUp(b)) return receiptAddsUp(a) ? a : b;
-        return receiptSum(b) > receiptSum(a) ? b : a;
-    }
-
-    /**
-     * Die Texterkennung läuft komplett im Browser, das Foto wird nirgends hochgeladen.
-     * Die Bibliothek (rund 5 MB) wird erst beim ersten Scan geladen, danach kommt sie
-     * aus dem Cache des Service Workers.
-     */
-    async function readReceipt(img, area, currency, onStatus) {
-        onStatus('Lade Texterkennung …');
-        await loadOcrLibrary();
-        const base = new URL(OCR_DIR, location.href).href;
-        let label = 'Lese Rechnung';
-        const worker = await Tesseract.createWorker('deu', Tesseract.OEM.LSTM_ONLY, {
-            workerPath: base + 'worker.min.js',
-            corePath: base + 'tesseract-core-simd-lstm.wasm.js',
-            langPath: base,
-            workerBlobURL: false,
-            cacheMethod: 'none',
-            logger: function (m) {
-                if (m.status === 'recognizing text') onStatus(label + ' … ' + Math.round(m.progress * 100) + ' %');
-            }
-        });
-        try {
-            await worker.setParameters({
-                tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
-                preserve_interword_spaces: '1'
-            });
-            let best = null;
-            for (let i = 0; i < OCR_SIDES.length && !(best && receiptAddsUp(best)); i++) {
-                if (i) label = 'Lese genauer';
-                onStatus(label + ' …');
-                const result = await worker.recognize(preparePhoto(img, area, OCR_SIDES[i]));
-                best = betterReceipt(best, C.parseReceipt(result.data.text, currency));
-            }
-            return best;
-        } finally {
-            await worker.terminate();
-        }
     }
 
     /* ---------- Ausgabe anlegen/bearbeiten ---------- */
@@ -2422,72 +2168,6 @@
             });
         }
 
-        /* Rechnung fotografieren */
-
-        const scanStatus = h('div', { class: 'scan-status', role: 'status', hidden: true });
-        const cropBox = h('div', { hidden: true });
-        const scanText = h('span', null, '📷 Rechnung fotografieren');
-        const scanButton = h('label', { class: 'btn btn-block' }, scanText,
-            h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: onPhoto }));
-
-        function applyReceipt(receipt) {
-            receipt.items.forEach(function (item) {
-                addItem(item.name, C.amountToInput(item.amount, form.currency));
-            });
-            form.type = 'items';
-            if (!form.items.length) addItem('', '');
-
-            // Ein zweites Foto ergänzt das erste, die Summe steht meist nur auf dem letzten.
-            const sum = itemSum();
-            const total = Math.max(receipt.total, sum);
-            form.amountFollowsItems = !total;
-            if (total) {
-                form.amountText = C.amountToInput(total, form.currency);
-                amountInput.value = form.amountText;
-            }
-            if (!form.desc.trim() && receipt.title) {
-                form.desc = receipt.title.slice(0, 120);
-                descInput.value = form.desc;
-            }
-            if (receipt.date && receipt.date <= C.todayStr()) {
-                form.date = receipt.date;
-                dateInput.value = form.date;
-            }
-
-            scanText.textContent = '📷 Weiteres Foto ergänzen';
-            splitFold.open = true;
-            drawSplit();
-            refresh();
-            splitFold.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            toast(receipt.items.length
-                ? receipt.items.length + (receipt.items.length === 1 ? ' Position' : ' Positionen') + ' erkannt. Bitte kurz prüfen.'
-                : 'Keine Positionen erkannt. Du kannst sie von Hand eintragen.');
-        }
-
-        async function onPhoto(e) {
-            const file = e.target.files[0];
-            e.target.value = '';
-            if (!file) return;
-            scanButton.hidden = true;
-            let photo = null;
-            try {
-                photo = await loadPhoto(file);
-                const area = await askPhotoArea(cropBox, photo.url, suggestArea(photo.img));
-                if (area) {
-                    scanStatus.hidden = false;
-                    applyReceipt(await readReceipt(photo.img, area, form.currency, function (message) { scanStatus.textContent = message; }));
-                }
-            } catch (err) {
-                console.warn('Kwidt: Foto nicht lesbar.', err);
-                toast(navigator.onLine === false
-                    ? 'Die Texterkennung muss einmal online geladen werden.'
-                    : 'Das Foto konnte nicht gelesen werden.');
-            }
-            if (photo) URL.revokeObjectURL(photo.url);
-            scanButton.hidden = false;
-            scanStatus.hidden = true;
-        }
-
         function submit(e) {
             e.preventDefault();
             function fail(message, section) {
@@ -2579,9 +2259,6 @@
                 existing && existing.series ? h('p', { class: 'small muted', style: 'margin-bottom:12px' }, 'Das gilt für alle künftigen Buchungen. Bisherige Einträge bleiben und lassen sich einzeln bearbeiten.') : null,
                 existing && existing.parent ? h('p', { class: 'small muted', style: 'margin-bottom:12px' }, 'Das ändert nur diesen einen Eintrag, nicht die Serie.') : null,
                 error,
-                existing ? null : h('div', { class: 'field' },
-                    scanButton, cropBox, scanStatus,
-                    h('div', { class: 'field-hint' }, 'Teilt die Rechnung in einzelne Positionen auf. Das Foto bleibt auf deinem Gerät.')),
                 h('div', { class: 'field' }, h('label', { for: 'expDesc' }, 'Beschreibung'), descInput),
                 h('div', { class: 'field' },
                     h('label', { for: 'expAmount' }, 'Betrag'),
@@ -2942,9 +2619,10 @@
 
     // Hält „zuletzt online“ aktuell, solange die Seite offen ist.
     setInterval(function () {
+        Sync.heartbeat();
         if (Sync.conns.size) markSeen(Sync.gid);
         updateSyncPill();
-    }, 30000);
+    }, HEARTBEAT);
 
     store = readStored();
     askToKeepData();

@@ -196,52 +196,6 @@
     .name-row input { flex: 1; }
 
     /* Rechnung */
-    .scan-status {
-        min-height: 42px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 8px;
-        background: var(--primary-soft);
-        color: var(--primary-strong);
-        font-size: 14px;
-        font-weight: 700;
-    }
-    .crop-stage {
-        position: relative;
-        width: fit-content;
-        max-width: 100%;
-        margin: 0 auto;
-        overflow: hidden;
-        border-radius: 8px;
-        line-height: 0;
-        user-select: none;
-        -webkit-user-select: none;
-    }
-    .crop-stage img { display: block; max-width: 100%; max-height: 62vh; pointer-events: none; }
-    .crop-frame {
-        position: absolute;
-        box-sizing: border-box;
-        border: 2px solid #fff;
-        box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
-    }
-    .crop-handle { position: absolute; width: 44px; height: 44px; touch-action: none; }
-    .crop-handle::after {
-        content: "";
-        position: absolute;
-        width: 22px;
-        height: 22px;
-        border: 0 solid #fff;
-    }
-    .crop-handle.tl { left: -2px; top: -2px; cursor: nwse-resize; }
-    .crop-handle.tr { right: -2px; top: -2px; cursor: nesw-resize; }
-    .crop-handle.bl { left: -2px; bottom: -2px; cursor: nesw-resize; }
-    .crop-handle.br { right: -2px; bottom: -2px; cursor: nwse-resize; }
-    .crop-handle.tl::after { left: 0; top: 0; border-width: 5px 0 0 5px; }
-    .crop-handle.tr::after { right: 0; top: 0; border-width: 5px 5px 0 0; }
-    .crop-handle.bl::after { left: 0; bottom: 0; border-width: 0 0 5px 5px; }
-    .crop-handle.br::after { right: 0; bottom: 0; border-width: 0 5px 5px 0; }
-
     .bill-item { padding: 10px 0; border-top: 1px solid var(--border); }
     .bill-item:first-child { border-top: none; }
     .bill-item .kv { border-top: none; padding: 0 0 8px; }
@@ -397,7 +351,7 @@
     .data-state span { margin-right: 8px; font-size: 12px; font-weight: 600; letter-spacing: 0; color: var(--muted); }
 
     .my-balance { text-align: center; font-size: 16px; font-weight: 600; line-height: 1.5; }
-    .quitt-banner {
+    .kwidt-banner {
         text-align: center;
         font-size: 18px;
         font-weight: 800;
@@ -546,14 +500,14 @@
 <div class="container">
     <main id="app"></main>
     <noscript>Kwidt braucht JavaScript.</noscript>
-    <div class="footer-info">v<span id="versionNumber">1.5</span></div>
+    <div class="footer-info">v<span id="versionNumber">1.6</span></div>
 </div>
 <div id="toast" role="status" hidden></div>
 
 <script src="../fileshare/vendor/peerjs.min.js"></script>
 <script src="../fileshare/vendor/qrcode.min.js"></script>
 <!-- ?v= immer zusammen mit der Versionsnummer oben ändern: Sonst läuft die neue Seite mit alten Skripten aus dem Browser-Cache. -->
-<script src="core.js?v=1.5"></script>
-<script src="app.js?v=1.5"></script>
+<script src="core.js?v=1.6"></script>
+<script src="app.js?v=1.6"></script>
 </body>
 </html>

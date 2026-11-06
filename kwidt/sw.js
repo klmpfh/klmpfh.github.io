@@ -6,12 +6,11 @@
  * den localStorage heran. Er hält nur die Dateien der App bereit.
  *
  * Eigene Dateien: Erst das Netz, damit neue Versionen sofort ankommen; der Cache
- * springt ein, wenn es zu lange dauert oder nicht klappt. Die Texterkennung ändert
- * sich nur mit ihrem Update und ist groß, sie kommt deshalb direkt aus dem Cache.
+ * springt ein, wenn es zu lange dauert oder nicht klappt.
  */
 'use strict';
 
-const CACHE = 'kwidt-v1';
+const CACHE = 'kwidt-v2';
 const NETWORK_TIMEOUT = 3000;
 const SHELL = [
     './',
@@ -56,11 +55,6 @@ function remember(cache, request, response) {
     return response;
 }
 
-async function cacheFirst(request) {
-    const cache = await caches.open(CACHE);
-    return await cache.match(request) || remember(cache, request, await fetch(request));
-}
-
 async function networkFirst(request) {
     const cache = await caches.open(CACHE);
     const cached = await cache.match(request, { ignoreSearch: true })
@@ -85,7 +79,5 @@ async function networkFirst(request) {
 self.addEventListener('fetch', function (event) {
     const url = new URL(event.request.url);
     if (event.request.method !== 'GET' || url.origin !== location.origin) return;
-    event.respondWith(url.pathname.indexOf('/vendor/tesseract/') !== -1
-        ? cacheFirst(event.request)
-        : networkFirst(event.request));
+    event.respondWith(networkFirst(event.request));
 });
