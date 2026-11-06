@@ -350,7 +350,7 @@
 
     function liveExpenses(doc) {
         return Object.keys(doc.expenses).map(function (k) { return doc.expenses[k]; })
-            .filter(function (e) { return !e.del; });
+            .filter(function (e) { return !e.del && !e.series; });
     }
     function livePayments(doc) {
         return Object.keys(doc.payments).map(function (k) { return doc.payments[k]; })
@@ -527,41 +527,84 @@
         return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate());
     }
 
-    /**
-     * Legt alle bis heute fälligen Wiederholungen an. Die ID ergibt sich aus
-     * Vorlage + Datum und der Zeitstempel aus der Vorlage: So erzeugen zwei Geräte
-     * denselben Datensatz, statt doppelt zu buchen, und eine gelöschte Wiederholung
-     * (neuerer Zeitstempel) wird beim Abgleich nicht wieder lebendig.
-     *
-     * Gebucht wird nur nach der letzten vorhandenen Wiederholung: Ändert jemand
-     * Datum oder Rhythmus der Vorlage, ergäben sich sonst neue IDs für schon
-     * gebuchte Zeiträume und damit doppelte Buchungen.
-     */
-    function expandRecurring(doc, today) {
-        var created = 0;
+    function latestOccurrences(doc) {
         var latest = {};
         Object.keys(doc.expenses).forEach(function (key) {
             var e = doc.expenses[key];
             if (e.parent && (!latest[e.parent] || e.date > latest[e.parent])) latest[e.parent] = e.date;
         });
+        return latest;
+    }
+
+    function bookOccurrence(doc, series, date) {
+        var copy = JSON.parse(JSON.stringify(series));
+        copy.id = series.id + '~' + date;
+        copy.date = date;
+        copy.repeat = 'none';
+        copy.parent = series.id;
+        delete copy.series;
+        doc.expenses[copy.id] = copy;
+    }
+
+    /**
+     * Eine Serie ist nur eine Vorlage (`series`): Sie zählt nie selbst, sondern erzeugt
+     * für jeden Termin einen eigenen Eintrag. Änderungen an der Vorlage gelten also nur
+     * für künftige Termine, und jeder gebuchte Eintrag lässt sich einzeln bearbeiten.
+     * Früher zählte die Vorlage als erster Termin. Solche Serien werden hier umgestellt.
+     *
+     * Die ID eines Eintrags ergibt sich aus Vorlage + Datum und der Zeitstempel aus der
+     * Vorlage: So erzeugen zwei Geräte denselben Datensatz, statt doppelt zu buchen, und
+     * ein gelöschter Eintrag (neuerer Zeitstempel) wird beim Abgleich nicht wieder lebendig.
+     *
+     * Gebucht wird nur nach dem letzten vorhandenen Eintrag: Ändert jemand Datum oder
+     * Rhythmus der Vorlage, ergäben sich sonst neue IDs für schon gebuchte Zeiträume und
+     * damit doppelte Buchungen.
+     */
+    function expandRecurring(doc, today) {
+        var created = 0;
+        var latest = latestOccurrences(doc);
         Object.keys(doc.expenses).forEach(function (key) {
-            var parent = doc.expenses[key];
-            if (parent.del || parent.parent || !parent.repeat || parent.repeat === 'none') return;
-            for (var n = 1; n <= 520; n++) {
-                var date = occurrence(parent.date, parent.repeat, n);
+            var series = doc.expenses[key];
+            if (series.del || series.parent || !series.repeat || series.repeat === 'none') return;
+            if (!series.series) {
+                series = doc.expenses[key] = Object.assign({}, series, { series: true });
+                created++;
+                if (series.date <= today && !doc.expenses[series.id + '~' + series.date]) {
+                    bookOccurrence(doc, series, series.date);
+                }
+            }
+            for (var n = 0; n <= 520; n++) {
+                var date = occurrence(series.date, series.repeat, n);
                 if (date > today) break;
-                var id = parent.id + '~' + date;
-                if (doc.expenses[id] || (latest[parent.id] && date <= latest[parent.id])) continue;
-                var copy = JSON.parse(JSON.stringify(parent));
-                copy.id = id;
-                copy.date = date;
-                copy.repeat = 'none';
-                copy.parent = parent.id;
-                doc.expenses[id] = copy;
+                if (doc.expenses[series.id + '~' + date] || (latest[series.id] && date <= latest[series.id])) continue;
+                bookOccurrence(doc, series, date);
                 created++;
             }
         });
         return created;
+    }
+
+    /** Laufende Serien, ohne beendete. */
+    function liveSeries(doc) {
+        return Object.keys(doc.expenses).map(function (k) { return doc.expenses[k]; })
+            .filter(function (e) { return e.series && !e.del && e.repeat !== 'none'; });
+    }
+
+    /** Alle Einträge einer Serie, neueste zuerst, auch gelöschte. */
+    function occurrencesOf(doc, seriesId) {
+        return Object.keys(doc.expenses).map(function (k) { return doc.expenses[k]; })
+            .filter(function (e) { return e.parent === seriesId; })
+            .sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+    }
+
+    /** Datum der nächsten Buchung, oder null. */
+    function nextOccurrence(doc, series, today) {
+        var latest = latestOccurrences(doc)[series.id];
+        for (var n = 0; n <= 520; n++) {
+            var date = occurrence(series.date, series.repeat, n);
+            if (date > today && (!latest || date > latest)) return date;
+        }
+        return null;
     }
 
     /* ---------- Gruppen-Dokument ---------- */
@@ -593,6 +636,8 @@
 
     function isNewer(incoming, current) {
         if (incoming.t !== current.t) return incoming.t > current.t;
+        // Dieselbe Serie, nur noch nicht umgestellt: Die Vorlage darf nicht zurückfallen.
+        if (!!incoming.series !== !!current.series) return !!incoming.series;
         return JSON.stringify(incoming) > JSON.stringify(current);
     }
 
@@ -729,6 +774,7 @@
             out.items = cleanItems(e.items);
             out.claims = cleanClaims(e.claims);
         }
+        if (e.series === true) out.series = true;
         return payersValid(out) && computeOwed(out) ? out : null;
     }
 
@@ -790,6 +836,53 @@
         });
         ids.slice(activityLimit).forEach(function (id) { delete copy.activity[id]; });
         return copy;
+    }
+
+    /* ---------- Stand der Daten ---------- */
+
+    var STATE_EMOJIS = Array.from('🐶🐱🐭🐰🦊🐻🐼🐨🐯🦁🐮🐷🐸🐵🐔🐧🐦🦆🦉🐴🦄🐝🦋🐌🐞🐢🐍🐙🦀🐬🐳🦈' +
+        '🌵🌲🌴🍄🌻🌈⭐🌙🔥💧⛄🍎🍌🍉🍇🍓🍕🍔🌭🍩🍪🎂☕🍺🎈🎁🎸🎲🚲🚀⚽🔑');
+
+    function sortedPairs(map) {
+        return Object.keys(map || {}).sort().map(function (key) { return [key, map[key]]; });
+    }
+
+    /**
+     * Fünf Emojis als Fingerabdruck der Eingaben: Sehen sie auf zwei Geräten gleich aus,
+     * ist der Stand gleich. Zählt nur, was die Daten ausmacht: Zeitstempel und Verlauf
+     * nicht, gelöschte Einträge auch nicht, weil sie einem Gerät noch fehlen dürfen.
+     */
+    function dataFingerprint(doc) {
+        var lines = [JSON.stringify(['meta', doc.meta.name, doc.meta.currency, doc.meta.simplify])];
+        Object.keys(doc.members).forEach(function (id) {
+            var m = doc.members[id];
+            lines.push(JSON.stringify(['member', id, m.name, m.left]));
+        });
+        Object.keys(doc.expenses).forEach(function (id) {
+            var e = doc.expenses[id];
+            if (e.del) return;
+            var claims = Object.keys(e.claims || {}).filter(function (key) { return e.claims[key].on; }).sort();
+            lines.push(JSON.stringify(['expense', id, e.desc, e.amount, e.currency, e.date, e.category, e.note,
+                sortedPairs(e.payers), e.split.type, sortedPairs(e.split.values), e.repeat, !!e.series, e.items || [], claims]));
+        });
+        livePayments(doc).forEach(function (p) {
+            lines.push(JSON.stringify(['payment', p.id, p.from, p.to, p.amount, p.currency, p.date, p.note]));
+        });
+        Object.keys(doc.comments).forEach(function (id) {
+            var c = doc.comments[id];
+            if (!c.del) lines.push(JSON.stringify(['comment', id, c.expense, c.text]));
+        });
+
+        // Nachmischen: Sonst würde eine kleine Änderung nur wenige Bits des Hashes treffen.
+        var h = hash(lines.sort().join('\n'));
+        h ^= h >>> 16;
+        h = Math.imul(h, 0x85ebca6b);
+        h ^= h >>> 13;
+        h = Math.imul(h, 0xc2b2ae35);
+        h ^= h >>> 16;
+        var out = [];
+        for (var i = 0; i < 5; i++) out.push(STATE_EMOJIS[(h >>> (i * 6)) & 63]);
+        return out;
     }
 
     /* ---------- Gruppensymbol ---------- */
@@ -917,6 +1010,345 @@
         return { title: title, date: receiptDate(String(text)), items: items, total: total };
     }
 
+    /* ---------- Excel-Dateien (.xls) lesen ---------- */
+
+    var CFB_END = 0xFFFFFFFC;
+
+    /**
+     * Eine .xls-Datei ist ein kleines Dateisystem (Compound File) mit dem Datenstrom
+     * "Workbook" darin. Liefert dessen Bytes, oder null, wenn es keine solche Datei ist.
+     * Kaputte Dateien enden in einem RangeError, das fängt der Aufrufer ab.
+     */
+    function workbookStream(buffer) {
+        var view = new DataView(buffer);
+        if (buffer.byteLength < 512 || view.getUint32(0, true) !== 0xE011CFD0 || view.getUint32(4, true) !== 0xE11AB1A1) return null;
+        var sectorSize = Math.pow(2, view.getUint16(30, true));
+        var miniSize = Math.pow(2, view.getUint16(32, true));
+        var total = Math.ceil(buffer.byteLength / sectorSize);
+        var whole = new Uint8Array(buffer);
+
+        function sectorAt(sector) { return (sector + 1) * sectorSize; }
+
+        var fatSectors = [];
+        var i;
+        for (i = 0; i < 109; i++) fatSectors.push(view.getUint32(76 + i * 4, true));
+        var difat = view.getUint32(68, true);
+        for (var guard = 0; difat < CFB_END && guard < total; guard++) {
+            for (i = 0; i < sectorSize / 4 - 1; i++) fatSectors.push(view.getUint32(sectorAt(difat) + i * 4, true));
+            difat = view.getUint32(sectorAt(difat) + sectorSize - 4, true);
+        }
+        var fat = [];
+        fatSectors.filter(function (sector) { return sector < CFB_END; }).forEach(function (sector) {
+            for (var n = 0; n < sectorSize / 4; n++) fat.push(view.getUint32(sectorAt(sector) + n * 4, true));
+        });
+
+        function chain(start, next) {
+            var out = [];
+            for (var sector = start; sector < CFB_END && out.length < next.length; sector = next[sector]) out.push(sector);
+            return out;
+        }
+
+        function readSectors(start) {
+            var sectors = chain(start, fat);
+            var out = new Uint8Array(sectors.length * sectorSize);
+            sectors.forEach(function (sector, index) {
+                out.set(whole.subarray(sectorAt(sector), sectorAt(sector) + sectorSize), index * sectorSize);
+            });
+            return out;
+        }
+
+        var directory = readSectors(view.getUint32(48, true));
+        var dirView = new DataView(directory.buffer);
+        var root = null;
+        var entry = null;
+        for (var at = 0; at + 128 <= directory.length; at += 128) {
+            var nameLength = Math.max(0, dirView.getUint16(at + 64, true) - 2);
+            var name = '';
+            for (i = 0; i < nameLength; i += 2) name += String.fromCharCode(dirView.getUint16(at + i, true));
+            var found = { start: dirView.getUint32(at + 116, true), size: dirView.getUint32(at + 120, true) };
+            if (directory[at + 66] === 5) root = found;
+            if (/^(workbook|book)$/i.test(name) && !entry) entry = found;
+        }
+        if (!entry) return null;
+        if (entry.size >= view.getUint32(56, true)) return readSectors(entry.start).subarray(0, entry.size);
+
+        // Kleine Datenströme liegen in eigenen, kürzeren Blöcken.
+        var miniTable = readSectors(view.getUint32(60, true));
+        var miniView = new DataView(miniTable.buffer);
+        var miniFat = [];
+        for (i = 0; i + 4 <= miniTable.length; i += 4) miniFat.push(miniView.getUint32(i, true));
+        var miniStream = readSectors(root.start);
+        var blocks = chain(entry.start, miniFat);
+        var out = new Uint8Array(blocks.length * miniSize);
+        blocks.forEach(function (block, index) {
+            out.set(miniStream.subarray(block * miniSize, (block + 1) * miniSize), index * miniSize);
+        });
+        return out.subarray(0, entry.size);
+    }
+
+    /** Die Texte stehen zentral in einer Tabelle, die über mehrere Datensätze laufen darf. */
+    function readSharedStrings(chunks) {
+        var c = 0;
+        var o = 0;
+        function byte() {
+            while (c < chunks.length && o >= chunks[c].length) { c++; o = 0; }
+            if (c >= chunks.length) throw new RangeError('Texttabelle zu kurz');
+            return chunks[c][o++];
+        }
+        function u16() { var low = byte(); return low | (byte() << 8); }
+        function u32() { var low = u16(); return (low + u16() * 65536); }
+
+        u32();
+        var count = u32();
+        var out = [];
+        for (var n = 0; n < count; n++) {
+            var length = u16();
+            var flags = byte();
+            var wide = flags & 1;
+            var rich = flags & 8 ? u16() : 0;
+            var extra = flags & 4 ? u32() : 0;
+            var text = '';
+            for (var i = 0; i < length; i++) {
+                if (o >= chunks[c].length) {
+                    // Mitten im Text beginnt ein neuer Datensatz mit eigener Zeichenbreite.
+                    c++;
+                    o = 0;
+                    if (c >= chunks.length) throw new RangeError('Texttabelle zu kurz');
+                    wide = chunks[c][o++] & 1;
+                }
+                text += String.fromCharCode(wide ? u16() : byte());
+            }
+            for (var skip = rich * 4 + extra; skip > 0; skip--) byte();
+            out.push(text);
+        }
+        return out;
+    }
+
+    function rkNumber(view, at) {
+        var raw = view.getUint32(at, true);
+        var value;
+        if (raw & 2) {
+            value = (raw | 0) >> 2;
+        } else {
+            var bits = new DataView(new ArrayBuffer(8));
+            bits.setUint32(4, raw & 0xFFFFFFFC, true);
+            value = bits.getFloat64(0, true);
+        }
+        return raw & 1 ? value / 100 : value;
+    }
+
+    /**
+     * Liest die Tabellenblätter einer .xls-Datei als [{name, rows}]. Das deckt Texte und
+     * Zahlen ab, mehr steht in den Dateien aus Splid nicht. Liefert null bei anderen Dateien.
+     */
+    function readXls(buffer) {
+        var bytes = workbookStream(buffer);
+        if (!bytes) return null;
+        var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.length);
+        var strings = [];
+        var sheetNames = {};
+        var sheets = [];
+        var current = null;
+        var pendingText = null;
+        var pos = 0;
+
+        function chars(at, length, wide) {
+            var text = '';
+            for (var i = 0; i < length; i++) {
+                text += String.fromCharCode(wide ? view.getUint16(at + i * 2, true) : view.getUint8(at + i));
+            }
+            return text;
+        }
+        function put(row, col, value) {
+            if (!current) return;
+            if (!current.cells[row]) current.cells[row] = [];
+            current.cells[row][col] = value;
+        }
+
+        while (pos + 4 <= bytes.length) {
+            var id = view.getUint16(pos, true);
+            var size = view.getUint16(pos + 2, true);
+            var data = pos + 4;
+            var row = data + 4 <= bytes.length ? view.getUint16(data, true) : 0;
+            var col = data + 4 <= bytes.length ? view.getUint16(data + 2, true) : 0;
+            if (id === 0x0809) {
+                current = view.getUint16(data + 2, true) === 0x0010 ? { name: sheetNames[pos] || 'Blatt', cells: [] } : null;
+                if (current) sheets.push(current);
+            } else if (id === 0x0085) {
+                sheetNames[view.getUint32(data, true)] = chars(data + 8, view.getUint8(data + 6), view.getUint8(data + 7) & 1);
+            } else if (id === 0x00FC) {
+                var chunks = [bytes.subarray(data, data + size)];
+                var next = data + size;
+                while (next + 4 <= bytes.length && view.getUint16(next, true) === 0x003C) {
+                    var chunkSize = view.getUint16(next + 2, true);
+                    chunks.push(bytes.subarray(next + 4, next + 4 + chunkSize));
+                    next += 4 + chunkSize;
+                }
+                strings = readSharedStrings(chunks);
+                pos = next;
+                continue;
+            } else if (id === 0x00FD) {
+                put(row, col, strings[view.getUint32(data + 6, true)]);
+            } else if (id === 0x0204) {
+                put(row, col, chars(data + 9, view.getUint16(data + 6, true), view.getUint8(data + 8) & 1));
+            } else if (id === 0x0203) {
+                put(row, col, view.getFloat64(data + 6, true));
+            } else if (id === 0x027E) {
+                put(row, col, rkNumber(view, data + 6));
+            } else if (id === 0x00BD) {
+                for (var at = data + 4, c = col; at + 6 <= data + size - 2; at += 6, c++) put(row, c, rkNumber(view, at + 2));
+            } else if (id === 0x0006) {
+                if (view.getUint16(data + 12, true) === 0xFFFF) pendingText = { row: row, col: col };
+                else put(row, col, view.getFloat64(data + 6, true));
+            } else if (id === 0x0207 && pendingText) {
+                put(pendingText.row, pendingText.col, chars(data + 3, view.getUint16(data, true), view.getUint8(data + 2) & 1));
+                pendingText = null;
+            }
+            pos = data + size;
+        }
+
+        return sheets.map(function (sheet) {
+            return {
+                name: sheet.name,
+                rows: Array.from(sheet.cells, function (cells) {
+                    return Array.from(cells || [], function (cell) { return cell === undefined ? '' : cell; });
+                })
+            };
+        });
+    }
+
+    /* ---------- Import aus Splid ---------- */
+
+    function cellNumber(value) {
+        if (typeof value === 'number') return isFinite(value) ? value : null;
+        return typeof value === 'string' && value.trim() ? parseNumberText(value, 2) : null;
+    }
+
+    function splidDate(value) {
+        if (typeof value === 'number' && value > 30000 && value < 80000) {
+            return new Date(Math.round((value - 25569) * 86400000)).toISOString().slice(0, 10);
+        }
+        return receiptDate(String(value));
+    }
+
+    /**
+     * Ein Splid-Export hat pro Person zwei Spalten: bezahlt und Anteil (negativ). Die
+     * Anteile sind ungerundet, deshalb entscheiden sie nur über die Verteilung. Die Summen-
+     * und Ausgleichszeilen bleiben draußen, die ergeben sich aus den Ausgaben von selbst.
+     * Liefert {name, currency, members, expenses, skipped} oder null.
+     */
+    function parseSplid(sheets, today) {
+        for (var s = 0; s < sheets.length; s++) {
+            var rows = sheets[s].rows;
+            var headerRow = -1;
+            for (var r = 0; r < rows.length && headerRow === -1; r++) {
+                if (rows[r][0] === 'Titel' && rows[r][1] === 'Betrag' && rows[r][3] === 'Von') headerRow = r;
+            }
+            if (headerRow !== -1) return parseSplidRows(rows, headerRow, today);
+        }
+        return null;
+    }
+
+    function parseSplidRows(rows, headerRow, today) {
+        var header = rows[headerRow];
+        var people = [];
+        for (var c = 6; c < header.length; c++) {
+            var name = String(header[c]).trim().slice(0, 40);
+            if (!name) continue;
+            var unique = name;
+            for (var n = 2; people.some(function (p) { return p.name === unique; }); n++) unique = name + ' ' + n;
+            people.push({ name: unique, col: c });
+        }
+
+        var expenses = [];
+        var skipped = 0;
+        var currencyCount = {};
+
+        rows.slice(headerRow + 1).forEach(function (row, index) {
+            var desc = String(row[0] === undefined ? '' : row[0]).trim();
+            if (!desc) return;
+            var currency = String(row[2]).trim();
+            var value = cellNumber(row[1]);
+            if (!isCurrency(currency) || !value || value <= 0) { skipped++; return; }
+            var amount = Math.round(value * Math.pow(10, currencyDecimals(currency)));
+
+            var payers = {};
+            var paid = 0;
+            var shares = {};
+            var low = Infinity;
+            var high = 0;
+            people.forEach(function (person) {
+                var factor = Math.pow(10, currencyDecimals(currency));
+                var payment = Math.round((cellNumber(row[person.col]) || 0) * factor);
+                if (payment > 0) {
+                    payers[person.name] = payment;
+                    paid += payment;
+                }
+                var share = Math.abs(cellNumber(row[person.col + 1]) || 0);
+                if (share > 0) {
+                    shares[person.name] = share;
+                    low = Math.min(low, share);
+                    high = Math.max(high, share);
+                }
+            });
+
+            var from = String(row[3]).trim();
+            if (!paid && people.some(function (p) { return p.name === from; })) {
+                payers[from] = amount;
+                paid = amount;
+            }
+            // Gerundete Teilbeträge dürfen ein paar Cent abweichen, mehr nicht.
+            var payerNames = Object.keys(payers).sort(function (a, b) { return payers[b] - payers[a]; });
+            if (!payerNames.length || !Object.keys(shares).length || Math.abs(paid - amount) > people.length) {
+                skipped++;
+                return;
+            }
+            payers[payerNames[0]] += amount - paid;
+
+            var date = splidDate(row[4]) || splidDate(row[5]) || today;
+            currencyCount[currency] = (currencyCount[currency] || 0) + 1;
+            expenses.push({
+                desc: desc.slice(0, 120),
+                amount: amount,
+                currency: currency,
+                date: date,
+                payers: payers,
+                equal: high - low < 0.006,
+                shares: high - low < 0.006 ? shares : distribute(shares, amount, desc + '|' + index)
+            });
+        });
+
+        var main = Object.keys(currencyCount).sort(function (a, b) { return currencyCount[b] - currencyCount[a]; })[0];
+        return {
+            name: String(rows[0] && rows[0][0] || '').split(/\s+[—–]\s+/)[0].trim().slice(0, 60),
+            currency: main || 'EUR',
+            members: people.map(function (p) { return p.name; }),
+            expenses: expenses,
+            skipped: skipped
+        };
+    }
+
+    /** Trägt die gelesenen Ausgaben in die Gruppe ein. `ids` ordnet Namen den Personen zu. */
+    function importSplid(doc, data, ids, by) {
+        function mapped(names, value) {
+            var out = {};
+            Object.keys(names).forEach(function (name) { out[ids[name]] = value(names[name]); });
+            return out;
+        }
+        data.expenses.forEach(function (e) {
+            var id = newId();
+            doc.expenses[id] = {
+                id: id, t: nextT(doc), by: by, desc: e.desc, amount: e.amount, currency: e.currency, date: e.date,
+                category: 'general', note: '',
+                payers: mapped(e.payers, function (v) { return v; }),
+                split: e.equal
+                    ? { type: 'equal', values: mapped(e.shares, function () { return 1; }) }
+                    : { type: 'exact', values: mapped(e.shares, function (v) { return v; }) },
+                repeat: 'none', del: false
+            };
+        });
+    }
+
     /* ---------- CSV ---------- */
 
     function csvCell(value) {
@@ -998,6 +1430,10 @@
         currenciesUsed: currenciesUsed,
         occurrence: occurrence,
         expandRecurring: expandRecurring,
+        liveSeries: liveSeries,
+        occurrencesOf: occurrencesOf,
+        nextOccurrence: nextOccurrence,
+        dataFingerprint: dataFingerprint,
         emptyGroup: emptyGroup,
         lastT: lastT,
         nextT: nextT,
@@ -1005,6 +1441,9 @@
         sanitizeGroup: sanitizeGroup,
         snapshotForLink: snapshotForLink,
         groupSymbol: groupSymbol,
+        readXls: readXls,
+        parseSplid: parseSplid,
+        importSplid: importSplid,
         parseReceipt: parseReceipt,
         toCsv: toCsv
     };

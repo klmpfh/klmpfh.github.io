@@ -58,7 +58,7 @@ relativ, über die eigene `src`-Angabe.
   Ohne Server: Daten liegen im Browser, Abgleich per Link oder live per WebRTC (`core.js` ist die Rechenlogik,
   `app.js` Oberfläche und Sync; PeerJS und QR-Code kommen aus `fileshare/vendor/`). Rechnungen werden per Foto
   direkt im Browser gelesen (Tesseract.js in `quitt/vendor/tesseract/`, Apache-2.0, Lizenzhinweise liegen dort),
-  `sw.js` hält die App offline bereit.
+  `sw.js` hält die App offline bereit. Beim Anlegen einer Gruppe lässt sich ein Excel-Export aus Splid (.xls) übernehmen.
 - `/zauberkloppen/` – Szenario-Generator für Fantasy-Rollenspiele.
 
 ## Entwicklung

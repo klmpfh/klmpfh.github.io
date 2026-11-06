@@ -28,7 +28,7 @@
     const app = document.getElementById('app');
     const toastEl = document.getElementById('toast');
 
-    let store = { groups: {}, me: {}, last: null };
+    let store = { groups: {}, me: {}, last: null, seen: {} };
     const state = { formActive: false, pendingRender: false, unsaved: false, search: '', statsCur: null, lastPath: null };
 
     /* ---------- Helfer ---------- */
@@ -150,7 +150,7 @@
     /* ---------- Speicher ---------- */
 
     function readStored() {
-        const out = { groups: {}, me: {}, last: null };
+        const out = { groups: {}, me: {}, last: null, seen: {} };
         try {
             const raw = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
             if (raw && raw.groups) {
@@ -162,6 +162,9 @@
                     if (typeof raw.me[gid] === 'string') out.me[gid] = raw.me[gid];
                 });
                 if (typeof raw.last === 'string') out.last = raw.last;
+                Object.keys(raw.seen || {}).forEach(function (gid) {
+                    if (typeof raw.seen[gid] === 'number') out.seen[gid] = raw.seen[gid];
+                });
             }
         } catch (e) {
             console.warn('Quitt: Gespeicherte Daten nicht lesbar.', e);
@@ -211,7 +214,21 @@
         });
         store.me = loaded.me;
         store.last = loaded.last;
+        store.seen = loaded.seen;
         return changed;
+    }
+
+    /**
+     * Wann war zuletzt ein anderes Gerät da? Das gilt nur für dieses Gerät und bleibt
+     * deshalb außerhalb des Gruppen-Dokuments. Gespeichert wird höchstens einmal pro Minute.
+     */
+    let seenSaved = 0;
+    function markSeen(gid, saveNow) {
+        store.seen[gid] = Date.now();
+        if (saveNow || Date.now() - seenSaved > 60000) {
+            seenSaved = Date.now();
+            persist();
+        }
     }
 
     function meId(gid) {
@@ -343,6 +360,7 @@
         },
 
         teardown: function () {
+            if (this.gid && this.conns.size) markSeen(this.gid, true);
             this.conns.forEach(function (conn) { try { conn.close(); } catch (e) { /* schon zu */ } });
             this.conns.clear();
             if (this.peer) {
@@ -424,6 +442,7 @@
             function greet() {
                 if (stale()) return;
                 self.conns.set(conn.peer, conn);
+                markSeen(self.gid);
                 self.send(conn);
                 self.announce();
                 self.refreshStatus();
@@ -437,6 +456,7 @@
 
             function lost() {
                 if (stale()) return;
+                markSeen(self.gid, true);
                 self.conns.delete(conn.peer);
                 if (self.isHost()) {
                     self.announce();
@@ -516,10 +536,15 @@
                 return Sync.deviceCount > 2
                     ? 'Live mit ' + (Sync.deviceCount - 1) + ' anderen Geräten'
                     : 'Live mit einem anderen Gerät';
-            case 'waiting': return 'Kein anderes Gerät online';
+            case 'waiting': return 'Kein anderes Gerät online' + lastSeenText();
             case 'connecting': return 'Verbinde …';
-            default: return 'Offline';
+            default: return 'Offline' + lastSeenText();
         }
+    }
+
+    function lastSeenText() {
+        const seen = store.seen[Sync.gid];
+        return seen ? ', zuletzt ' + timeAgo(seen) : ', noch keins gesehen';
     }
 
     function syncPillClass() {
@@ -701,7 +726,7 @@
                     h('span', { class: 'big', 'aria-hidden': 'true' }, '🧾'),
                     'Noch keine Gruppe. Leg eine an, zum Beispiel für den nächsten Urlaub, die WG oder den Grillabend. Ein Paar ist einfach eine Gruppe mit zwei Personen.'),
                 h('div', { class: 'actions' },
-                    h('a', { class: 'btn btn-primary', href: '#/new' }, '+ Neue Gruppe'))),
+                    h('a', { class: 'btn', href: '#/new' }, '+ Neue Gruppe'))),
             h('section', { class: 'panel' },
                 h('h2', null, 'So funktioniert es'),
                 h('p', { class: 'small muted' }, 'Es gibt keine Anmeldung. Deine Gruppen liegen nur in diesem Browser, nicht auf einem Server. Jede Person hat ihre eigene Kopie.'),
@@ -759,6 +784,7 @@
     function viewNewGroup() {
         state.formActive = true;
         const form = { currency: 'EUR' };
+        let imported = null;
         const friends = h('div', null);
         const error = h('div', { class: 'form-error', hidden: true });
 
@@ -795,9 +821,102 @@
         });
         const meInput = h('input', { id: 'myName', type: 'text', maxlength: 40, placeholder: 'Dein Name', autocomplete: 'name' });
 
+        const currencyEl = currencySelect(form.currency, function (e) { form.currency = e.target.value; }, { id: 'groupCurrency' });
+        const manualPeople = h('div', null);
+        const importSummary = h('div', { class: 'import-box', hidden: true });
+
+        function clearImport() {
+            imported = null;
+            importSummary.hidden = true;
+            importSummary.textContent = '';
+            manualPeople.hidden = false;
+        }
+
+        function showImport() {
+            const totals = {};
+            imported.expenses.forEach(function (x) { totals[x.currency] = (totals[x.currency] || 0) + x.amount; });
+            const count = imported.expenses.length;
+            importSummary.textContent = '';
+            importSummary.hidden = false;
+            importSummary.appendChild(h('div', { class: 'link-title' }, 'Aus Splid'));
+            importSummary.appendChild(h('p', { class: 'small muted' }, imported.members.length + ' Personen · '
+                + count + (count === 1 ? ' Ausgabe' : ' Ausgaben') + ' · '
+                + Object.keys(totals).map(function (cur) { return money(totals[cur], cur); }).join(' + ')));
+            if (imported.skipped) {
+                importSummary.appendChild(h('div', { class: 'notice', style: 'margin:8px 0 0' },
+                    imported.skipped + (imported.skipped === 1 ? ' Zeile konnte' : ' Zeilen konnten') + ' nicht gelesen werden und fehlt in der Gruppe.'));
+            }
+            importSummary.appendChild(h('div', { class: 'field', style: 'margin:10px 0 8px' },
+                h('label', { for: 'importMe' }, 'Wer bist du?'),
+                h('select', {
+                    id: 'importMe', value: '',
+                    onchange: function (e) { imported.me = e.target.value; }
+                },
+                    h('option', { value: '' }, 'Bitte wählen'),
+                    imported.members.map(function (m) { return h('option', { value: m }, m); }))));
+            importSummary.appendChild(h('button', { class: 'link-btn small', type: 'button', onclick: clearImport }, 'Import verwerfen'));
+        }
+
+        async function onImport(e) {
+            const file = e.target.files[0];
+            e.target.value = '';
+            if (!file) return;
+            error.hidden = true;
+            let data = null;
+            try {
+                const sheets = C.readXls(await file.arrayBuffer());
+                data = sheets && C.parseSplid(sheets, C.todayStr());
+            } catch (err) {
+                console.warn('Quitt: Datei nicht lesbar.', err);
+            }
+            if (!data || !data.members.length || !data.expenses.length) {
+                error.textContent = 'Das sieht nicht nach einer Excel-Datei aus Splid aus (.xls).';
+                error.hidden = false;
+                return;
+            }
+            imported = data;
+            nameInput.value = data.name || nameInput.value;
+            nameInput.dispatchEvent(new Event('input'));
+            form.currency = data.currency;
+            if (!Array.from(currencyEl.options).some(function (o) { return o.value === data.currency; })) {
+                currencyEl.appendChild(h('option', { value: data.currency }, data.currency));
+            }
+            currencyEl.value = data.currency;
+            manualPeople.hidden = true;
+            showImport();
+        }
+
+        function submitImport(name) {
+            const gid = C.newGroupId();
+            const doc = C.emptyGroup(gid);
+            doc.meta = { t: Date.now(), name: name, currency: form.currency, simplify: true };
+            store.groups[gid] = doc;
+            const ids = {};
+            imported.members.forEach(function (member) {
+                const id = C.newId();
+                ids[member] = id;
+                doc.members[id] = { id: id, t: C.nextT(doc), name: member, left: false };
+            });
+            store.me[gid] = ids[imported.me];
+            C.importSplid(doc, imported, ids, ids[imported.me]);
+            logActivity(doc, 'group-create', '', name);
+            logActivity(doc, 'import', '', imported.expenses.length + ' Ausgaben');
+            persist();
+            go('/g/' + gid);
+        }
+
         function submit(e) {
             e.preventDefault();
             const name = nameInput.value.trim();
+            if (imported) {
+                if (!name || !imported.me) {
+                    error.textContent = !name ? 'Bitte gib einen Gruppennamen ein.' : 'Bitte wähle aus, wer du bist.';
+                    error.hidden = false;
+                    return;
+                }
+                submitImport(name);
+                return;
+            }
             const myName = meInput.value.trim();
             if (!name || !myName) {
                 error.textContent = 'Bitte gib einen Gruppennamen und deinen eigenen Namen ein.';
@@ -823,23 +942,30 @@
             go('/g/' + gid);
         }
 
+        manualPeople.appendChild(h('div', { class: 'field' }, h('label', { for: 'myName' }, 'Dein Name'), meInput));
+        manualPeople.appendChild(h('span', { class: 'field-label' }, 'Wer ist noch dabei?'));
+        manualPeople.appendChild(friends);
+
         return h('div', null,
             h('a', { class: 'back', href: '#/' }, '‹ Gruppen'),
             h('form', { class: 'panel', onsubmit: submit },
                 h('h2', null, 'Neue Gruppe'),
                 error,
                 h('div', { class: 'field' },
+                    h('label', { class: 'btn btn-small btn-block' }, 'Aus Splid importieren',
+                        h('input', { type: 'file', accept: '.xls,application/vnd.ms-excel', hidden: true, onchange: onImport })),
+                    h('div', { class: 'field-hint' }, 'Excel-Datei aus Splid (.xls). Sie wird nur in deinem Browser gelesen.')),
+                h('div', { class: 'field' },
                     h('label', { for: 'groupName' }, 'Name der Gruppe'),
                     h('div', { class: 'name-row' }, avatarSlot, nameInput),
                     h('div', { class: 'field-hint' }, 'Ein Emoji im Namen wird zum Symbol, sonst die Anfangsbuchstaben.')),
                 h('div', { class: 'field' },
                     h('label', { for: 'groupCurrency' }, 'Währung'),
-                    currencySelect(form.currency, function (e) { form.currency = e.target.value; }, { id: 'groupCurrency' })),
-                h('div', { class: 'field' }, h('label', { for: 'myName' }, 'Dein Name'), meInput),
-                h('span', { class: 'field-label' }, 'Wer ist noch dabei?'),
-                friends,
+                    currencyEl),
+                importSummary,
+                manualPeople,
                 h('div', { class: 'actions' },
-                    h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, 'Gruppe anlegen'))));
+                    h('button', { class: 'btn btn-block', type: 'submit' }, 'Gruppe anlegen'))));
     }
 
     /* ---------- Gruppenansichten ---------- */
@@ -902,6 +1028,7 @@
         delete store.groups[doc.id];
         delete store.me[doc.id];
         if (store.last === doc.id) store.last = null;
+        delete store.seen[doc.id];
         persist();
         go('/');
     }
@@ -976,10 +1103,12 @@
             h('header', { class: 'group-head' },
                 groupAvatar(doc.meta.name, true),
                 h('h1', null, doc.meta.name),
-                h('a', { id: 'syncPill', class: syncPillClass(), href: '#/g/' + doc.id + '/settings' }, syncLabel())),
+                h('a', { id: 'syncPill', class: syncPillClass(), href: '#/g/' + doc.id + '/settings' }, syncLabel()),
+                h('div', { class: 'data-state', title: 'Gleiche Emojis auf zwei Geräten bedeuten: gleicher Stand.' },
+                    h('span', null, 'Stand'), C.dataFingerprint(doc).join(' '))),
             summary ? h('section', { class: 'panel' }, summary) : null,
             h('div', { class: 'group-actions' },
-                h('a', { class: 'btn btn-primary', href: '#/g/' + doc.id + '/expense' }, '+ Ausgabe'),
+                h('a', { class: 'btn', href: '#/g/' + doc.id + '/expense' }, '+ Ausgabe'),
                 h('a', { class: 'btn', href: '#/g/' + doc.id + '/pay' }, '+ Zahlung')),
             h('nav', { class: 'tabs', 'aria-label': 'Gruppenbereiche' }, tabs.map(function (t) {
                 return h('a', {
@@ -1079,11 +1208,41 @@
         });
     }
 
+    function daysUntil(dateStr) {
+        const p = dateStr.split('-').map(Number);
+        const now = new Date();
+        const days = Math.round((new Date(p[0], p[1] - 1, p[2]) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+        return new Intl.RelativeTimeFormat('de', { numeric: 'auto' }).format(days, 'day');
+    }
+
+    function nextBookingText(doc, series) {
+        const date = C.nextOccurrence(doc, series, C.todayStr());
+        return date ? 'nächste am ' + formatDate(date, true) + ' (' + daysUntil(date) + ')' : 'keine weitere geplant';
+    }
+
+    function viewSeriesPanel(doc) {
+        const today = C.todayStr();
+        const series = C.liveSeries(doc).sort(function (a, b) {
+            return (C.nextOccurrence(doc, a, today) || '') < (C.nextOccurrence(doc, b, today) || '') ? -1 : 1;
+        });
+        if (!series.length) return null;
+        return h('section', { class: 'panel' },
+            h('h2', null, 'Wiederkehrend'),
+            h('div', { class: 'list' }, series.map(function (e) {
+                return h('a', { class: 'item', href: '#/g/' + doc.id + '/expense/' + e.id },
+                    h('span', { class: 'icon', 'aria-hidden': 'true' }, category(e.category).emoji),
+                    h('span', { class: 'body' },
+                        h('div', { class: 'title' }, e.desc),
+                        h('div', { class: 'sub' }, REPEAT_LABELS[e.repeat] + ' · ' + nextBookingText(doc, e))),
+                    h('span', { class: 'side' }, h('strong', null, money(e.amount, e.currency))));
+            })));
+    }
+
     function viewExpensesTab(doc, balances, me) {
         const list = h('div', { class: 'list' });
         renderEntries(list, doc, me);
         const members = activeMembers(doc);
-        return h('section', { class: 'panel' },
+        return h('div', null, viewSeriesPanel(doc), h('section', { class: 'panel' },
             members.length < 2 ? h('div', { class: 'notice' },
                 'Du bist noch allein hier. ',
                 h('a', { href: '#/g/' + doc.id + '/settings' }, 'Lade deine Freunde ein.')) : null,
@@ -1096,7 +1255,7 @@
                         renderEntries(list, doc, me);
                     }
                 })),
-            list);
+            list));
     }
 
     /* Salden */
@@ -1257,6 +1416,7 @@
             case 'expense-restore': return who + ' ' + label + ' wiederhergestellt';
             case 'comment': return who + ' ' + label + ' kommentiert';
             case 'claim': return who + ' bei ' + label + ' Positionen zugeordnet';
+            case 'import': return who + ' ' + a.label + ' aus Splid importiert';
             case 'pay-add': return who + ' eine Zahlung eingetragen: ' + a.label;
             case 'pay-edit': return who + ' eine Zahlung geändert: ' + a.label;
             case 'pay-del': return who + ' eine Zahlung gelöscht: ' + a.label;
@@ -1297,38 +1457,46 @@
     }
 
     function viewInvitePanel(doc) {
-        const qrBox = h('div', { class: 'qr-card', hidden: true });
-        let qrDrawn = false;
-
-        async function copyLink() {
-            toast(await copyText(await inviteLink(doc)) ? 'Link kopiert.' : 'Kopieren hat nicht geklappt.');
+        const qrBox = h('div', { class: 'qr-card' });
+        if (typeof QRCode !== 'undefined') {
+            const box = h('div');
+            qrBox.appendChild(box);
+            new QRCode(box, {
+                text: shortLink(doc),
+                width: 200, height: 200,
+                colorDark: '#14121a', colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.M
+            });
         }
-        function toggleQr() {
-            if (!qrDrawn && typeof QRCode !== 'undefined') {
-                const box = h('div');
-                qrBox.appendChild(box);
-                new QRCode(box, {
-                    text: shortLink(doc),
-                    width: 200, height: 200,
-                    colorDark: '#14121a', colorLight: '#ffffff',
-                    correctLevel: QRCode.CorrectLevel.M
-                });
-                qrDrawn = true;
-            }
-            qrBox.hidden = !qrBox.hidden;
+
+        function linkOption(title, text, short) {
+            return h('div', { class: 'link-option' },
+                h('div', { class: 'link-title' }, title),
+                h('p', { class: 'small muted' }, text),
+                h('div', { class: 'actions' },
+                    h('button', {
+                        class: 'btn', type: 'button',
+                        onclick: async function () {
+                            const link = short ? shortLink(doc) : await inviteLink(doc);
+                            toast(await copyText(link) ? 'Link kopiert.' : 'Kopieren hat nicht geklappt.');
+                        }
+                    }, 'Kopieren'),
+                    h('button', {
+                        class: 'btn', type: 'button',
+                        onclick: function () { shareInvite(doc, null, short); }
+                    }, 'Teilen')));
         }
 
         return h('section', { class: 'panel' },
             h('h2', null, 'Einladen & abgleichen'),
-            h('p', { class: 'small muted' }, 'Der Link enthält den aktuellen Stand der Gruppe. Schick ihn in euren Chat: Beim Öffnen wird er mit dem Stand der anderen Person zusammengeführt. Das klappt immer wieder, also auch später zum Abgleichen.'),
-            h('p', { class: 'small muted' }, 'Wer den Link hat, kann die Gruppe lesen und bearbeiten. Solange zwei Geräte die Gruppe gleichzeitig offen haben, gleichen sie sich automatisch ab. Für den Verbindungsaufbau wird dabei der öffentliche Dienst PeerJS genutzt, die Daten selbst gehen verschlüsselt von Gerät zu Gerät.'),
-            h('div', { class: 'actions' },
-                navigator.share ? h('button', { class: 'btn btn-primary', type: 'button', onclick: function () { shareInvite(doc); } }, 'Link teilen') : null,
-                h('button', { class: navigator.share ? 'btn' : 'btn btn-primary', type: 'button', onclick: copyLink }, 'Link kopieren'),
-                h('button', { class: 'btn', type: 'button', onclick: function () { shareInvite(doc, null, true); } }, 'Kurzer Link'),
-                h('button', { class: 'btn', type: 'button', onclick: toggleQr }, 'QR-Code')),
-            qrBox,
-            h('p', { class: 'small muted', style: 'margin-top:10px' }, 'Kurzer Link und QR-Code enthalten nur die Adresse der Gruppe. Sie funktionieren nur, solange jemand die Gruppe gerade offen hat.'));
+            linkOption('Kurzer Link', 'Enthält nur die Adresse der Gruppe. Die Daten kommen per Live-Abgleich, also nur, solange jemand die Gruppe gerade offen hat.', true),
+            linkOption('Link mit Daten', 'Enthält den aktuellen Stand und funktioniert immer. Beim Öffnen wird er mit dem vorhandenen Stand zusammengeführt, das klappt auch später zum Abgleichen.', false),
+            h('div', { class: 'link-option' },
+                h('div', { class: 'link-title' }, 'QR-Code'),
+                h('p', { class: 'small muted' }, 'Wie der kurze Link: Er enthält nur die Adresse der Gruppe.'),
+                qrBox),
+            h('p', { class: 'small muted', style: 'margin-top:14px' }, 'Wer einen Link hat, kann die Gruppe lesen und bearbeiten. Für den Live-Abgleich wird der öffentliche Dienst PeerJS genutzt, die Daten selbst gehen verschlüsselt von Gerät zu Gerät.'),
+            h('p', { class: 'small muted', style: 'margin-top:8px' }, 'Die Emojis neben „Stand“ oben sind ein Fingerabdruck eurer Eingaben: Sehen sie auf zwei Geräten gleich aus, seid ihr auf demselben Stand.'));
     }
 
     function viewMembersPanel(doc, balances, me) {
@@ -1611,7 +1779,7 @@
                         place();
                     }
                 }, 'Ganzes Foto'),
-                h('button', { class: 'btn btn-primary', type: 'button', onclick: function () { finish(area); } }, 'Bereich lesen')));
+                h('button', { class: 'btn', type: 'button', onclick: function () { finish(area); } }, 'Bereich lesen')));
         });
     }
 
@@ -2141,6 +2309,7 @@
         function drawSplit() {
             seg.textContent = '';
             C.SPLIT_TYPES.forEach(function (type) {
+                if (type === 'items' && existing && existing.series) return;
                 seg.appendChild(h('button', {
                     type: 'button',
                     'aria-pressed': String(type === form.type),
@@ -2287,6 +2456,7 @@
                 del: false
             };
             if (existing && existing.parent) record.parent = existing.parent;
+            if (existing && existing.series) record.series = true;
             if (form.type === 'items') {
                 record.items = read.items;
                 record.claims = savedClaims(read.items);
@@ -2302,7 +2472,7 @@
             logActivity(doc, existing ? 'expense-edit' : 'expense-add', eid, desc, total, form.currency);
             commit(doc);
             state.formActive = false;
-            go('/g/' + doc.id + (form.type === 'items' ? '/expense/' + eid : ''));
+            go('/g/' + doc.id + (form.type === 'items' || (existing && existing.series) ? '/expense/' + eid : ''));
         }
 
         const repeatField = h('div', { class: 'field' },
@@ -2310,13 +2480,14 @@
             h('select', {
                 id: 'expRepeat', value: form.repeat,
                 onchange: function (e) { form.repeat = e.target.value; refresh(); }
-            }, C.REPEATS.map(function (r) { return h('option', { value: r }, REPEAT_LABELS[r]); })));
+            }, C.REPEATS.filter(function (r) { return r !== 'none' || !(existing && existing.series); })
+                .map(function (r) { return h('option', { value: r }, REPEAT_LABELS[r]); })));
 
         const payFold = fold('Bezahlt von', payValue, payArea);
         const splitFold = fold('Aufteilung', splitValue, [seg, splitHint, itemsArea, generalLabel, splitRows, splitSum, adoptSum]);
         const moreFold = fold('Mehr', moreValue, [
             h('div', { class: 'field-row' },
-                h('div', { class: 'field' }, h('label', { for: 'expDate' }, 'Datum'), dateInput),
+                h('div', { class: 'field' }, h('label', { for: 'expDate' }, existing && existing.series ? 'Beginn' : 'Datum'), dateInput),
                 h('div', { class: 'field' },
                     h('label', { for: 'expCategory' }, 'Kategorie'),
                     h('select', {
@@ -2338,7 +2509,9 @@
         const view = h('div', null,
             existing ? backLink(doc, 'expense/' + existing.id, 'Zurück') : backLink(doc),
             h('form', { class: 'panel', onsubmit: submit, novalidate: true },
-                h('h2', null, existing ? 'Ausgabe bearbeiten' : 'Neue Ausgabe'),
+                h('h2', null, !existing ? 'Neue Ausgabe' : existing.series ? 'Serie bearbeiten' : 'Ausgabe bearbeiten'),
+                existing && existing.series ? h('p', { class: 'small muted', style: 'margin-bottom:12px' }, 'Das gilt für alle künftigen Buchungen. Bisherige Einträge bleiben und lassen sich einzeln bearbeiten.') : null,
+                existing && existing.parent ? h('p', { class: 'small muted', style: 'margin-bottom:12px' }, 'Das ändert nur diesen einen Eintrag, nicht die Serie.') : null,
                 error,
                 existing ? null : h('div', { class: 'field' },
                     scanButton, cropBox, scanStatus,
@@ -2350,7 +2523,7 @@
                         amountInput,
                         currencySelect(form.currency, function (e) { form.currency = e.target.value; refresh(); }, { 'aria-label': 'Währung' }))),
                 h('div', { class: 'folds' }, payFold, splitFold, moreFold),
-                h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, existing ? 'Änderungen speichern' : 'Ausgabe speichern')));
+                h('button', { class: 'btn btn-block', type: 'submit' }, existing ? 'Änderungen speichern' : 'Ausgabe speichern')));
 
         refresh();
         return view;
@@ -2409,15 +2582,29 @@
             e.del ? null : h('div', { class: 'actions' },
                 h('button', {
                     class: 'btn', type: 'button',
-                    onclick: function () { shareInvite(doc, e.id); }
-                }, 'Link zum Auswählen schicken'),
+                    onclick: function () { shareInvite(doc, e.id, true); }
+                }, 'Kurzer Link'),
                 h('button', {
                     class: 'btn', type: 'button',
-                    onclick: function () { shareInvite(doc, e.id, true); }
-                }, 'Kurzer Link')));
+                    onclick: function () { shareInvite(doc, e.id); }
+                }, 'Link mit Daten')));
     }
 
     /* ---------- Ausgabe-Detail ---------- */
+
+    /** Vergangene Einträge einer Serie. Jeder lässt sich für sich öffnen und bearbeiten. */
+    function viewOccurrencesPanel(doc, series) {
+        const entries = C.occurrencesOf(doc, series.id);
+        return h('section', { class: 'panel' },
+            h('h2', null, 'Bisherige Einträge'),
+            entries.length ? h('div', { class: 'list' }, entries.map(function (e) {
+                return h('a', { class: 'item', href: '#/g/' + doc.id + '/expense/' + e.id },
+                    h('span', { class: 'body' },
+                        h('div', { class: 'title' }, formatDate(e.date, true)),
+                        e.del ? h('div', { class: 'sub' }, 'Gelöscht') : null),
+                    h('span', { class: 'side' }, h('strong', null, money(e.amount, e.currency))));
+            })) : h('div', { class: 'small muted' }, 'Noch nichts gebucht.'));
+    }
 
     function setExpenseDeleted(doc, e, deleted) {
         const current = doc.expenses[e.id];
@@ -2461,26 +2648,28 @@
             render();
         }
 
-        const repeatInfo = e.parent ? 'Wiederkehrende Ausgabe'
-            : e.repeat && e.repeat !== 'none' ? 'Wiederholt sich: ' + REPEAT_LABELS[e.repeat] : null;
+        const series = e.parent ? doc.expenses[e.parent] : null;
+        const repeatInfo = !e.series ? null
+            : e.del ? REPEAT_LABELS[e.repeat] : REPEAT_LABELS[e.repeat] + ' · ' + nextBookingText(doc, e);
 
         return h('div', null,
             backLink(doc),
-            e.del ? h('div', { class: 'notice' }, 'Diese Ausgabe wurde gelöscht und zählt nicht mehr. ',
+            e.del ? h('div', { class: 'notice' }, e.series ? 'Diese Serie ist beendet. Die bisherigen Einträge bleiben. ' : 'Diese Ausgabe wurde gelöscht und zählt nicht mehr. ',
                 h('button', {
                     class: 'link-btn', type: 'button',
                     onclick: function () {
                         setExpenseDeleted(doc, e, false);
                         render();
                     }
-                }, 'Wiederherstellen')) : null,
+                }, e.series ? 'Wieder aufnehmen' : 'Wiederherstellen')) : null,
             h('section', { class: 'panel' },
                 h('div', { class: 'detail-head' },
                     h('div', { class: 'emoji', 'aria-hidden': 'true' }, c.emoji),
                     h('h1', null, e.desc),
                     h('div', { class: 'amount' }, money(e.amount, cur)),
-                    h('div', { class: 'small muted' }, formatDate(e.date, true) + ' · ' + c.label),
-                    repeatInfo ? h('div', { class: 'small muted' }, '🔁 ' + repeatInfo) : null),
+                    h('div', { class: 'small muted' }, (e.series ? 'Seit ' : '') + formatDate(e.date, true) + ' · ' + c.label),
+                    repeatInfo ? h('div', { class: 'small muted' }, '🔁 ' + repeatInfo) : null,
+                    series ? h('div', { class: 'small' }, h('a', { href: '#/g/' + doc.id + '/expense/' + series.id }, '🔁 Zur Serie')) : null),
                 h('h2', null, payers.length > 1 ? 'Bezahlt haben' : 'Bezahlt hat'),
                 payers.map(function (id) {
                     return h('div', { class: 'kv' }, h('span', null, memberName(doc, id)), h('span', null, money(e.payers[id], cur)));
@@ -2491,19 +2680,20 @@
                 }),
                 e.note ? [h('h2', null, 'Notiz'), h('div', { class: 'note-box' }, e.note)] : null,
                 e.del ? null : h('div', { class: 'actions' },
-                    h('a', { class: 'btn', href: '#/g/' + doc.id + '/expense/' + e.id + '/edit' }, 'Bearbeiten'),
+                    h('a', { class: 'btn', href: '#/g/' + doc.id + '/expense/' + e.id + '/edit' }, e.series ? 'Serie bearbeiten' : 'Bearbeiten'),
                     h('button', {
                         class: 'btn btn-danger', type: 'button',
                         onclick: function () {
                             setExpenseDeleted(doc, e, true);
                             go('/g/' + doc.id);
-                            toast('„' + e.desc + '“ gelöscht.', 'Rückgängig', function () {
+                            toast('„' + e.desc + '“ ' + (e.series ? 'beendet.' : 'gelöscht.'), 'Rückgängig', function () {
                                 setExpenseDeleted(doc, e, false);
                                 softRender();
                             });
                         }
-                    }, 'Löschen'))),
+                    }, e.series ? 'Serie beenden' : 'Löschen'))),
             e.items ? viewItemsPanel(doc, e, me) : null,
+            e.series ? viewOccurrencesPanel(doc, e) : null,
             h('section', { class: 'panel' },
                 h('h2', null, 'Kommentare'),
                 comments.length ? null : h('div', { class: 'small muted' }, 'Noch keine Kommentare.'),
@@ -2648,7 +2838,7 @@
                         }),
                         currencySelect(form.currency, function (e) { form.currency = e.target.value; }, { 'aria-label': 'Währung' }))),
                 h('div', { class: 'folds' }, moreFold),
-                h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, payment ? 'Änderungen speichern' : 'Zahlung speichern'),
+                h('button', { class: 'btn btn-block', type: 'submit' }, payment ? 'Änderungen speichern' : 'Zahlung speichern'),
                 payment && !payment.del ? h('div', { class: 'actions' },
                     h('button', { class: 'btn btn-danger', type: 'button', onclick: removePayment }, 'Zahlung löschen')) : null));
     }
@@ -2683,6 +2873,12 @@
     });
     window.addEventListener('online', function () { Sync.wake(); });
     window.addEventListener('offline', function () { updateSyncPill(); });
+
+    // Hält „zuletzt online“ aktuell, solange die Seite offen ist.
+    setInterval(function () {
+        if (Sync.conns.size) markSeen(Sync.gid);
+        updateSyncPill();
+    }, 30000);
 
     store = readStored();
     askToKeepData();
