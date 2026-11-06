@@ -1,5 +1,5 @@
 /**
- * Quitt – Service Worker: Sorgt dafür, dass die App auch ohne Netz startet.
+ * Kwidt – Service Worker: Sorgt dafür, dass die App auch ohne Netz startet.
  *
  * Die Gruppen selbst liegen im localStorage und sind beim Speichern sofort sicher.
  * Ein Service Worker läuft nicht, solange die Seite zu ist, und kommt auch nicht an
@@ -11,7 +11,7 @@
  */
 'use strict';
 
-const CACHE = 'quitt-v2';
+const CACHE = 'kwidt-v1';
 const NETWORK_TIMEOUT = 3000;
 const SHELL = [
     './',
@@ -40,7 +40,7 @@ self.addEventListener('activate', function (event) {
         caches.keys()
             .then(function (names) {
                 return Promise.all(names
-                    .filter(function (name) { return name.indexOf('quitt-') === 0 && name !== CACHE; })
+                    .filter(function (name) { return name.indexOf('kwidt-') === 0 && name !== CACHE; })
                     .map(function (name) { return caches.delete(name); }));
             })
             .then(function () { return self.clients.claim(); })

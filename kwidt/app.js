@@ -1,5 +1,5 @@
 /**
- * Quitt – Oberfläche, Speicherung und Abgleich zwischen Geräten.
+ * Kwidt – Oberfläche, Speicherung und Abgleich zwischen Geräten.
  *
  * Es gibt keinen Server: Jede Gruppe liegt als Dokument im localStorage des
  * jeweiligen Browsers. Geräte gleichen sich auf zwei Wegen ab, beide nutzen
@@ -16,6 +16,8 @@
     'use strict';
 
     const C = window.QuittCore;
+    // Die App hieß früher Quitt. Interne Kennungen bleiben so: Speicher, Sync und
+    // Backups hängen daran, ein neuer Name würde bestehende Gruppen unerreichbar machen.
     const STORE_KEY = 'quitt-v1';
     const PEER_PREFIX = 'klmpfh-quitt-';
     const MAX_DECOMPRESSED = 8 * 1024 * 1024;
@@ -167,7 +169,7 @@
                 });
             }
         } catch (e) {
-            console.warn('Quitt: Gespeicherte Daten nicht lesbar.', e);
+            console.warn('Kwidt: Gespeicherte Daten nicht lesbar.', e);
         }
         return out;
     }
@@ -178,7 +180,7 @@
             state.unsaved = false;
         } catch (e) {
             state.unsaved = true;
-            console.error('Quitt: Speichern fehlgeschlagen.', e);
+            console.error('Kwidt: Speichern fehlgeschlagen.', e);
             toast('Speichern fehlgeschlagen. Bitte ein Backup sichern.');
         }
         askToKeepData();
@@ -319,7 +321,7 @@
         const link = short ? shortLink(doc, expenseId) : await inviteLink(doc, expenseId);
         if (navigator.share) {
             try {
-                await navigator.share({ title: 'Quitt – ' + doc.meta.name, url: link });
+                await navigator.share({ title: 'Kwidt – ' + doc.meta.name, url: link });
                 return;
             } catch (e) {
                 if (e && e.name === 'AbortError') return;
@@ -645,7 +647,7 @@
             try {
                 incoming = C.sanitizeGroup(await decodeSnapshot(data));
             } catch (e) {
-                console.warn('Quitt: Link nicht lesbar.', e);
+                console.warn('Kwidt: Link nicht lesbar.', e);
             }
             if (!incoming || incoming.id !== gid) {
                 incoming = null;
@@ -713,7 +715,7 @@
 
         return h('div', null,
             h('header', { class: 'page-head' },
-                h('h1', null, 'Quitt'),
+                h('h1', null, 'Kwidt'),
                 h('p', null, 'Gemeinsame Ausgaben aufteilen, bis alle quitt sind.')),
             totalKeys.length ? h('section', { class: 'panel' },
                 h('h2', null, 'Über alle Gruppen'),
@@ -743,7 +745,7 @@
             if (store.me[gid]) me[gid] = store.me[gid];
             return store.groups[gid];
         });
-        download('quitt-backup-' + C.todayStr() + '.json', 'application/json',
+        download('kwidt-backup-' + C.todayStr() + '.json', 'application/json',
             JSON.stringify({ app: 'quitt', version: 1, groups: groups, me: me }, null, 1));
     }
 
@@ -753,7 +755,7 @@
         if (!file) return;
         try {
             const data = JSON.parse(await file.text());
-            if (!data || data.app !== 'quitt' || !Array.isArray(data.groups)) throw new Error('Kein Quitt-Backup');
+            if (!data || data.app !== 'quitt' || !Array.isArray(data.groups)) throw new Error('Kein Kwidt-Backup');
             let count = 0;
             data.groups.forEach(function (raw) {
                 const doc = C.sanitizeGroup(raw);
@@ -768,8 +770,8 @@
             render();
             toast(count + (count === 1 ? ' Gruppe' : ' Gruppen') + ' geladen.');
         } catch (err) {
-            console.warn('Quitt: Backup nicht lesbar.', err);
-            toast('Diese Datei ist kein Quitt-Backup.');
+            console.warn('Kwidt: Backup nicht lesbar.', err);
+            toast('Diese Datei ist kein Kwidt-Backup.');
         }
     }
 
@@ -867,7 +869,7 @@
                 const sheets = C.readXls(await file.arrayBuffer());
                 data = sheets && C.parseSplid(sheets, C.todayStr());
             } catch (err) {
-                console.warn('Quitt: Datei nicht lesbar.', err);
+                console.warn('Kwidt: Datei nicht lesbar.', err);
             }
             if (!data || !data.members.length || !data.expenses.length) {
                 error.textContent = 'Das sieht nicht nach einer Excel-Datei aus Splid aus (.xls).';
@@ -1261,7 +1263,7 @@
     /* Salden */
 
     function summaryText(doc, balances) {
-        const lines = ['Quitt – ' + doc.meta.name, ''];
+        const lines = ['Kwidt – ' + doc.meta.name, ''];
         const currencies = Object.keys(balances);
         currencies.forEach(function (cur) {
             if (currencies.length > 1) lines.push(cur);
@@ -1341,7 +1343,7 @@
                 h('div', { class: 'actions' },
                     sections.length ? h('button', {
                         class: 'btn', type: 'button',
-                        onclick: function () { shareText('Quitt – ' + doc.meta.name, summaryText(doc, balances)); }
+                        onclick: function () { shareText('Kwidt – ' + doc.meta.name, summaryText(doc, balances)); }
                     }, 'Stand teilen') : null)));
     }
 
@@ -1602,7 +1604,7 @@
                 h('div', { class: 'actions', style: 'margin-top:0' },
                     h('button', {
                         class: 'btn', type: 'button',
-                        onclick: function () { download('quitt-' + fileSafe(doc.meta.name) + '.csv', 'text/csv;charset=utf-8', C.toCsv(doc)); }
+                        onclick: function () { download('kwidt-' + fileSafe(doc.meta.name) + '.csv', 'text/csv;charset=utf-8', C.toCsv(doc)); }
                     }, 'Als CSV exportieren'),
                     h('button', {
                         class: 'btn btn-danger', type: 'button',
@@ -2412,7 +2414,7 @@
                     applyReceipt(await readReceipt(photo.img, area, form.currency, function (message) { scanStatus.textContent = message; }));
                 }
             } catch (err) {
-                console.warn('Quitt: Foto nicht lesbar.', err);
+                console.warn('Kwidt: Foto nicht lesbar.', err);
                 toast(navigator.onLine === false
                     ? 'Die Texterkennung muss einmal online geladen werden.'
                     : 'Das Foto konnte nicht gelesen werden.');
@@ -2824,7 +2826,7 @@
             payment && payment.del ? h('div', { class: 'notice' }, 'Diese Zahlung wurde gelöscht.') : null,
             h('form', { class: 'panel', onsubmit: submit, novalidate: true },
                 h('h2', null, payment ? 'Zahlung bearbeiten' : 'Zahlung eintragen'),
-                h('p', { class: 'small muted', style: 'margin-bottom:12px' }, 'Quitt überweist selbst nichts. Trag hier ein, was eine Person einer anderen gegeben hat, egal ob alles, nur einen Teil oder einfach so.'),
+                h('p', { class: 'small muted', style: 'margin-bottom:12px' }, 'Kwidt überweist selbst nichts. Trag hier ein, was eine Person einer anderen gegeben hat, egal ob alles, nur einen Teil oder einfach so.'),
                 error,
                 h('div', { class: 'field-row' },
                     personSelect('payFrom', 'from', 'Wer hat gezahlt?'),
@@ -2888,7 +2890,7 @@
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('sw.js').catch(function (e) {
             // Normal bei file://, die App läuft dann ohne Offline-Modus.
-            console.info('Quitt: Kein Service Worker.', e);
+            console.info('Kwidt: Kein Service Worker.', e);
         });
     }
 })();

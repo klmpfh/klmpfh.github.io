@@ -1,5 +1,5 @@
 /**
- * Quitt – Rechen- und Datenlogik (ohne DOM, damit sie auch in Node testbar ist).
+ * Kwidt – Rechen- und Datenlogik (ohne DOM, damit sie auch in Node testbar ist).
  *
  * Grundregeln:
  *  - Geldbeträge sind immer Ganzzahlen in der kleinsten Einheit (Cent), nie Floats.

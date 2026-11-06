@@ -76,8 +76,8 @@
         { key: 'fileshare',     href: 'fileshare/',     label: 'Fileshare',          letter: 'f' },
         { key: 'ical',          href: 'ical/',          label: 'iCal Terminsuche',   letter: 'i' },
         { key: 'knallbum',      href: 'knallbum/',      label: 'Knall Bumm',         letter: 'k' },
+        { key: 'kwidt',         href: 'kwidt/',         label: 'Kwidt',              letter: 'k' },
         { key: 'laserfeelings', href: 'laserfeelings/', label: 'Laser & Feelings',   letter: 'l' },
-        { key: 'quitt',         href: 'quitt/',         label: 'Quitt',              letter: 'q' },
         { key: 'sport',         href: 'sport/',         label: 'Sport',              letter: 's' },
         { key: 'zauberkloppen', href: 'zauberkloppen/', label: 'Zaubern & Kloppen',  letter: 'z' }
     ];
