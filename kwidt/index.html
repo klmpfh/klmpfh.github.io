@@ -376,6 +376,32 @@
         letter-spacing: 1px;
         color: var(--text-strong);
     }
+    /* Personen über Gruppen hinweg */
+    .offset-block + .offset-block { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border); }
+    .total-row { font-weight: 700; }
+    .item .sub.names { font-size: 12px; }
+    .link-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+    .link-form .field-hint { margin: -6px 0 4px; }
+    .link-form .actions { margin-top: 8px; }
+    .offset-flow { margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--theme-gray-150); }
+    .offset-row { padding: 8px 0; border-top: 1px solid var(--border); line-height: 1.45; overflow-wrap: anywhere; }
+    .offset-row:first-of-type { border-top: none; }
+    .offset-row.is-target { border-left: 3px solid var(--primary); padding-left: 8px; }
+    .offset-rest { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+    .offset-rest .seg { margin-top: 6px; }
+    .check-row { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .check-row input { width: 18px; height: 18px; flex: none; margin-top: 1px; accent-color: var(--primary); }
+    .offset-log { padding: 10px 0; border-top: 1px solid var(--border); }
+    .offset-log:first-of-type { border-top: none; }
+    .small.neg { font-weight: 600; }
+    .btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+    .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 20px; margin-top: 14px; }
+    .fact-list { list-style: none; margin: 4px 0 0; padding: 0; font-size: 14px; line-height: 1.4; }
+    .fact-list li { position: relative; padding: 3px 0 3px 22px; }
+    .fact-list li::before { position: absolute; left: 2px; top: 3px; font-weight: 800; }
+    .fact-list.pro li::before { content: "+"; color: var(--pos); }
+    .fact-list.con li::before { content: "–"; color: var(--neg); }
+    .fact-list.feature li::before { content: "✓"; color: var(--primary); }
     .data-state-hint { margin-top: 2px; font-size: 11px; letter-spacing: 0; color: var(--muted); }
     .kind-seg { margin-bottom: 14px; }
 
@@ -546,14 +572,14 @@
 <div class="container">
     <main id="app"></main>
     <noscript>Kwidt braucht JavaScript.</noscript>
-    <div class="footer-info">v<span id="versionNumber">1.19</span></div>
+    <div class="footer-info">v<span id="versionNumber">1.31</span></div>
 </div>
 <div id="toast" role="status" hidden></div>
 
 <script src="../fileshare/vendor/peerjs.min.js"></script>
 <script src="../fileshare/vendor/qrcode.min.js"></script>
 <!-- ?v= immer zusammen mit der Versionsnummer oben ändern: Sonst läuft die neue Seite mit alten Skripten aus dem Browser-Cache. -->
-<script src="core.js?v=1.19"></script>
-<script src="app.js?v=1.19"></script>
+<script src="core.js?v=1.31"></script>
+<script src="app.js?v=1.31"></script>
 </body>
 </html>

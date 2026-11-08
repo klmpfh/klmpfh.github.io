@@ -559,6 +559,43 @@
         return pairwiseDebts(doc, cur);
     }
 
+    /**
+     * Was `a` an `b` zahlen soll (positiv) bzw. bekommt (negativ), so wie die Gruppe
+     * rechnet: mit Vereinfachung nach den Ausgleichsvorschlägen, sonst direkt.
+     */
+    function pairAmount(doc, cur, a, b, balances) {
+        var sum = 0;
+        settlements(doc, cur, balances).forEach(function (t) {
+            if (t.from === a && t.to === b) sum += t.amount;
+            else if (t.from === b && t.to === a) sum -= t.amount;
+        });
+        return sum;
+    }
+
+    /**
+     * Alles Offene zwischen zwei Personen in einer Zielgruppe sammeln. `items`: [{gid, amount}],
+     * positiv = ich schulde dort, negativ = ich bekomme dort. Jede andere Gruppe bekommt eine
+     * Verrechnung, die sie zwischen uns auf 0 bringt; die Zielgruppe eine Gegenbuchung über
+     * die Summe davon. Über alle Gruppen heben sich die Einträge auf, es fließt kein Geld.
+     * Liefert {moved, net, entries: [{gid, amount}]}: amount positiv = Zahlung von mir an
+     * die Person. `net` steht danach in der Zielgruppe offen (Vorzeichen wie `items`).
+     */
+    function planCollect(items, targetGid) {
+        var entries = [];
+        var moved = 0;
+        var others = 0;
+        var net = 0;
+        items.forEach(function (i) {
+            net += i.amount;
+            if (i.gid === targetGid || !i.amount) return;
+            entries.push({ gid: i.gid, amount: i.amount });
+            moved += Math.abs(i.amount);
+            others += i.amount;
+        });
+        if (others) entries.push({ gid: targetGid, amount: -others });
+        return { moved: moved, net: net, entries: entries };
+    }
+
     function isSettled(balances) {
         return Object.keys(balances).every(function (cur) {
             return Object.keys(balances[cur]).every(function (id) { return balances[cur][id] === 0; });
@@ -941,10 +978,17 @@
         if (!RE_ID.test(p.id) || !isT(p.t)) return null;
         if (!isMoney(p.amount) || !isCurrency(p.currency) || !RE_DATE.test(String(p.date))) return null;
         if (!RE_ID.test(String(p.from)) || !RE_ID.test(String(p.to)) || p.from === p.to) return null;
-        return {
+        var out = {
             id: p.id, t: p.t, by: clip(p.by, 16), from: p.from, to: p.to, amount: p.amount,
             currency: p.currency, date: p.date, note: clip(p.note, 300), del: !!p.del
         };
+        // Verrechnung über verschiedene Gruppen: gemeinsame Kennung aller beteiligten
+        // Zahlungen und wer verrechnet hat. Verrät nichts über die anderen Gruppen.
+        if (RE_ID.test(String(p.offset)) && RE_ID.test(String(p.offsetBy))) {
+            out.offset = p.offset;
+            out.offsetBy = p.offsetBy;
+        }
+        return out;
     }
 
     function cleanComment(c) {
@@ -1033,7 +1077,7 @@
                 e.repeat !== 'none' ? seriesEvery(e) : 0]));
         });
         livePayments(doc).forEach(function (p) {
-            lines.push(JSON.stringify(['payment', p.id, p.from, p.to, p.amount, p.currency, p.date, p.note]));
+            lines.push(JSON.stringify(['payment', p.id, p.from, p.to, p.amount, p.currency, p.date, p.note, p.offset || '']));
         });
         groupCategories(doc).forEach(function (c) {
             lines.push(JSON.stringify(['category', c.id, c.label, c.emoji]));
@@ -1414,23 +1458,24 @@
     }
 
     /**
-     * Kategorie-Vorschläge für einen Import: Titel, die mindestens zweimal vorkommen
-     * (ohne Groß/klein), in der häufigsten Schreibweise. Vorgaben sind nicht dabei.
-     * Liefert [{label, count}], häufigste zuerst.
+     * Kategorie-Vorschläge für einen Import: Kategorien aus der Datei (Kwidt-CSV) und
+     * Titel, die mindestens zweimal vorkommen (ohne Groß/klein), in der häufigsten
+     * Schreibweise. Vorgaben sind nicht dabei. Liefert [{label, count}], häufigste zuerst.
      */
     function splidCategorySuggestions(data) {
         var groups = {};
         data.expenses.forEach(function (e) {
-            var label = parseCategoryName(e.desc).label;
+            var label = parseCategoryName(e.category || e.desc).label;
             var key = label.toLocaleLowerCase('de');
             if (!key) return;
-            var g = groups[key] || (groups[key] = { count: 0, spellings: {} });
+            var g = groups[key] || (groups[key] = { count: 0, spellings: {}, given: false });
             g.count++;
+            g.given = g.given || !!e.category;
             g.spellings[label] = (g.spellings[label] || 0) + 1;
         });
         var builtin = CATEGORIES.map(function (c) { return c.label.toLocaleLowerCase('de'); });
         return Object.keys(groups)
-            .filter(function (key) { return groups[key].count >= 2 && builtin.indexOf(key) === -1; })
+            .filter(function (key) { return (groups[key].given || groups[key].count >= 2) && builtin.indexOf(key) === -1; })
             .map(function (key) {
                 var sp = groups[key].spellings;
                 var label = Object.keys(sp).sort(function (a, b) { return sp[b] - sp[a] || (a < b ? -1 : 1); })[0];
@@ -1439,10 +1484,16 @@
             .sort(function (a, b) { return b.count - a.count || a.label.localeCompare(b.label, 'de'); });
     }
 
+    /** Gehört die gelesene Ausgabe zu dieser Kategorie? Erst die Kategorie aus der Datei, sonst der Name. */
+    function importMatchesCategory(e, label) {
+        return nameKey(e.category || e.desc) === nameKey(label);
+    }
+
     /**
-     * Trägt die gelesenen Ausgaben und Zahlungen in die Gruppe ein. `ids` ordnet Namen den Personen zu.
-     * `data.categories` (Namen) legt fest, welche Kategorien es gibt: Nicht genannte Vorgaben
-     * fallen weg. Ausgaben, die genauso heißen wie eine Kategorie, bekommen sie.
+     * Trägt die gelesenen Ausgaben und Zahlungen in die Gruppe ein (aus Splid oder einer
+     * Kwidt-CSV). `ids` ordnet Namen den Personen zu. `data.categories` (Namen) legt fest,
+     * welche Kategorien es gibt: Nicht genannte Vorgaben fallen weg. Eine Ausgabe bekommt
+     * ihre Kategorie aus der Datei, sonst die, die genauso heißt wie sie.
      */
     function importSplid(doc, data, ids, by) {
         if (data.categories) {
@@ -1461,13 +1512,15 @@
             var id = newId();
             doc.expenses[id] = {
                 id: id, t: nextT(doc), by: by, desc: e.desc, amount: e.amount, currency: e.currency, date: e.date,
-                category: (categoryByName(doc, e.desc) || CATEGORIES[0]).id, note: '',
+                category: ((e.category && categoryByName(doc, e.category)) || categoryByName(doc, e.desc) || CATEGORIES[0]).id,
+                note: e.note || '',
                 payers: mapped(e.payers, function (v) { return v; }),
                 split: e.equal
                     ? { type: 'equal', values: mapped(e.shares, function () { return 1; }) }
                     : { type: 'exact', values: mapped(e.shares, function (v) { return v; }) },
                 repeat: 'none', del: false
             };
+            if (e.refund) doc.expenses[id].refund = true;
         });
         data.payments.forEach(function (p) {
             var id = newId();
@@ -1492,12 +1545,18 @@
         return { toString: function () { return amountToInput(minor, cur); } };
     }
 
+    /**
+     * Eine Zeile pro Ausgabe, Rückzahlung und Zahlung. Die Spalten reichen, um die Datei
+     * wieder einzulesen (parseKwidtCsv): wer wie viel bezahlt hat, wer was trägt und an
+     * wen eine Zahlung ging. Wiederholungen, Kommentare und Positionen fehlen.
+     */
     function toCsv(doc) {
         var memberIds = Object.keys(doc.members).sort(function (a, b) {
             return doc.members[a].name.localeCompare(doc.members[b].name, 'de');
         });
         function name(id) { return doc.members[id] ? doc.members[id].name : 'Unbekannt'; }
-        var header = ['Datum', 'Art', 'Beschreibung', 'Kategorie', 'Betrag', 'Währung', 'Bezahlt von']
+        var header = ['Datum', 'Art', 'Beschreibung', 'Kategorie', 'Betrag', 'Währung', 'Bezahlt von', 'An', 'Notiz']
+            .concat(memberIds.map(function (id) { return 'Bezahlt ' + name(id); }))
             .concat(memberIds.map(function (id) { return 'Anteil ' + name(id); }));
         var rows = [];
 
@@ -1509,8 +1568,10 @@
                 date: e.date,
                 cells: [e.date, e.refund ? 'Rückzahlung' : 'Ausgabe', e.desc, category.id === 'general' ? '' : category.label,
                     csvAmount(sign * e.amount, e.currency), e.currency,
-                    Object.keys(e.payers).filter(function (id) { return e.payers[id] > 0; }).map(name).join(', ')
+                    Object.keys(e.payers).filter(function (id) { return e.payers[id] > 0; }).map(name).join(', '), '', e.note
                 ].concat(memberIds.map(function (id) {
+                    return e.payers[id] ? csvAmount(sign * e.payers[id], e.currency) : '';
+                })).concat(memberIds.map(function (id) {
                     return owed[id] ? csvAmount(sign * owed[id], e.currency) : '';
                 }))
             });
@@ -1518,15 +1579,148 @@
         livePayments(doc).forEach(function (p) {
             rows.push({
                 date: p.date,
-                cells: [p.date, 'Zahlung', name(p.from) + ' an ' + name(p.to), '', csvAmount(p.amount, p.currency), p.currency, name(p.from)]
+                cells: [p.date, 'Zahlung', name(p.from) + ' an ' + name(p.to), '', csvAmount(p.amount, p.currency), p.currency,
+                    name(p.from), name(p.to), p.note]
+                    .concat(memberIds.map(function () { return ''; }))
                     .concat(memberIds.map(function () { return ''; }))
             });
         });
 
         rows.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
-        return '﻿' + [header].concat(rows.map(function (r) { return r.cells; }))
+        return '\ufeff' + [header].concat(rows.map(function (r) { return r.cells; }))
             .map(function (cells) { return cells.map(csvCell).join(';'); })
             .join('\r\n') + '\r\n';
+    }
+
+    /** Zerlegt CSV mit ; als Trenner, Anführungszeichen und Zeilenumbrüchen in Zellen. */
+    function parseCsvRows(text) {
+        var rows = [];
+        var row = [];
+        var cell = '';
+        var quoted = false;
+        for (var i = 0; i < text.length; i++) {
+            var ch = text.charAt(i);
+            if (quoted) {
+                if (ch === '"' && text.charAt(i + 1) === '"') { cell += '"'; i++; }
+                else if (ch === '"') quoted = false;
+                else cell += ch;
+            } else if (ch === '"' && cell === '') {
+                quoted = true;
+            } else if (ch === ';') {
+                row.push(cell);
+                cell = '';
+            } else if (ch === '\n' || ch === '\r') {
+                if (ch === '\r' && text.charAt(i + 1) === '\n') i++;
+                row.push(cell);
+                rows.push(row);
+                row = [];
+                cell = '';
+            } else {
+                cell += ch;
+            }
+        }
+        if (cell !== '' || row.length) {
+            row.push(cell);
+            rows.push(row);
+        }
+        return rows;
+    }
+
+    /** Macht den Formel-Schutz aus csvCell rückgängig ("'=…" → "=…"). */
+    function csvText(value) {
+        var s = String(value === undefined ? '' : value);
+        return /^'[=+\-@\t\r]/.test(s) ? s.slice(1) : s;
+    }
+
+    /**
+     * Liest eine Kwidt-CSV (toCsv) wieder ein, im selben Format wie parseSplid, plus
+     * Kategorie, Notiz und Rückzahlung pro Ausgabe. Ältere Dateien ohne die Spalten
+     * "Bezahlt <Name>" und "An" gehen auch, solange bei einer Ausgabe nur eine Person
+     * bezahlt hat. Liefert null, wenn es keine Kwidt-CSV ist.
+     */
+    function parseKwidtCsv(text) {
+        var rows = parseCsvRows(String(text).replace(/^\ufeff/, ''));
+        var header = rows[0] || [];
+        function col(name) { return header.indexOf(name); }
+        if (header[0] !== 'Datum' || col('Art') === -1 || col('Betrag') === -1 || col('Währung') === -1) return null;
+
+        var people = [];
+        header.forEach(function (cell, c) {
+            var m = /^Anteil (.+)$/.exec(cell);
+            if (!m) return;
+            var name = tidyText(csvText(m[1]), 40);
+            if (name && !people.some(function (p) { return p.name === name; })) {
+                people.push({ name: name, shareCol: c, paidCol: col('Bezahlt ' + m[1]) });
+            }
+        });
+        var names = people.map(function (p) { return p.name; });
+        function isMember(name) { return names.indexOf(name) !== -1; }
+
+        var expenses = [];
+        var payments = [];
+        var skipped = 0;
+        var currencyCount = {};
+
+        rows.slice(1).forEach(function (row) {
+            if (row.every(function (cell) { return !String(cell).trim(); })) return;
+            function get(name) { var c = col(name); return c === -1 ? '' : csvText(row[c]).trim(); }
+            var date = get('Datum');
+            var kind = get('Art');
+            var currency = get('Währung');
+            var amount = isCurrency(currency) ? parseAmount(get('Betrag'), currency, true) : null;
+            if (!RE_DATE.test(date) || !amount || !isCurrency(currency)) { skipped++; return; }
+            amount = Math.abs(amount);
+            var desc = tidyText(get('Beschreibung'), 120);
+            var note = get('Notiz').slice(0, 1000);
+
+            if (kind === 'Zahlung') {
+                var from = tidyText(get('Bezahlt von'), 40);
+                var to = tidyText(get('An'), 40);
+                if (!to && desc.indexOf(from + ' an ') === 0) to = desc.slice(from.length + 4);
+                if (!isMember(from) || !isMember(to) || from === to) { skipped++; return; }
+                currencyCount[currency] = (currencyCount[currency] || 0) + 1;
+                payments.push({ from: from, to: to, amount: amount, currency: currency, date: date, note: note.slice(0, 300) });
+                return;
+            }
+            if (kind !== 'Ausgabe' && kind !== 'Rückzahlung') { skipped++; return; }
+
+            var shares = {};
+            var shareSum = 0;
+            var payers = {};
+            var paidSum = 0;
+            people.forEach(function (p) {
+                var share = Math.abs(parseAmount(csvText(row[p.shareCol]), currency, true) || 0);
+                if (share) { shares[p.name] = share; shareSum += share; }
+                if (p.paidCol !== -1) {
+                    var paid = Math.abs(parseAmount(csvText(row[p.paidCol]), currency, true) || 0);
+                    if (paid) { payers[p.name] = paid; paidSum += paid; }
+                }
+            });
+            if (!paidSum) {
+                var payer = tidyText(get('Bezahlt von'), 40);
+                if (isMember(payer)) { payers[payer] = amount; paidSum = amount; }
+            }
+            if (paidSum !== amount || shareSum !== amount) { skipped++; return; }
+
+            var values = Object.keys(shares).map(function (n) { return shares[n]; });
+            currencyCount[currency] = (currencyCount[currency] || 0) + 1;
+            expenses.push({
+                desc: desc || 'Ausgabe',
+                amount: amount,
+                currency: currency,
+                date: date,
+                payers: payers,
+                // Gleiche Anteile bleiben "gleich aufgeteilt", sonst exakt wie in der Datei.
+                equal: values.every(function (v) { return v === values[0]; }),
+                shares: shares,
+                category: tidyText(get('Kategorie'), 30),
+                note: note,
+                refund: kind === 'Rückzahlung'
+            });
+        });
+
+        var main = Object.keys(currencyCount).sort(function (a, b) { return currencyCount[b] - currencyCount[a]; })[0];
+        return { name: '', currency: main || 'EUR', members: names, expenses: expenses, payments: payments, skipped: skipped };
     }
 
     return {
@@ -1543,6 +1737,7 @@
         MAX_EVERY: MAX_EVERY,
         seriesEvery: seriesEvery,
         RE_GROUP_ID: RE_GROUP_ID,
+        RE_ID: RE_ID,
         RE_EXPENSE_ID: RE_EXPENSE_ID,
         newId: newId,
         newGroupId: newGroupId,
@@ -1554,6 +1749,8 @@
         parseQuantity: parseQuantity,
         distribute: distribute,
         computeOwed: computeOwed,
+        pairAmount: pairAmount,
+        planCollect: planCollect,
         expenseSign: expenseSign,
         claimantsOf: claimantsOf,
         itemShares: itemShares,
@@ -1584,6 +1781,8 @@
         readXls: readXls,
         parseSplid: parseSplid,
         importSplid: importSplid,
+        importMatchesCategory: importMatchesCategory,
+        parseKwidtCsv: parseKwidtCsv,
         toCsv: toCsv
     };
 });

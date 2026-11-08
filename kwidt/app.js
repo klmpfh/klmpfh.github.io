@@ -28,7 +28,7 @@
     const app = document.getElementById('app');
     const toastEl = document.getElementById('toast');
 
-    let store = { groups: {}, me: {}, last: null, seen: {} };
+    let store = { groups: {}, me: {}, last: null, seen: {}, contacts: {}, offsets: {} };
     const state = { formActive: false, pendingRender: false, unsaved: false, search: '', filter: emptyFilter(), filterOpen: false, statsCur: null, statsCategory: '', lastPath: null };
 
     function emptyFilter() {
@@ -164,7 +164,7 @@
     /* ---------- Speicher ---------- */
 
     function readStored() {
-        const out = { groups: {}, me: {}, last: null, seen: {} };
+        const out = { groups: {}, me: {}, last: null, seen: {}, contacts: {}, offsets: {} };
         try {
             const raw = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
             if (raw && raw.groups) {
@@ -179,6 +179,8 @@
                 Object.keys(raw.seen || {}).forEach(function (gid) {
                     if (typeof raw.seen[gid] === 'number') out.seen[gid] = raw.seen[gid];
                 });
+                out.contacts = cleanContacts(raw.contacts);
+                out.offsets = cleanOffsets(raw.offsets);
             }
         } catch (e) {
             console.warn('Kwidt: Gespeicherte Daten nicht lesbar.', e);
@@ -229,6 +231,8 @@
         store.me = loaded.me;
         store.last = loaded.last;
         store.seen = loaded.seen;
+        store.contacts = loaded.contacts;
+        store.offsets = loaded.offsets;
         return changed;
     }
 
@@ -608,6 +612,8 @@
         const params = new URLSearchParams(qIndex === -1 ? '' : raw.slice(qIndex + 1));
         const parts = path.split('/').filter(Boolean);
         if (parts[0] === 'new') return { name: 'new' };
+        if (parts[0] === 'p' && C.RE_ID.test(parts[1] || '')) return { name: 'contact', id: parts[1] };
+        if (parts[0] === 'offsets') return { name: 'offsets' };
         if (parts[0] !== 'g' || !C.RE_GROUP_ID.test(parts[1] || '')) return { name: 'home' };
         return {
             name: 'group',
@@ -669,7 +675,10 @@
         }
 
         Sync.stop();
-        app.appendChild(route.name === 'new' ? viewNewGroup() : viewHome());
+        app.appendChild(route.name === 'new' ? viewNewGroup()
+            : route.name === 'contact' ? viewContact(route.id)
+                : route.name === 'offsets' ? viewOffsetLog()
+                    : viewHome());
     }
 
     async function handleJoin() {
@@ -730,6 +739,20 @@
         }, symbol.text);
     }
 
+    /** „geändert vor 2 Stunden · abgeglichen gestern“. Abgeglichen zählt nur der Live-Abgleich mit einem anderen Gerät. */
+    function groupTimesText(doc) {
+        function ago(t) { return Date.now() - t < 60000 ? 'gerade eben' : timeAgo(t); }
+        const seen = store.seen[doc.id];
+        return 'geändert ' + ago(C.lastT(doc)) + ' · ' + (seen ? 'abgeglichen ' + ago(seen) : 'noch nie abgeglichen');
+    }
+
+    /** „Anna, Ben, Chris (du)“: alle aktiven Mitglieder, du zuletzt. */
+    function memberNamesText(doc) {
+        const me = meId(doc.id);
+        const others = activeMembers(doc).filter(function (m) { return m.id !== me; }).map(function (m) { return m.name; });
+        return others.concat(me ? [memberName(doc, me) + ' (du)'] : []).join(', ');
+    }
+
     function viewHome() {
         const docs = Object.keys(store.groups).map(function (gid) { return store.groups[gid]; });
         docs.sort(function (a, b) { return C.lastT(b) - C.lastT(a); });
@@ -747,7 +770,9 @@
                     h('div', { class: 'sub' }, doc.meta.t
                         ? [memberCount + (memberCount === 1 ? ' Person' : ' Personen') + ' · Stand ',
                             h('code', { class: 'state-code', title: 'Gleicher Code auf zwei Geräten heißt: gleicher Stand.' }, C.dataFingerprint(doc))]
-                        : 'Wartet auf Daten')),
+                        : 'Wartet auf Daten'),
+                    doc.meta.t ? h('div', { class: 'sub names' }, memberNamesText(doc)) : null,
+                    doc.meta.t ? h('div', { class: 'sub' }, groupTimesText(doc)) : null),
                 h('span', { class: 'side' }, mine.length
                     ? mine.map(function (b) {
                         return h('div', null, h('span', { class: 'muted' }, b.amount > 0 ? 'du bekommst ' : 'du schuldest '), balanceSpan(b.amount, b.cur));
@@ -772,15 +797,57 @@
                     h('span', { class: 'big', 'aria-hidden': 'true' }, '🧾'),
                     'Noch keine Gruppe. Leg eine an, zum Beispiel für den nächsten Urlaub, die WG oder den Grillabend. Ein Paar ist einfach eine Gruppe mit zwei Personen.'),
                 h('div', { class: 'actions' },
-                    h('a', { class: 'btn', href: '#/new' }, '+ Neue Gruppe'))),
+                    h('a', { class: 'btn', href: '#/new' }, '+ Neue Gruppe oder importieren')),
+                h('div', { class: 'field-hint' }, 'Hier kommen auch einzelne Gruppen rein: die CSV einer Gruppe aus Kwidt oder eine Excel-Datei aus Splid.')),
+            viewPeoplePanel(),
             h('section', { class: 'panel' },
-                h('h2', null, 'So funktioniert es'),
-                h('p', { class: 'small muted' }, 'Es gibt keine Anmeldung. Deine Gruppen liegen nur in diesem Browser, nicht auf einem Server. Jede Person hat ihre eigene Kopie.'),
-                h('p', { class: 'small muted' }, 'Haben zwei Geräte dieselbe Gruppe gleichzeitig offen, gleichen sie sich live ab. Sonst reicht es, den Link der Gruppe neu zu schicken: Beim Öffnen wird der Stand zusammengeführt, ohne dass etwas verloren geht.'),
+                h('h2', null, 'Backup'),
+                h('p', { class: 'small muted' }, 'Sichert alle Gruppen dieses Browsers in einer Datei, dazu die verknüpften Personen und die Verrechnungen. Beim Laden wird sie mit dem vorhandenen Stand zusammengeführt.'),
                 h('div', { class: 'actions' },
                     docs.length ? h('button', { class: 'btn btn-small', type: 'button', onclick: exportAll }, 'Backup sichern') : null,
                     h('label', { class: 'btn btn-small' }, 'Backup laden',
-                        h('input', { type: 'file', accept: 'application/json,.json', hidden: true, onchange: importBackup })))));
+                        h('input', { type: 'file', accept: 'application/json,.json', hidden: true, onchange: importBackup })))),
+            h('section', { class: 'panel' },
+                h('h2', null, 'So funktioniert es'),
+                h('p', { class: 'small muted' }, 'Es gibt keine Anmeldung. Deine Gruppen liegen nur in diesem Browser, nicht auf einem Server. Jede Person hat ihre eigene Kopie.'),
+                h('p', { class: 'small muted' },
+                    'Haben zwei Geräte dieselbe Gruppe gleichzeitig offen, gleichen sie sich live ab. '
+                    + 'Auf dieser Startseite und für Gruppen, die gerade niemand offen hat, wird nichts abgeglichen. '
+                    + 'Sonst reicht es, den Link der Gruppe neu zu schicken: Beim Öffnen wird der Stand zusammengeführt, ohne dass etwas verloren geht.'),
+                h('div', { class: 'facts' },
+                    factList('Vorteile', 'pro', [
+                        'Kein Konto, keine Anmeldung',
+                        'Daten nur auf euren Geräten',
+                        'Kostenlos, ohne Werbung',
+                        'Läuft auch offline'
+                    ]),
+                    factList('Nachteile', 'con', [
+                        'Abgleich nur bei gleichzeitig offener Gruppe oder per Link',
+                        'Browserdaten gelöscht = Gruppe weg, Backup sichern',
+                        'Wer den Link hat, kann alles sehen und ändern',
+                        'Live-Abgleich läuft über den öffentlichen Dienst PeerJS. Er vermittelt nur die Verbindung, die Daten gehen verschlüsselt von Gerät zu Gerät'
+                    ]))),
+            h('section', { class: 'panel' },
+                h('h2', null, 'Was Kwidt besonders macht'),
+                factList(null, 'feature', [
+                    'Rückzahlungen aufteilen, z. B. Guthaben vom Stromversorger',
+                    'Rechnung nach Positionen: Jede Person tippt an, was sie hatte',
+                    'Wiederholungen mit freiem Abstand, z. B. alle 3 Monate',
+                    'Verpasste Termine werden nachgebucht',
+                    'Monatsübersicht pro Kategorie',
+                    'Filter nach Person, Kategorie, Betrag und Text',
+                    'Mehrere Währungen in einer Gruppe',
+                    'Import aus Splid und aus der eigenen CSV',
+                    'Stand-Code: Zwei Geräte auf einen Blick vergleichen',
+                    'Personen über Gruppen hinweg: Schulden verrechnen und in einer Gruppe zusammenführen, etwa WG gegen Urlaub. Die Verknüpfung liegt nur auf deinem Gerät (und im Backup), keine Gruppe erfährt etwas über die anderen'
+                ])));
+    }
+
+    /** Kurze Liste mit Zeichen davor: + Vorteil, – Nachteil, ✓ Funktion. */
+    function factList(title, kind, items) {
+        return h('div', null,
+            title ? h('div', { class: 'link-title' }, title) : null,
+            h('ul', { class: 'fact-list ' + kind }, items.map(function (text) { return h('li', null, text); })));
     }
 
     function exportAll() {
@@ -790,7 +857,7 @@
             return store.groups[gid];
         });
         download('kwidt-backup-' + C.todayStr() + '.json', 'application/json',
-            JSON.stringify({ app: 'quitt', version: 1, groups: groups, me: me }, null, 1));
+            JSON.stringify({ app: 'quitt', version: 1, groups: groups, me: me, contacts: store.contacts, offsets: store.offsets }, null, 1));
     }
 
     async function importBackup(e) {
@@ -810,6 +877,11 @@
                 if (typeof me === 'string' && !store.me[doc.id]) store.me[doc.id] = me;
                 count++;
             });
+            // Kontakte und Verrechnungs-Log: Was es hier schon gibt, bleibt wie es ist.
+            const contacts = cleanContacts(data.contacts);
+            Object.keys(contacts).forEach(function (id) { if (!store.contacts[id]) store.contacts[id] = contacts[id]; });
+            const offsets = cleanOffsets(data.offsets);
+            Object.keys(offsets).forEach(function (id) { if (!store.offsets[id]) store.offsets[id] = offsets[id]; });
             persist();
             render();
             toast(count + (count === 1 ? ' Gruppe' : ' Gruppen') + ' geladen.');
@@ -818,6 +890,763 @@
             toast('Diese Datei ist kein Kwidt-Backup.');
         }
     }
+
+    /* ---------- Personen über Gruppen hinweg ---------- */
+    /*
+     * Kontakte verknüpfen dieselbe Person aus verschiedenen Gruppen. Sie liegen nur auf
+     * diesem Gerät (und im Backup), nie in einer Gruppe: Keine Gruppe erfährt etwas über
+     * die anderen. Eine Verrechnung trägt in jeder beteiligten Gruppe eine markierte
+     * Zahlung ein. Das lokale Log hält fest, was wo eingetragen wurde, für die Erklärung
+     * an die andere Person und zum Rückgängigmachen.
+     */
+
+    const OFFSET_NOTE = 'Über verschiedene Gruppen verrechnet';
+    const DIFF_NOTE = 'Differenz nach Verrechnung über verschiedene Gruppen';
+
+    // Laufende Verrechnung auf der Kontaktseite (nur im Speicher, nicht gespeichert).
+    let offsetFlow = null;
+
+    function cleanContacts(raw) {
+        const out = {};
+        if (!raw || typeof raw !== 'object') return out;
+        Object.keys(raw).forEach(function (id) {
+            const c = raw[id];
+            if (!c || !C.RE_ID.test(id) || typeof c.name !== 'string') return;
+            out[id] = {
+                id: id,
+                name: C.tidyText(c.name, 40) || 'Person',
+                links: (Array.isArray(c.links) ? c.links : [])
+                    .filter(function (l) { return l && C.RE_GROUP_ID.test(String(l.gid)) && C.RE_ID.test(String(l.member)); })
+                    .map(function (l) { return { gid: l.gid, member: l.member }; })
+            };
+        });
+        return out;
+    }
+
+    /** Das Log stammt nur von diesem Gerät bzw. aus dem eigenen Backup; Texte landen nur als Textknoten im DOM. */
+    function cleanOffsets(raw) {
+        const out = {};
+        if (!raw || typeof raw !== 'object') return out;
+        Object.keys(raw).forEach(function (id) {
+            const o = raw[id];
+            if (!o || !C.RE_ID.test(id) || typeof o.t !== 'number' || !Array.isArray(o.entries)) return;
+            out[id] = JSON.parse(JSON.stringify(o));
+            out[id].id = id;
+        });
+        return out;
+    }
+
+    /** „Du hast mit Anna über verschiedene Gruppen verrechnet“, aus Sicht des Geräts. */
+    function offsetText(doc, p, me) {
+        const by = p.offsetBy === p.to ? p.to : p.from;
+        const other = by === p.from ? p.to : p.from;
+        return (by === me ? 'Du hast' : memberName(doc, by) + ' hat') + ' mit ' + (other === me ? 'dir' : memberName(doc, other))
+            + ' über verschiedene Gruppen verrechnet';
+    }
+
+    /** Wer die Verrechnung angestoßen hat, mit dem Namen aus dieser Gruppe. */
+    function offsetStarter(doc, p, me) {
+        return p.offsetBy === me ? 'dir' : memberName(doc, p.offsetBy);
+    }
+
+    function contactList() {
+        return Object.keys(store.contacts).map(function (id) { return store.contacts[id]; })
+            .sort(function (a, b) { return a.name.localeCompare(b.name, 'de'); });
+    }
+
+    /** Warum eine Verknüpfung gerade nicht zählt, oder null. */
+    function linkProblem(l) {
+        const doc = store.groups[l.gid];
+        if (!doc) return 'Gruppe nicht mehr auf diesem Gerät';
+        if (!meId(l.gid)) return 'Du hast in dieser Gruppe noch nicht gewählt, wer du bist';
+        if (!doc.members[l.member]) return 'Person nicht mehr in der Gruppe';
+        if (l.member === meId(l.gid)) return 'Das bist du selbst';
+        return null;
+    }
+
+    /** Nutzbare Verknüpfungen: Gruppe da, ich bin drin, die Person auch. */
+    function contactLinks(contact) {
+        return contact.links.filter(function (l) { return !linkProblem(l); }).map(function (l) {
+            return { gid: l.gid, member: l.member, doc: store.groups[l.gid], me: meId(l.gid) };
+        });
+    }
+
+    /** „Anna · Urlaub · dabei: Ben, Chris“: genug, um Gleichnamige auseinanderzuhalten. */
+    function linkLabel(doc, member) {
+        const me = meId(doc.id);
+        const others = Object.keys(doc.members).map(function (id) { return doc.members[id]; })
+            .filter(function (m) { return !m.left && m.id !== member && m.id !== me; })
+            .map(function (m) { return m.name; })
+            .sort(function (a, b) { return a.localeCompare(b, 'de'); });
+        const shown = others.length > 4 ? others.slice(0, 4).join(', ') + ' …' : others.join(', ');
+        return memberName(doc, member) + (doc.members[member].left ? ' (ausgetreten)' : '') + ' · ' + doc.meta.name
+            + ' · ' + (shown ? 'dabei: du, ' + shown : 'nur ihr zwei');
+    }
+
+    /** Pro Währung, was zwischen mir und dem Kontakt in jeder Gruppe offen ist, so wie die Gruppe rechnet. */
+    function contactAmounts(contact) {
+        const links = contactLinks(contact);
+        const balances = {};
+        const currencies = {};
+        links.forEach(function (l) {
+            balances[l.gid] = C.computeBalances(l.doc);
+            Object.keys(balances[l.gid]).forEach(function (cur) { currencies[cur] = true; });
+        });
+        // Jede verknüpfte Gruppe in jeder Währung, auch ohne Beträge: Sie kann Zielgruppe sein.
+        const out = {};
+        Object.keys(currencies).forEach(function (cur) {
+            out[cur] = links.map(function (l) {
+                return Object.assign({ cur: cur, amount: C.pairAmount(l.doc, cur, l.me, l.member, balances[l.gid]) }, l);
+            }).sort(function (a, b) { return a.doc.meta.name.localeCompare(b.doc.meta.name, 'de'); });
+        });
+        return out;
+    }
+
+    function owedText(amount, cur) {
+        if (amount > 0) return 'du schuldest ' + money(amount, cur);
+        if (amount < 0) return 'du bekommst ' + money(-amount, cur);
+        return 'nichts offen';
+    }
+
+    function owedSpan(amount, cur) {
+        if (!amount) return h('span', { class: 'muted' }, 'nichts offen');
+        return h('span', null, h('span', { class: 'muted' }, amount > 0 ? 'du schuldest ' : 'du bekommst '),
+            h('strong', { class: amount > 0 ? 'neg' : 'pos' }, money(Math.abs(amount), cur)));
+    }
+
+    function modeText(doc) {
+        return doc.meta.simplify ? 'vereinfacht gerechnet' : 'direkt gerechnet';
+    }
+
+    /**
+     * Gleicht eine Gruppe einmal mit den Geräten ab, die sie gerade offen haben: eigenen
+     * Stand schicken, ihren übernehmen, Verbindung wieder trennen. Ist niemand da, gibt
+     * es nach ein paar Sekunden auf. Liefert 'sent' oder 'offline'.
+     */
+    function exchangeOnce(gid) {
+        return new Promise(function (resolve) {
+            const doc = store.groups[gid];
+            if (!doc || typeof Peer === 'undefined' || navigator.onLine === false) return resolve('offline');
+            if (Sync.gid === gid) {
+                Sync.broadcast(doc);
+                return resolve(Sync.conns.size ? 'sent' : 'offline');
+            }
+            let done = false;
+            let peer = null;
+            const timer = setTimeout(function () { finish('offline'); }, 12000);
+            function finish(result) {
+                if (done) return;
+                done = true;
+                clearTimeout(timer);
+                if (result === 'sent') markSeen(gid, true);
+                // Kurz warten, damit der eigene Stand noch rausgeht.
+                setTimeout(function () { try { peer.destroy(); } catch (e) { /* schon zu */ } }, 400);
+                resolve(result);
+            }
+            try {
+                peer = new Peer({ debug: 0 });
+            } catch (e) {
+                return finish('offline');
+            }
+            peer.on('open', function () {
+                const conn = peer.connect(PEER_PREFIX + gid, { reliable: true });
+                conn.on('open', function () {
+                    conn.send({ app: 'quitt', type: 'state', doc: store.groups[gid] });
+                });
+                conn.on('data', function (msg) {
+                    if (!msg || msg.app !== 'quitt' || msg.type !== 'state') return;
+                    const incoming = C.sanitizeGroup(msg.doc);
+                    const current = store.groups[gid];
+                    if (incoming && current && incoming.id === gid && C.mergeGroups(current, incoming)) persist();
+                    setTimeout(function () { finish('sent'); }, 300);
+                });
+                conn.on('error', function () { finish('offline'); });
+            });
+            // Auch "niemand hat die Gruppe offen" kommt als Fehler (peer-unavailable).
+            peer.on('error', function () { finish('offline'); });
+        });
+    }
+
+    function syncStatusText(status) {
+        return status === 'sent' ? 'abgeglichen' : status === 'offline' ? 'niemand online, kommt beim nächsten Abgleich an' : 'wird gesendet …';
+    }
+
+    /* Startseite */
+
+    function viewPeoplePanel() {
+        if (!Object.keys(store.groups).length) return null;
+        const list = contactList();
+        const input = h('input', { type: 'text', maxlength: 40, placeholder: 'Name, z. B. Anna', 'aria-label': 'Neue Person', autocomplete: 'off' });
+        const logCount = Object.keys(store.offsets).length;
+
+        return h('section', { class: 'panel' },
+            h('h2', null, 'Personen über Gruppen hinweg'),
+            h('p', { class: 'small muted', style: 'margin-bottom:8px' }, 'Verknüpfe dieselbe Person aus verschiedenen Gruppen. Dann siehst du, was zwischen euch insgesamt offen ist, und kannst alles in einer Gruppe zusammenführen. Die Verknüpfung bleibt auf diesem Gerät, keine Gruppe erfährt davon.'),
+            list.length ? h('div', { class: 'list' }, list.map(function (contact) {
+                const amounts = contactAmounts(contact);
+                const totals = Object.keys(amounts).map(function (cur) {
+                    return { cur: cur, amount: amounts[cur].reduce(function (sum, row) { return sum + row.amount; }, 0) };
+                }).filter(function (t) { return t.amount; });
+                const groups = contactLinks(contact).length;
+                return h('a', { class: 'item', href: '#/p/' + contact.id },
+                    h('span', { class: 'body' },
+                        h('div', { class: 'title' }, contact.name),
+                        h('div', { class: 'sub' }, groups + (groups === 1 ? ' Gruppe' : ' Gruppen')
+                            + (groups ? ': ' + contactLinks(contact).map(function (l) {
+                                return l.doc.meta.name + ' (' + memberName(l.doc, l.member) + ')';
+                            }).join(', ') : ''))),
+                    h('span', { class: 'side' }, totals.length
+                        ? totals.map(function (t) { return h('div', null, owedSpan(t.amount, t.cur)); })
+                        : h('span', { class: 'muted' }, 'kwidt')));
+            })) : null,
+            h('form', {
+                class: 'add-row',
+                onsubmit: function (e) {
+                    e.preventDefault();
+                    const name = C.tidyText(input.value, 40);
+                    if (!name) return;
+                    const id = C.newId();
+                    store.contacts[id] = { id: id, name: name, links: [] };
+                    persist();
+                    go('/p/' + id);
+                }
+            }, input, h('button', { class: 'btn', type: 'submit' }, 'Anlegen')),
+            logCount ? h('p', { class: 'small', style: 'margin-top:10px' },
+                h('a', { href: '#/offsets' }, 'Alle Verrechnungen (' + logCount + ')')) : null);
+    }
+
+    /* Kontaktseite */
+
+    function viewContact(cid) {
+        const contact = store.contacts[cid];
+        if (!contact) {
+            setTimeout(function () { go('/'); }, 0);
+            return h('div');
+        }
+        // Fällige Wiederholungen nachbuchen, sonst rechnet die Übersicht mit altem Stand.
+        contactLinks(contact).forEach(function (l) {
+            if (C.expandRecurring(l.doc, C.todayStr())) persist();
+        });
+        if (offsetFlow && offsetFlow.cid !== cid) offsetFlow = null;
+
+        return h('div', null,
+            h('a', { class: 'back', href: '#/' }, '‹ Startseite'),
+            h('header', { class: 'group-head' },
+                h('h1', null, contact.name),
+                h('p', { class: 'small muted' }, 'Nur auf diesem Gerät. Die Gruppen erfahren nichts von dieser Verknüpfung.')),
+            viewContactAmounts(contact),
+            viewContactLinks(contact),
+            viewOffsetEntries(contactOffsets(contact.id), 'Verrechnungen mit ' + contact.name),
+            viewContactSettings(contact));
+    }
+
+    /** Mitglieder einer Gruppe als Text, du zuerst markiert: hilft, die richtige Person zu finden. */
+    function groupPeopleText(doc, exclude) {
+        const me = meId(doc.id);
+        const names = activeMembers(doc).filter(function (m) { return m.id !== me && exclude.indexOf(m.id) === -1; }).map(function (m) { return m.name; });
+        return names.length ? names.join(', ') : 'niemand sonst';
+    }
+
+    function viewContactLinks(contact) {
+        const usedElsewhere = {};
+        Object.keys(store.contacts).forEach(function (id) {
+            if (id === contact.id) return;
+            store.contacts[id].links.forEach(function (l) { usedElsewhere[l.gid + '|' + l.member] = store.contacts[id].name; });
+        });
+        const linkedGroups = contact.links.map(function (l) { return l.gid; });
+        const key = contact.name.toLocaleLowerCase('de');
+
+        // Wählbar: Gruppen, in denen ich bin und die noch nicht verknüpft sind, mit ihren freien Personen.
+        const groups = Object.keys(store.groups).map(function (gid) {
+            const doc = store.groups[gid];
+            const me = meId(gid);
+            if (!me || !doc.meta.t || linkedGroups.indexOf(gid) !== -1) return null;
+            const people = Object.keys(doc.members)
+                .filter(function (id) { return id !== me && !usedElsewhere[gid + '|' + id]; })
+                .map(function (id) { return { id: id, name: doc.members[id].name, left: doc.members[id].left, same: doc.members[id].name.toLocaleLowerCase('de') === key }; })
+                // Gleicher Name zuerst, verknüpft wird aber nur von Hand.
+                .sort(function (a, b) { return (b.same - a.same) || (a.left - b.left) || a.name.localeCompare(b.name, 'de'); });
+            return people.length ? { gid: gid, doc: doc, me: me, people: people, same: people.some(function (p) { return p.same; }) } : null;
+        }).filter(Boolean).sort(function (a, b) { return (b.same - a.same) || a.doc.meta.name.localeCompare(b.doc.meta.name, 'de'); });
+
+        const groupSelect = h('select', {
+            id: 'linkGroup',
+            onchange: function () { fillPeople(); }
+        },
+            h('option', { value: '' }, 'Gruppe wählen …'),
+            groups.map(function (g) { return h('option', { value: g.gid }, g.doc.meta.name); }));
+        const personSelect = h('select', { id: 'linkPerson', disabled: true }, h('option', { value: '' }, 'Erst die Gruppe wählen'));
+        const groupInfo = h('div', { class: 'field-hint', hidden: true });
+        const submitButton = h('button', { class: 'btn', type: 'submit', disabled: true }, 'Verknüpfen');
+
+        function current() {
+            return groups.filter(function (g) { return g.gid === groupSelect.value; })[0] || null;
+        }
+        function fillPeople() {
+            const g = current();
+            personSelect.textContent = '';
+            personSelect.disabled = !g;
+            groupInfo.hidden = !g;
+            if (!g) {
+                personSelect.appendChild(h('option', { value: '' }, 'Erst die Gruppe wählen'));
+                submitButton.disabled = true;
+                return;
+            }
+            personSelect.appendChild(h('option', { value: '' }, 'Person wählen …'));
+            g.people.forEach(function (p) {
+                personSelect.appendChild(h('option', { value: p.id }, p.name + (p.left ? ' (ausgetreten)' : '')));
+            });
+            groupInfo.textContent = 'Du bist dort: ' + memberName(g.doc, g.me) + ' · außerdem dabei: ' + groupPeopleText(g.doc, []);
+            submitButton.disabled = true;
+        }
+        personSelect.addEventListener('change', function () { submitButton.disabled = !personSelect.value; });
+
+        return h('section', { class: 'panel' },
+            h('h2', null, 'Verknüpft'),
+            h('p', { class: 'small muted', style: 'margin-bottom:8px' }, 'Pro Gruppe eine Person. Prüf Gruppe und Mitglieder: Gleicher Name heißt nicht gleiche Person, und dieselbe Person kann anders heißen.'),
+            contact.links.length ? contact.links.map(function (l) {
+                const problem = linkProblem(l);
+                const doc = store.groups[l.gid];
+                const known = doc && doc.members[l.member];
+                return h('div', { class: 'category-row' },
+                    h('span', null,
+                        h('strong', null, doc ? doc.meta.name : 'Unbekannte Gruppe'),
+                        known ? h('div', { class: 'small' }, 'Person dort: ' + memberName(doc, l.member) + (doc.members[l.member].left ? ' (ausgetreten)' : '')) : null,
+                        known && meId(l.gid) ? h('div', { class: 'small muted' }, 'Du bist dort: ' + memberName(doc, meId(l.gid)) + ' · außerdem dabei: ' + groupPeopleText(doc, [l.member])) : null,
+                        problem ? h('div', { class: 'small neg' }, problem) : null),
+                    h('button', {
+                        class: 'btn btn-small', type: 'button',
+                        onclick: function () {
+                            contact.links = contact.links.filter(function (x) { return x !== l; });
+                            offsetFlow = null;
+                            persist();
+                            render();
+                        }
+                    }, 'Lösen'));
+            }) : h('div', { class: 'small muted' }, 'Noch keine Gruppe verknüpft.'),
+            groups.length ? h('form', {
+                class: 'link-form',
+                onsubmit: function (e) {
+                    e.preventDefault();
+                    const g = current();
+                    if (!g || !personSelect.value) return;
+                    contact.links.push({ gid: g.gid, member: personSelect.value });
+                    offsetFlow = null;
+                    persist();
+                    render();
+                }
+            },
+                h('div', { class: 'field-row' },
+                    h('div', { class: 'field' }, h('label', { for: 'linkGroup' }, 'Gruppe'), groupSelect),
+                    h('div', { class: 'field' }, h('label', { for: 'linkPerson' }, 'Person dort'), personSelect)),
+                groupInfo,
+                h('div', { class: 'actions' }, submitButton))
+                : h('div', { class: 'small muted', style: 'margin-top:8px' }, 'Keine weitere Gruppe zum Verknüpfen.'));
+    }
+
+    function viewContactSettings(contact) {
+        const nameInput = h('input', { type: 'text', maxlength: 40, value: contact.name, 'aria-label': 'Name', autocomplete: 'off' });
+        return h('section', { class: 'panel' },
+            h('h2', null, 'Person'),
+            h('form', {
+                class: 'add-row',
+                onsubmit: function (e) {
+                    e.preventDefault();
+                    const name = C.tidyText(nameInput.value, 40);
+                    if (!name) return;
+                    contact.name = name;
+                    persist();
+                    render();
+                    toast('Umbenannt.');
+                }
+            }, nameInput, h('button', { class: 'btn', type: 'submit' }, 'Umbenennen')),
+            h('div', { class: 'actions' },
+                h('button', {
+                    class: 'btn btn-danger btn-small', type: 'button',
+                    onclick: function () {
+                        if (!confirm('„' + contact.name + '“ entfernen? Die Gruppen bleiben, wie sie sind. Bisherige Verrechnungen bleiben im Log.')) return;
+                        delete store.contacts[contact.id];
+                        offsetFlow = null;
+                        persist();
+                        go('/');
+                    }
+                }, 'Person entfernen')));
+    }
+
+    /* Übersicht und Verrechnen */
+
+    function viewContactAmounts(contact) {
+        const amounts = contactAmounts(contact);
+        const currencies = Object.keys(amounts).sort();
+        if (!currencies.length) {
+            return h('section', { class: 'panel' }, h('h2', null, 'Offen zwischen euch'),
+                h('div', { class: 'small muted' }, contactLinks(contact).length ? 'In den verknüpften Gruppen gibt es noch keine Beträge.' : 'Verknüpfe unten mindestens zwei Gruppen.'));
+        }
+        return h('section', { class: 'panel' },
+            h('h2', null, 'Offen zwischen euch'),
+            currencies.map(function (cur) {
+                const rows = amounts[cur];
+                const total = rows.reduce(function (sum, r) { return sum + r.amount; }, 0);
+                const flow = offsetFlow && offsetFlow.cid === contact.id && offsetFlow.cur === cur ? offsetFlow : null;
+                // Zusammenführen lohnt, sobald es mindestens zwei Gruppen gibt und irgendwo etwas offen ist.
+                const canCollect = rows.length >= 2 && rows.some(function (r) { return r.amount; });
+                return h('div', { class: 'offset-block' },
+                    currencies.length > 1 ? h('div', { class: 'link-title' }, cur) : null,
+                    rows.map(function (r) {
+                        return h('div', { class: 'kv' },
+                            h('span', null, r.doc.meta.name, h('div', { class: 'small muted' }, 'dort: ' + memberName(r.doc, r.member) + ' · ' + modeText(r.doc))),
+                            owedSpan(r.amount, cur));
+                    }),
+                    h('div', { class: 'kv total-row' }, h('span', null, 'Zusammen'), total ? owedSpan(total, cur) : h('span', { class: 'pos' }, 'kwidt')),
+                    rows.some(function (r) { return r.doc.meta.simplify; }) ? h('p', { class: 'small muted' },
+                        'Vereinfacht rechnende Gruppen zeigen nur, was die Ausgleichsvorschläge zwischen euch beiden vorsehen. Das kann 0 sein, obwohl ihr dort Ausgaben miteinander habt.') : null,
+                    flow ? viewOffsetFlow(contact, flow)
+                        : canCollect ? h('div', { class: 'actions' },
+                            h('button', {
+                                class: 'btn', type: 'button',
+                                onclick: function () { startOffset(contact, cur); }
+                            }, 'In einer Gruppe zusammenführen …')) : null);
+            }));
+    }
+
+    function stillOnContact(cid) {
+        return location.hash === '#/p/' + cid;
+    }
+
+    /** Schritt 1: alle beteiligten Gruppen einmal abgleichen, damit mit dem aktuellen Stand gerechnet wird. */
+    async function startOffset(contact, cur) {
+        const links = contactLinks(contact);
+        offsetFlow = { cid: contact.id, cur: cur, step: 'sync', pull: {}, target: '', mode: 'open', sure: false };
+        links.forEach(function (l) { offsetFlow.pull[l.gid] = 'pending'; });
+        render();
+        const flow = offsetFlow;
+        await Promise.all(links.map(function (l) {
+            return exchangeOnce(l.gid).then(function (result) { flow.pull[l.gid] = result; });
+        }));
+        if (offsetFlow !== flow) return;
+        flow.step = 'preview';
+        if (stillOnContact(contact.id)) render();
+    }
+
+    /**
+     * Vorschlag für die Zielgruppe: die mit dem größten offenen Betrag, direkt rechnende
+     * zuerst. In vereinfacht rechnenden Gruppen können die Vorschläge den Betrag umleiten.
+     */
+    function defaultTarget(rows) {
+        return rows.slice().sort(function (a, b) {
+            return (a.doc.meta.simplify - b.doc.meta.simplify) || (Math.abs(b.amount) - Math.abs(a.amount))
+                || a.doc.meta.name.localeCompare(b.doc.meta.name, 'de');
+        })[0].gid;
+    }
+
+    /** Was das Zusammenführen mit der aktuellen Auswahl bewirken würde. */
+    function offsetPreview(contact, flow) {
+        const rows = contactAmounts(contact)[flow.cur] || [];
+        const byGid = {};
+        rows.forEach(function (r) { byGid[r.gid] = r; });
+        if (!byGid[flow.target] && rows.length) flow.target = defaultTarget(rows);
+        const plan = C.planCollect(rows.map(function (r) { return { gid: r.gid, amount: r.amount }; }), flow.target);
+        return { rows: rows, plan: plan, byGid: byGid };
+    }
+
+    /** Dein Name für die Person, und wie sie in der Gruppe heißt, falls anders. */
+    function contactWho(contact, row) {
+        const there = memberName(row.doc, row.member);
+        return contact.name + (there !== contact.name ? ' (in „' + row.doc.meta.name + '“: ' + there + ')' : '');
+    }
+
+    function viewOffsetFlow(contact, flow) {
+        if (flow.step === 'sync') {
+            return h('div', { class: 'offset-flow' },
+                h('div', { class: 'link-title' }, 'Gleiche die Gruppen ab …'),
+                Object.keys(flow.pull).map(function (gid) {
+                    return h('div', { class: 'small muted' }, store.groups[gid].meta.name + ': ' + (flow.pull[gid] === 'pending' ? 'verbinde …' : syncStatusText(flow.pull[gid])));
+                }));
+        }
+        if (flow.step === 'done') return viewOffsetDone(flow);
+
+        const p = offsetPreview(contact, flow);
+        const cur = flow.cur;
+        const target = p.byGid[flow.target];
+        const entryOf = {};
+        p.plan.entries.forEach(function (e) { entryOf[e.gid] = e.amount; });
+        const net = p.plan.net;
+        const pay = flow.mode === 'pay' && net !== 0;
+        const nothing = !p.plan.entries.length && !pay;
+
+        function rerender() { render(); }
+
+        const targetSelect = h('select', {
+            id: 'offsetTarget', value: flow.target,
+            onchange: function (e) { flow.target = e.target.value; rerender(); }
+        }, p.rows.map(function (r) {
+            return h('option', { value: r.gid }, r.doc.meta.name + ' · ' + owedText(r.amount, cur) + (r.doc.meta.simplify ? ' · vereinfacht, Vorschläge können umleiten' : ''));
+        }));
+
+        const result = h('div', { class: 'offset-rest' },
+            h('div', { class: 'link-title' }, net
+                ? 'Danach in „' + target.doc.meta.name + '“: ' + owedText(net, cur)
+                : 'Danach seid ihr in allen Gruppen kwidt'),
+            net ? h('div', { class: 'seg', role: 'group', 'aria-label': 'Was passiert mit der Summe?' },
+                [['open', 'Offen lassen'], ['pay', 'Differenz zahlen']].map(function (m) {
+                    return h('button', {
+                        type: 'button', 'aria-pressed': String(flow.mode === m[0]),
+                        onclick: function () { flow.mode = m[0]; rerender(); }
+                    }, m[1]);
+                })) : null,
+            pay ? h('div', { class: 'notice', style: 'margin:10px 0 0' },
+                (net > 0 ? 'Du musst ' + contactWho(contact, target) + ' ' : contactWho(contact, target) + ' muss dir ')
+                + money(Math.abs(net), cur) + ' wirklich zahlen. Das wird in „' + target.doc.meta.name + '“ als normale Zahlung eingetragen.') : null,
+            target.doc.meta.simplify ? h('p', { class: 'small muted', style: 'margin-top:8px' },
+                '„' + target.doc.meta.name + '“ rechnet vereinfacht: Der Betrag kommt dort an, die Ausgleichsvorschläge können ihn aber auf andere Personen umleiten. Unterm Strich stimmt es trotzdem.') : null);
+
+        return h('div', { class: 'offset-flow' },
+            h('div', { class: 'field' },
+                h('label', { for: 'offsetTarget' }, 'Zielgruppe: Hier sammelt sich alles'),
+                targetSelect),
+            h('div', { class: 'link-title' }, 'Vorschau'),
+            p.rows.map(function (r) {
+                const entry = entryOf[r.gid] || 0;
+                const paid = pay && r.gid === flow.target ? net : 0;
+                const after = r.amount - entry - paid;
+                return h('div', { class: 'offset-row' + (r.gid === flow.target ? ' is-target' : '') },
+                    h('div', null, h('strong', null, r.doc.meta.name), r.gid === flow.target ? ' · Zielgruppe' : '', ' · Stand ', h('code', { class: 'state-code' }, C.dataFingerprint(r.doc))),
+                    h('div', { class: 'small muted' }, 'Person dort: ' + linkLabel(r.doc, r.member)),
+                    h('div', { class: 'small muted' }, 'Du heißt dort: ' + memberName(r.doc, r.me) + ' · ' + modeText(r.doc) + ' · ' + syncStatusText(flow.pull[r.gid] || 'offline')),
+                    h('div', { class: 'small' }, 'jetzt: ' + owedText(r.amount, cur)
+                        + (entry ? ' → Verrechnung: ' + (entry > 0 ? 'du an ' : 'an dich von ') + memberName(r.doc, r.member) + ' ' + money(Math.abs(entry), cur) : ' → kein Eintrag')
+                        + (paid ? ' → Differenz gezahlt: ' + money(Math.abs(paid), cur) : '')
+                        + ' → danach: ' + owedText(after, cur)));
+            }),
+            result,
+            nothing ? h('p', { class: 'small muted' }, 'Mit dieser Zielgruppe gibt es nichts zu verschieben.') : [
+                h('label', { class: 'check-row' },
+                    h('input', {
+                        type: 'checkbox', checked: flow.sure,
+                        onchange: function (e) { flow.sure = e.target.checked; rerender(); }
+                    }),
+                    h('span', null, 'Ich habe geprüft: In allen Gruppen ist das dieselbe Person.')),
+                h('div', { class: 'actions' },
+                    h('button', { class: 'btn', type: 'button', disabled: !flow.sure, onclick: function () { runOffset(contact, flow); } }, 'Jetzt zusammenführen'),
+                    h('button', { class: 'btn btn-small', type: 'button', onclick: function () { offsetFlow = null; render(); } }, 'Abbrechen'))],
+            nothing ? h('div', { class: 'actions' },
+                h('button', { class: 'btn btn-small', type: 'button', onclick: function () { offsetFlow = null; render(); } }, 'Schließen')) : null,
+            h('p', { class: 'small muted' }, 'In jeder Gruppe mit Eintrag steht danach eine Zahlung „über verschiedene Gruppen verrechnet“. Über alle Gruppen heben sie sich auf, es fließt kein Geld. Danach versucht Kwidt einmal, die Gruppen an Geräte zu senden, die sie gerade offen haben. Ist niemand online, kommt es beim nächsten Abgleich an.'));
+    }
+
+    /** Schritt 3: Zahlungen eintragen, Log schreiben, einmal senden. */
+    async function runOffset(contact, flow) {
+        const p = offsetPreview(contact, flow);
+        const net = p.plan.net;
+        const pay = flow.mode === 'pay' && net !== 0;
+        if (!flow.sure || (!p.plan.entries.length && !pay)) return;
+        const cur = flow.cur;
+        const target = p.byGid[flow.target];
+        const oid = C.newId();
+        const today = C.todayStr();
+        const log = {
+            id: oid, t: Date.now(), contact: contact.id, name: contact.name, currency: cur, total: p.plan.moved,
+            target: flow.target, targetGroup: target.doc.meta.name, entries: [], rest: [], status: {}
+        };
+        const touched = {};
+
+        function addPayment(row, signedAmount, offset) {
+            const doc = row.doc;
+            const id = C.newId();
+            const from = signedAmount > 0 ? row.me : row.member;
+            const to = signedAmount > 0 ? row.member : row.me;
+            const amount = Math.abs(signedAmount);
+            doc.payments[id] = {
+                id: id, t: C.nextT(doc), by: row.me, from: from, to: to, amount: amount, currency: cur, date: today,
+                note: offset ? OFFSET_NOTE : DIFF_NOTE + ', angestoßen von ' + memberName(doc, row.me), del: false
+            };
+            if (offset) {
+                doc.payments[id].offset = oid;
+                doc.payments[id].offsetBy = row.me;
+                logActivity(doc, 'offset-add', id, 'mit ' + memberName(doc, row.member) + ' ' + money(amount, cur) + ' über verschiedene Gruppen verrechnet');
+            } else {
+                logActivity(doc, 'pay-add', id, memberName(doc, from) + ' an ' + memberName(doc, to) + ' (Differenz nach Verrechnung)', amount, cur);
+            }
+            touched[row.gid] = true;
+            log.entries.push({
+                gid: row.gid, group: doc.meta.name, payment: id, kind: offset ? 'offset' : 'difference',
+                from: from, to: to, amount: amount, fromName: memberName(doc, from), toName: memberName(doc, to)
+            });
+        }
+
+        p.plan.entries.forEach(function (e) { addPayment(p.byGid[e.gid], e.amount, true); });
+        if (pay) {
+            addPayment(target, net, false);
+        } else if (net) {
+            log.rest.push({
+                gid: target.gid, group: target.doc.meta.name, amount: Math.abs(net),
+                fromName: memberName(target.doc, net > 0 ? target.me : target.member),
+                toName: memberName(target.doc, net > 0 ? target.member : target.me)
+            });
+        }
+
+        Object.keys(touched).forEach(function (gid) { log.status[gid] = 'pending'; });
+        store.offsets[oid] = log;
+        persist();
+        flow.step = 'done';
+        flow.log = oid;
+        render();
+
+        await Promise.all(Object.keys(touched).map(function (gid) {
+            return exchangeOnce(gid).then(function (result) {
+                log.status[gid] = result;
+                persist();
+                if (stillOnContact(contact.id)) render();
+            });
+        }));
+    }
+
+    /** Überschrift eines Log-Eintrags; ältere Einträge ohne Zielgruppe heißen weiter „verrechnet“. */
+    function offsetTitle(log) {
+        return log.targetGroup
+            ? 'In „' + log.targetGroup + '“ zusammengeführt, ' + money(log.total, log.currency) + ' verschoben'
+            : money(log.total, log.currency) + ' verrechnet';
+    }
+
+    function viewOffsetDone(flow) {
+        const log = store.offsets[flow.log];
+        if (!log) return null;
+        return h('div', { class: 'offset-flow' },
+            h('div', { class: 'link-title' }, offsetTitle(log)),
+            viewOffsetDetails(log),
+            h('div', { class: 'actions' },
+                h('button', { class: 'btn', type: 'button', onclick: function () { copyExplanation(log); } }, 'Erklärung kopieren'),
+                h('button', { class: 'btn btn-small', type: 'button', onclick: function () { offsetFlow = null; render(); } }, 'Fertig')),
+            h('p', { class: 'small muted' }, 'Schick die Erklärung an die andere Person, damit sie die Einträge in den Gruppen prüfen kann.'));
+    }
+
+    /* Log */
+
+    function contactOffsets(cid) {
+        return Object.keys(store.offsets).map(function (id) { return store.offsets[id]; })
+            .filter(function (o) { return !cid || o.contact === cid; })
+            .sort(function (a, b) { return b.t - a.t; });
+    }
+
+    function dateTime(t) {
+        return new Date(t).toLocaleString('de-DE', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function viewOffsetDetails(log) {
+        return h('div', null,
+            log.entries.map(function (e) {
+                const status = log.status && log.status[e.gid];
+                return h('div', { class: 'kv' },
+                    h('span', null, e.group,
+                        h('div', { class: 'small muted' }, e.fromName + ' → ' + e.toName + (e.kind === 'difference' ? ' · Differenz, echte Zahlung' : ' · verrechnet')
+                            + (status ? ' · ' + syncStatusText(status) : ''))),
+                    h('span', null, money(e.amount, log.currency)));
+            }),
+            (log.rest || []).map(function (r) {
+                return h('div', { class: 'kv' },
+                    h('span', null, r.group, h('div', { class: 'small muted' }, 'bleibt offen: ' + r.fromName + ' → ' + r.toName)),
+                    h('span', { class: 'muted' }, money(r.amount, log.currency)));
+            }));
+    }
+
+    function viewOffsetEntries(list, title) {
+        if (!list.length) return null;
+        return h('section', { class: 'panel' },
+            h('h2', null, title),
+            list.map(function (log) {
+                return h('div', { class: 'offset-log' },
+                    h('div', { class: 'link-title' }, 'Mit ' + log.name + ': ' + offsetTitle(log)),
+                    h('div', { class: 'small muted' }, dateTime(log.t) + (log.undone ? ' · rückgängig gemacht am ' + dateTime(log.undone) : '')),
+                    viewOffsetDetails(log),
+                    log.undone && log.undoProblems && log.undoProblems.length ? h('div', { class: 'notice', style: 'margin:8px 0 0' },
+                        'Nicht alles rückgängig gemacht: ' + log.undoProblems.join(' · ')) : null,
+                    h('div', { class: 'actions' },
+                        h('button', { class: 'btn btn-small', type: 'button', onclick: function () { copyExplanation(log); } }, 'Erklärung kopieren'),
+                        log.undone ? null : h('button', { class: 'btn btn-small btn-danger', type: 'button', onclick: function () { undoOffset(log); } }, 'Rückgängig machen')));
+            }));
+    }
+
+    function viewOffsetLog() {
+        return h('div', null,
+            h('a', { class: 'back', href: '#/' }, '‹ Startseite'),
+            viewOffsetEntries(contactOffsets(null), 'Alle Verrechnungen')
+            || h('section', { class: 'panel' }, h('div', { class: 'empty' }, 'Noch keine Verrechnungen.')));
+    }
+
+    /** Text für die andere Person: alles drin, auch die Gruppennamen, denn sie ist in all diesen Gruppen. */
+    function offsetExplanation(log) {
+        const cur = log.currency;
+        const lines = ['Verrechnung über verschiedene Gruppen (Kwidt)', dateTime(log.t), ''];
+        if (log.targetGroup) {
+            lines.push('Alles, was zwischen uns in den Gruppen unten offen war, ist jetzt in „' + log.targetGroup + '“ zusammengeführt. '
+                + 'Dafür fließt kein Geld: Die Einträge heben sich über alle Gruppen gegenseitig auf.', '');
+        } else {
+            lines.push('Verrechnet: ' + money(log.total, cur) + '. Dafür fließt kein Geld, die Beträge heben sich gegenseitig auf.', '');
+        }
+        log.entries.filter(function (e) { return e.kind !== 'difference'; }).forEach(function (e) {
+            lines.push('• ' + e.group + ': ' + e.fromName + ' an ' + e.toName + ' ' + money(e.amount, cur) + ' (als Verrechnung eingetragen)');
+        });
+        const diffs = log.entries.filter(function (e) { return e.kind === 'difference'; });
+        if (diffs.length) {
+            lines.push('', 'Die Differenz wird wirklich gezahlt:');
+            diffs.forEach(function (e) {
+                lines.push('• ' + e.group + ': ' + e.fromName + ' zahlt ' + e.toName + ' ' + money(e.amount, cur) + ' (als normale Zahlung eingetragen)');
+            });
+        }
+        if (log.rest && log.rest.length) {
+            lines.push('', log.targetGroup ? 'Offen in „' + log.targetGroup + '“:' : 'Bleibt offen:');
+            log.rest.forEach(function (r) {
+                lines.push('• ' + r.group + ': ' + r.fromName + ' an ' + r.toName + ' ' + money(r.amount, cur));
+            });
+        }
+        if (log.undone) lines.push('', 'Diese Verrechnung wurde am ' + dateTime(log.undone) + ' rückgängig gemacht.');
+        lines.push('', 'Du findest die Einträge in den genannten Gruppen unter „Ausgaben“. Stimmt etwas nicht, kann die Verrechnung rückgängig gemacht werden.');
+        return lines.join('\n');
+    }
+
+    async function copyExplanation(log) {
+        toast(await copyText(offsetExplanation(log)) ? 'Erklärung kopiert.' : 'Kopieren hat nicht geklappt.');
+    }
+
+    /** Was "Rückgängig" mit einem Eintrag des Logs machen würde. */
+    function undoCheck(log, e) {
+        const doc = store.groups[e.gid];
+        if (!doc) return { ok: false, text: e.group + ': Gruppe nicht mehr auf diesem Gerät' };
+        const p = doc.payments[e.payment];
+        if (!p || p.del) return { ok: false, text: e.group + ': Zahlung fehlt, wurde schon gelöscht' };
+        if (p.amount !== e.amount || p.from !== e.from || p.to !== e.to || p.currency !== log.currency) {
+            return { ok: false, text: e.group + ': Zahlung wurde geändert und bleibt, bitte selbst prüfen' };
+        }
+        return { ok: true, doc: doc, payment: p, text: e.group + ': ' + (e.kind === 'difference' ? 'Differenz-Zahlung' : 'Verrechnung') + ' wird gelöscht' };
+    }
+
+    async function undoOffset(log) {
+        const checks = log.entries.map(function (e) { return { entry: e, check: undoCheck(log, e) }; });
+        if (!confirm('Verrechnung mit ' + log.name + ' vom ' + dateTime(log.t) + ' rückgängig machen?\n\n'
+            + checks.map(function (c) { return '• ' + c.check.text; }).join('\n'))) return;
+
+        const touched = {};
+        checks.forEach(function (c) {
+            if (!c.check.ok) return;
+            const doc = c.check.doc;
+            const before = c.check.payment;
+            doc.payments[before.id] = Object.assign({}, before, { del: true, t: C.nextT(doc) });
+            logActivity(doc, c.entry.kind === 'difference' ? 'pay-del' : 'offset-undo', before.id,
+                memberName(doc, before.from) + ' an ' + memberName(doc, before.to) + ' ' + money(before.amount, before.currency));
+            touched[c.entry.gid] = true;
+        });
+        log.undone = Date.now();
+        log.undoProblems = checks.filter(function (c) { return !c.check.ok; }).map(function (c) { return c.check.text; });
+        persist();
+        render();
+        if (log.undoProblems.length) {
+            toast('Nicht alles rückgängig: ' + log.undoProblems.join(' · '), 'OK', function () { /* nur schließen */ });
+        } else {
+            toast('Verrechnung rückgängig gemacht.');
+        }
+        await Promise.all(Object.keys(touched).map(function (gid) { return exchangeOnce(gid); }));
+    }
+
 
     /* ---------- Neue Gruppe ---------- */
 
@@ -887,10 +1716,10 @@
 
         function showImport() {
             const totals = {};
-            imported.expenses.forEach(function (x) { totals[x.currency] = (totals[x.currency] || 0) + x.amount; });
+            imported.expenses.forEach(function (x) { totals[x.currency] = (totals[x.currency] || 0) + (x.refund ? -1 : 1) * x.amount; });
             importSummary.textContent = '';
             importSummary.hidden = false;
-            importSummary.appendChild(h('div', { class: 'link-title' }, 'Aus Splid'));
+            importSummary.appendChild(h('div', { class: 'link-title' }, imported.source === 'csv' ? 'Aus Kwidt-CSV' : 'Aus Splid'));
             const parts = [imported.members.length + ' Personen', importCounts(imported)];
             if (Object.keys(totals).length) parts.push(Object.keys(totals).map(function (cur) { return money(totals[cur], cur); }).join(' + '));
             importSummary.appendChild(h('p', { class: 'small muted' }, parts.join(' · ')));
@@ -922,14 +1751,13 @@
             imported.categories = options.map(function (o) { return o.label; });
 
             function countFor(label) {
-                const key = label.toLocaleLowerCase('de');
-                return imported.expenses.filter(function (x) { return C.tidyText(x.desc, 120).toLocaleLowerCase('de') === key; }).length;
+                return imported.expenses.filter(function (x) { return C.importMatchesCategory(x, label); }).length;
             }
             function chip(label, on) {
                 const count = countFor(label);
                 return h('button', {
                     class: 'chip', type: 'button', 'aria-pressed': String(on),
-                    title: count ? count + (count === 1 ? ' Ausgabe heißt so' : ' Ausgaben heißen so') : null,
+                    title: count ? count + (count === 1 ? ' Ausgabe gehört dazu' : ' Ausgaben gehören dazu') : null,
                     onclick: function (e) {
                         const nowOn = e.currentTarget.getAttribute('aria-pressed') !== 'true';
                         e.currentTarget.setAttribute('aria-pressed', String(nowOn));
@@ -966,7 +1794,9 @@
 
             return h('div', { class: 'field', style: 'margin:0 0 8px' },
                 h('span', { class: 'field-label' }, 'Welche Kategorien soll es geben?'),
-                h('div', { class: 'field-hint', style: 'margin:0 0 8px' }, 'Ausgaben, die genauso heißen wie eine Kategorie, bekommen sie. Die Zahl zeigt, wie viele das sind.'),
+                h('div', { class: 'field-hint', style: 'margin:0 0 8px' }, imported.source === 'csv'
+                    ? 'Ausgaben behalten ihre Kategorie aus der Datei. Die Zahl zeigt, wie viele zu einer Kategorie gehören.'
+                    : 'Ausgaben, die genauso heißen wie eine Kategorie, bekommen sie. Die Zahl zeigt, wie viele das sind.'),
                 chips,
                 h('div', { class: 'add-row' }, addInput, h('button', { class: 'btn btn-small', type: 'button', onclick: add }, 'Hinzufügen')));
         }
@@ -977,17 +1807,27 @@
             if (!file) return;
             error.hidden = true;
             let data = null;
+            const isCsv = /\.csv$/i.test(file.name) || file.type === 'text/csv';
             try {
-                const sheets = C.readXls(await file.arrayBuffer());
-                data = sheets && C.parseSplid(sheets, C.todayStr());
+                if (isCsv) {
+                    data = C.parseKwidtCsv(await file.text());
+                    // Der Gruppenname steckt nur im Dateinamen: kwidt-Urlaub.csv → Urlaub
+                    if (data) data.name = file.name.replace(/\.csv$/i, '').replace(/^kwidt-/i, '').replace(/[-_]+/g, ' ').trim().slice(0, 60);
+                } else {
+                    const sheets = C.readXls(await file.arrayBuffer());
+                    data = sheets && C.parseSplid(sheets, C.todayStr());
+                }
             } catch (err) {
                 console.warn('Kwidt: Datei nicht lesbar.', err);
             }
             if (!data || !data.members.length || !(data.expenses.length + data.payments.length)) {
-                error.textContent = 'Das sieht nicht nach einer Excel-Datei aus Splid aus (.xls).';
+                error.textContent = isCsv
+                    ? 'Das sieht nicht nach einer CSV-Datei aus Kwidt aus.'
+                    : 'Das sieht nicht nach einer Excel-Datei aus Splid (.xls) oder einer CSV aus Kwidt aus.';
                 error.hidden = false;
                 return;
             }
+            data.source = isCsv ? 'csv' : 'splid';
             imported = data;
             nameInput.value = data.name || nameInput.value;
             nameInput.dispatchEvent(new Event('input'));
@@ -1066,9 +1906,9 @@
                 h('h2', null, 'Neue Gruppe'),
                 error,
                 h('div', { class: 'field' },
-                    h('label', { class: 'btn btn-small btn-block' }, 'Aus Splid importieren',
-                        h('input', { type: 'file', accept: '.xls,application/vnd.ms-excel', hidden: true, onchange: onImport })),
-                    h('div', { class: 'field-hint' }, 'Excel-Datei aus Splid (.xls). Sie wird nur in deinem Browser gelesen.')),
+                    h('label', { class: 'btn btn-small btn-block' }, 'Importieren',
+                        h('input', { type: 'file', accept: '.xls,.csv,application/vnd.ms-excel,text/csv', hidden: true, onchange: onImport })),
+                    h('div', { class: 'field-hint' }, 'CSV-Datei aus Kwidt oder Excel-Datei aus Splid (.xls). Sie wird nur in deinem Browser gelesen.')),
                 h('div', { class: 'field' },
                     h('label', { for: 'groupName' }, 'Name der Gruppe'),
                     h('div', { class: 'name-row' }, avatarSlot, nameInput),
@@ -1246,6 +2086,7 @@
     }
 
     function paymentText(doc, p, me) {
+        if (p.offset) return offsetText(doc, p, me);
         if (p.from === me) return 'Du hast ' + memberName(doc, p.to) + ' gezahlt';
         if (p.to === me) return memberName(doc, p.from) + ' hat dir gezahlt';
         return memberName(doc, p.from) + ' hat ' + memberName(doc, p.to) + ' gezahlt';
@@ -1257,12 +2098,12 @@
      * Die jeweils andere bleibt leer, hält aber ihren Platz.
      */
     function amountColumns(kind, minor, cur) {
-        const labels = { payment: 'Zahlung', expense: 'Ausgabe', refund: 'Rückzahlung' };
+        const labels = { payment: 'Zahlung', offset: 'Verrechnung', expense: 'Ausgabe', refund: 'Rückzahlung' };
         const cell = h('span', null, h('span', { class: 'muted' }, labels[kind]), h('strong', null, money(minor, cur)));
         const empty = h('span');
         return [
-            h('span', { class: 'col col-pay' }, kind === 'payment' ? cell : empty),
-            h('span', { class: 'col col-amount ' + (kind === 'refund' ? 'is-refund' : 'is-expense') }, kind === 'payment' ? empty : cell)
+            h('span', { class: 'col col-pay' }, kind === 'payment' || kind === 'offset' ? cell : empty),
+            h('span', { class: 'col col-amount ' + (kind === 'refund' ? 'is-refund' : 'is-expense') }, kind === 'payment' || kind === 'offset' ? empty : cell)
         ];
     }
     function expenseEffect(e, me) {
@@ -1280,7 +2121,7 @@
             ? [entry.e.desc, entry.e.note]
                 .concat((entry.e.items || []).map(function (item) { return item.name; }))
                 .concat(commentTexts[entry.e.id] || [])
-            : [entry.p.note, 'zahlung'];
+            : [entry.p.note, 'zahlung', entry.p.offset ? 'verrechnung verrechnet' : ''];
         return parts.join('\n').toLocaleLowerCase('de').indexOf(term) !== -1;
     }
 
@@ -1391,8 +2232,9 @@
                 container.appendChild(h('a', { class: 'item', href: '#/g/' + doc.id + '/pay/' + p.id },
                     h('span', { class: 'body' },
                         h('div', { class: 'title' }, paymentText(doc, p, me)),
-                        h('div', { class: 'sub' }, formatDate(p.date) + (p.note ? ' · ' + p.note : ''))),
-                    amountColumns('payment', p.amount, p.currency),
+                        h('div', { class: 'sub' }, formatDate(p.date) + (p.offset ? ' · angestoßen von ' + offsetStarter(doc, p, me) : '')
+                            + (p.note && p.note !== OFFSET_NOTE ? ' · ' + p.note : ''))),
+                    amountColumns(p.offset ? 'offset' : 'payment', p.amount, p.currency),
                     // Nur wenn das Geld an dich geht; sonst bleibt die Spalte leer.
                     p.to === me
                         ? h('span', { class: 'side' }, h('span', { class: 'muted' }, 'du bekommst'), h('strong', { class: 'pos' }, money(p.amount, p.currency)))
@@ -1709,7 +2551,7 @@
                     h('div', null,
                         h('div', { class: 'small muted' }, 'Gesamteinnahmen'),
                         h('div', { class: 'stat-total pos' }, money(stats.income.amount, cur)),
-                        h('div', { class: 'small muted' }, stats.income.count + (stats.income.count === 1 ? ' Rückzahlung' : ' Rückzahlungen'))),
+                        h('div', { class: 'small muted' }, stats.income.count + (stats.income.count === 1 ? ' Einnahme' : ' Einnahmen'))),
                     h('div', null,
                         h('div', { class: 'small muted' }, 'Ergebnis'),
                         h('div', { class: 'stat-total ' + (stats.total > 0 ? 'neg' : stats.total < 0 ? 'pos' : '') }, money(-stats.total, cur)),
@@ -1750,12 +2592,16 @@
             case 'expense-restore': return who + ' ' + label + ' wiederhergestellt';
             case 'comment': return who + ' ' + label + ' kommentiert';
             case 'claim': return who + ' bei ' + label + ' Positionen zugeordnet';
-            case 'import': return who + ' ' + a.label + ' aus Splid importiert';
+            case 'import': return who + ' ' + a.label + ' importiert';
             case 'category-add': return who + ' die Kategorie ' + label + ' hinzugefügt';
             case 'category-del': return who + ' die Kategorie ' + label + ' entfernt';
             case 'pay-add': return who + ' eine Zahlung eingetragen: ' + a.label;
             case 'pay-edit': return who + ' eine Zahlung geändert: ' + a.label;
             case 'pay-del': return who + ' eine Zahlung gelöscht: ' + a.label;
+            case 'offset-add': return who + ' ' + a.label;
+            case 'offset-edit': return who + ' eine Verrechnung geändert: ' + a.label;
+            case 'offset-del': return who + ' eine Verrechnung gelöscht: ' + a.label;
+            case 'offset-undo': return who + ' eine Verrechnung rückgängig gemacht: ' + a.label;
             case 'member-add': return who + ' ' + a.label + ' hinzugefügt';
             case 'member-left': return who + ' ' + a.label + ' aus der Gruppe genommen';
             case 'member-back': return who + ' ' + a.label + ' wieder aufgenommen';
@@ -2952,7 +3798,11 @@
                 id: id, t: C.nextT(doc), by: me, from: form.from, to: form.to, amount: amount,
                 currency: form.currency, date: form.date, note: form.note.trim(), del: false
             };
-            logActivity(doc, payment ? 'pay-edit' : 'pay-add', id, label(), amount, form.currency);
+            if (payment && payment.offset) {
+                doc.payments[id].offset = payment.offset;
+                doc.payments[id].offsetBy = payment.offsetBy;
+            }
+            logActivity(doc, payment && payment.offset ? 'offset-edit' : payment ? 'pay-edit' : 'pay-add', id, label(), amount, form.currency);
             commit(doc);
             state.formActive = false;
             go('/g/' + doc.id + '/balances');
@@ -2961,7 +3811,7 @@
         function removePayment() {
             const before = doc.payments[payment.id];
             doc.payments[payment.id] = Object.assign({}, before, { del: true, t: C.nextT(doc) });
-            logActivity(doc, 'pay-del', payment.id, label(), before.amount, before.currency);
+            logActivity(doc, before.offset ? 'offset-del' : 'pay-del', payment.id, label(), before.amount, before.currency);
             commit(doc);
             state.formActive = false;
             go('/g/' + doc.id + '/balances');
@@ -2976,7 +3826,12 @@
             backLink(doc, 'balances', 'Salden'),
             payment && payment.del ? h('div', { class: 'notice' }, 'Diese Zahlung wurde gelöscht.') : null,
             h('form', { class: 'panel', onsubmit: submit, novalidate: true },
-                h('h2', null, payment ? 'Zahlung bearbeiten' : 'Zahlung eintragen'),
+                h('h2', null, payment && payment.offset ? 'Verrechnung bearbeiten' : payment ? 'Zahlung bearbeiten' : 'Zahlung eintragen'),
+                payment && payment.offset ? h('div', { class: 'notice' }, offsetText(doc, payment, me) + ' (' + money(payment.amount, payment.currency)
+                    + '). Dafür ist kein Geld geflossen: Was hier fehlt, wurde in einer anderen Gruppe ausgeglichen. Änderst oder löschst du die Zahlung, gilt das nur für diese Gruppe. '
+                    + (payment.offsetBy === me ? 'Angestoßen hast du.'
+                        : 'Angestoßen hat das ' + offsetStarter(doc, payment, me) + '. Bei Fragen wende dich an ' + offsetStarter(doc, payment, me)
+                            + '. ' + offsetStarter(doc, payment, me) + ' sieht auf dem eigenen Gerät, mit welchen Gruppen verrechnet wurde.')) : null,
                 h('p', { class: 'small muted', style: 'margin-bottom:12px' }, 'Kwidt überweist selbst nichts. Trag hier ein, was eine Person einer anderen gegeben hat, egal ob alles, nur einen Teil oder einfach so.'),
                 error,
                 h('div', { class: 'field-row' },
@@ -3036,7 +3891,7 @@
 
     store = readStored();
     askToKeepData();
-    if (!location.hash && store.groups[store.last]) history.replaceState(null, '', '#/g/' + store.last);
+    // Ohne Link landet man immer auf der Startseite, nicht in der zuletzt offenen Gruppe.
     handleJoin().then(render);
 
     if ('serviceWorker' in navigator) {
