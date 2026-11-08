@@ -1233,21 +1233,24 @@
 
     /* Ausgaben */
 
+    /** Ohne Betrag: Der steht in der Liste in einer eigenen Spalte. */
     function payerText(doc, e, me) {
         const payers = Object.keys(e.payers).filter(function (id) { return e.payers[id] > 0; });
-        const amount = money(e.amount, e.currency);
-        const verb = e.refund ? ' bekommen' : ' bezahlt';
-        const prefix = e.refund ? 'Rückzahlung: ' : '';
-        if (payers.length > 1) return prefix + payers.length + ' Personen haben ' + amount + verb;
-        if (payers[0] === me) return prefix + 'Du hast ' + amount + verb;
-        return prefix + memberName(doc, payers[0]) + ' hat ' + amount + verb;
+        const verb = e.refund ? ' es bekommen' : ' bezahlt';
+        if (payers.length > 1) return payers.length + ' Personen haben' + verb;
+        if (payers[0] === me) return 'Du hast' + verb;
+        return memberName(doc, payers[0]) + ' hat' + verb;
     }
 
     function paymentText(doc, p, me) {
-        const amount = money(p.amount, p.currency);
-        if (p.from === me) return 'Du hast ' + memberName(doc, p.to) + ' ' + amount + ' gezahlt';
-        if (p.to === me) return memberName(doc, p.from) + ' hat dir ' + amount + ' gezahlt';
-        return memberName(doc, p.from) + ' hat ' + memberName(doc, p.to) + ' ' + amount + ' gezahlt';
+        if (p.from === me) return 'Du hast ' + memberName(doc, p.to) + ' gezahlt';
+        if (p.to === me) return memberName(doc, p.from) + ' hat dir gezahlt';
+        return memberName(doc, p.from) + ' hat ' + memberName(doc, p.to) + ' gezahlt';
+    }
+
+    /** Spalte mit dem ganzen Betrag, vor dem, was davon auf dich entfällt. */
+    function amountColumn(label, minor, cur) {
+        return h('span', { class: 'total' }, h('span', { class: 'muted' }, label), h('strong', null, money(minor, cur)));
     }
 
     function expenseEffect(e, me) {
@@ -1369,6 +1372,7 @@
                     h('span', { class: 'body' },
                         h('div', { class: 'title' }, e.desc, isRecurring ? ' 🔁' : ''),
                         h('div', { class: 'sub' }, formatDate(e.date) + ' · ' + payerText(doc, e, me) + (comments ? ' · 💬 ' + comments : ''))),
+                    amountColumn(e.refund ? 'Rückzahlung' : 'Ausgabe', e.amount, e.currency),
                     expenseEffect(e, me)));
             } else {
                 const p = entry.p;
@@ -1376,7 +1380,9 @@
                     h('span', { class: 'icon', 'aria-hidden': 'true' }, '🤝'),
                     h('span', { class: 'body' },
                         h('div', { class: 'title' }, paymentText(doc, p, me)),
-                        h('div', { class: 'sub' }, formatDate(p.date) + (p.note ? ' · ' + p.note : '')))));
+                        h('div', { class: 'sub' }, formatDate(p.date) + (p.note ? ' · ' + p.note : ''))),
+                    amountColumn('Zahlung', p.amount, p.currency),
+                    h('span', { class: 'side' })));
             }
         });
     }

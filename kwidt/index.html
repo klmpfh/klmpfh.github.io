@@ -314,6 +314,15 @@
     .item .sub { font-size: 13px; color: var(--muted); margin-top: 2px; line-height: 1.35; overflow-wrap: anywhere; }
     .item .side { text-align: right; flex: none; font-size: 13px; max-width: 45%; }
     .item .side strong { display: block; font-size: 15px; font-variant-numeric: tabular-nums; }
+    /* Ausgaben-Liste wie eine Tabelle: Betrag und dein Anteil stehen in festen Spalten untereinander. */
+    .item .total { flex: none; width: 84px; text-align: right; font-size: 12px; }
+    .item .total strong { display: block; font-size: 14px; color: var(--text-strong); font-variant-numeric: tabular-nums; }
+    .item .total ~ .side { width: 88px; max-width: none; font-size: 12px; }
+    .item .total ~ .side strong { font-size: 14px; }
+    @media (max-width: 380px) {
+        .item .total { width: 74px; }
+        .item .total ~ .side { width: 78px; }
+    }
 
     .month {
         font-size: 12px;
@@ -511,14 +520,14 @@
 <div class="container">
     <main id="app"></main>
     <noscript>Kwidt braucht JavaScript.</noscript>
-    <div class="footer-info">v<span id="versionNumber">1.9</span></div>
+    <div class="footer-info">v<span id="versionNumber">1.10</span></div>
 </div>
 <div id="toast" role="status" hidden></div>
 
 <script src="../fileshare/vendor/peerjs.min.js"></script>
 <script src="../fileshare/vendor/qrcode.min.js"></script>
 <!-- ?v= immer zusammen mit der Versionsnummer oben ändern: Sonst läuft die neue Seite mit alten Skripten aus dem Browser-Cache. -->
-<script src="core.js?v=1.9"></script>
-<script src="app.js?v=1.9"></script>
+<script src="core.js?v=1.10"></script>
+<script src="app.js?v=1.10"></script>
 </body>
 </html>
