@@ -42,7 +42,9 @@
         'TRY', 'JPY', 'CAD', 'AUD', 'THB'];
 
     var SPLIT_TYPES = ['equal', 'exact', 'percent', 'shares', 'adjust', 'items'];
+    // 'biweekly' gibt es nur noch für alte Serien, neue sind 'weekly' mit every: 2.
     var REPEATS = ['none', 'weekly', 'biweekly', 'monthly', 'yearly'];
+    var MAX_EVERY = 99;
 
     var MAX_AMOUNT = 1e12;
     var MAX_ITEMS = 200;
@@ -652,13 +654,21 @@
 
     /* ---------- Wiederkehrende Ausgaben ---------- */
 
-    function occurrence(dateStr, repeat, n) {
+    /** Intervall einer Serie: alle `every` Wochen/Monate/Jahre. Fehlt es (alte Serien), ist es 1. */
+    function seriesEvery(e) {
+        var every = e && e.every;
+        return Number.isInteger(every) && every >= 1 && every <= MAX_EVERY ? every : 1;
+    }
+
+    /** Der n-te Termin ab `dateStr`. Monatsenden bleiben erhalten: Der 31. wird im Februar zum 28. */
+    function occurrence(dateStr, repeat, n, every) {
         var p = dateStr.split('-').map(Number);
+        var step = n * (every || 1);
         var d;
         if (repeat === 'weekly' || repeat === 'biweekly') {
-            d = new Date(Date.UTC(p[0], p[1] - 1, p[2] + n * (repeat === 'weekly' ? 7 : 14)));
+            d = new Date(Date.UTC(p[0], p[1] - 1, p[2] + step * (repeat === 'weekly' ? 7 : 14)));
         } else {
-            var months = (p[1] - 1) + n * (repeat === 'yearly' ? 12 : 1);
+            var months = (p[1] - 1) + step * (repeat === 'yearly' ? 12 : 1);
             var lastDay = new Date(Date.UTC(p[0], months + 1, 0)).getUTCDate();
             d = new Date(Date.UTC(p[0], months, Math.min(p[2], lastDay)));
         }
@@ -681,6 +691,7 @@
         copy.repeat = 'none';
         copy.parent = series.id;
         delete copy.series;
+        delete copy.every;
         doc.expenses[copy.id] = copy;
     }
 
@@ -712,7 +723,7 @@
                 }
             }
             for (var n = 0; n <= 520; n++) {
-                var date = occurrence(series.date, series.repeat, n);
+                var date = occurrence(series.date, series.repeat, n, seriesEvery(series));
                 if (date > today) break;
                 if (doc.expenses[series.id + '~' + date] || (latest[series.id] && date <= latest[series.id])) continue;
                 bookOccurrence(doc, series, date);
@@ -739,7 +750,7 @@
     function nextOccurrence(doc, series, today) {
         var latest = latestOccurrences(doc)[series.id];
         for (var n = 0; n <= 520; n++) {
-            var date = occurrence(series.date, series.repeat, n);
+            var date = occurrence(series.date, series.repeat, n, seriesEvery(series));
             if (date > today && (!latest || date > latest)) return date;
         }
         return null;
@@ -921,6 +932,8 @@
         }
         if (e.series === true) out.series = true;
         if (e.refund === true) out.refund = true;
+        // Bestehende Wiederholungen ohne Intervall bekommen hier eine 1.
+        if (out.repeat !== 'none') out.every = seriesEvery(e);
         return payersValid(out) && computeOwed(out) ? out : null;
     }
 
@@ -1016,7 +1029,8 @@
             if (e.del) return;
             var claims = Object.keys(e.claims || {}).filter(function (key) { return e.claims[key].on; }).sort();
             lines.push(JSON.stringify(['expense', id, e.desc, e.amount, e.currency, e.date, e.category, e.note,
-                sortedPairs(e.payers), e.split.type, sortedPairs(e.split.values), e.repeat, !!e.series, e.items || [], claims, !!e.refund]));
+                sortedPairs(e.payers), e.split.type, sortedPairs(e.split.values), e.repeat, !!e.series, e.items || [], claims, !!e.refund,
+                e.repeat !== 'none' ? seriesEvery(e) : 0]));
         });
         livePayments(doc).forEach(function (p) {
             lines.push(JSON.stringify(['payment', p.id, p.from, p.to, p.amount, p.currency, p.date, p.note]));
@@ -1526,6 +1540,8 @@
         CURRENCIES: CURRENCIES,
         SPLIT_TYPES: SPLIT_TYPES,
         REPEATS: REPEATS,
+        MAX_EVERY: MAX_EVERY,
+        seriesEvery: seriesEvery,
         RE_GROUP_ID: RE_GROUP_ID,
         RE_EXPENSE_ID: RE_EXPENSE_ID,
         newId: newId,

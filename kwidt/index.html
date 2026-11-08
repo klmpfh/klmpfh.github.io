@@ -416,6 +416,9 @@
     .range-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 6px; }
     .range-row input { padding-left: 8px; padding-right: 8px; }
     input.bad { border-color: var(--neg); }
+    .every-row { display: flex; align-items: center; gap: 8px; }
+    .every-row input { width: 64px; flex: none; text-align: center; }
+    .every-unit { min-width: 0; }
     .filter-summary { font-size: 13px; color: var(--muted); font-weight: 600; margin: 0 0 8px; }
     .chip-count { margin-left: 6px; font-size: 11px; opacity: 0.75; }
 
@@ -537,14 +540,14 @@
 <div class="container">
     <main id="app"></main>
     <noscript>Kwidt braucht JavaScript.</noscript>
-    <div class="footer-info">v<span id="versionNumber">1.15</span></div>
+    <div class="footer-info">v<span id="versionNumber">1.18</span></div>
 </div>
 <div id="toast" role="status" hidden></div>
 
 <script src="../fileshare/vendor/peerjs.min.js"></script>
 <script src="../fileshare/vendor/qrcode.min.js"></script>
 <!-- ?v= immer zusammen mit der Versionsnummer oben ändern: Sonst läuft die neue Seite mit alten Skripten aus dem Browser-Cache. -->
-<script src="core.js?v=1.15"></script>
-<script src="app.js?v=1.15"></script>
+<script src="core.js?v=1.18"></script>
+<script src="app.js?v=1.18"></script>
 </body>
 </html>

@@ -1216,7 +1216,7 @@
                 h('h1', null, doc.meta.name),
                 h('a', { id: 'syncPill', class: syncPillClass(), href: '#/g/' + doc.id + '/settings' }, syncLabel()),
                 h('div', { class: 'data-state', title: 'Gleicher Code auf zwei Geräten heißt: gleicher Stand.' },
-                    h('span', null, 'Stand'), h('code', null, C.dataFingerprint(doc).replace(/^(..)/, '$1 ')),
+                    h('span', null, 'Stand'), h('code', null, C.dataFingerprint(doc)),
                     h('div', { class: 'data-state-hint' }, 'Ändert sich, wenn Daten geändert werden'))),
             summary ? h('section', { class: 'panel' }, summary) : null,
             h('div', { class: 'group-actions' },
@@ -1423,7 +1423,7 @@
                     categoryIcon(doc, e.category),
                     h('span', { class: 'body' },
                         h('div', { class: 'title' }, e.desc),
-                        h('div', { class: 'sub' }, (e.refund ? 'Rückzahlung · ' : '') + REPEAT_LABELS[e.repeat] + ' · ' + nextBookingText(doc, e))),
+                        h('div', { class: 'sub' }, (e.refund ? 'Rückzahlung · ' : '') + repeatLabel(e) + ' · ' + nextBookingText(doc, e))),
                     h('span', { class: 'side' }, h('strong', null, money(C.expenseSign(e) * e.amount, e.currency))));
             })));
     }
@@ -1438,7 +1438,9 @@
                 state.filterOpen = !state.filterOpen;
                 filterButton.setAttribute('aria-expanded', String(state.filterOpen));
                 filterBox.hidden = !state.filterOpen;
+                // Zuklappen heißt: Filter weg, damit die Liste nie unbemerkt gefiltert bleibt.
                 if (state.filterOpen) filterBox.querySelector('#filterSearch').focus();
+                else filterBox.reset();
             }
         });
         const filterBox = viewFilterBox(doc, me, update);
@@ -1507,7 +1509,16 @@
         const min = amountInput('filterMin', 'min', 'von');
         const max = amountInput('filterMax', 'max', 'bis');
 
-        return h('div', { class: 'filter-box' },
+        function reset() {
+            Object.assign(f, emptyFilter());
+            state.search = '';
+            search.value = payer.value = member.value = category.value = min.value = max.value = '';
+            min.classList.remove('bad');
+            max.classList.remove('bad');
+            onChange();
+        }
+
+        const box = h('div', { class: 'filter-box' },
             h('div', { class: 'field' }, h('label', { for: 'filterSearch' }, 'Suchen'), search),
             h('div', { class: 'field-row' },
                 h('div', { class: 'field' }, h('label', { for: 'filterPayer' }, 'Bezahlt von'), payer),
@@ -1517,17 +1528,9 @@
                 h('div', { class: 'field' },
                     h('label', { for: 'filterMin' }, 'Betrag'),
                     h('div', { class: 'range-row' }, min, h('span', { 'aria-hidden': 'true' }, '–'), max))),
-            h('button', {
-                class: 'link-btn small', type: 'button',
-                onclick: function () {
-                    Object.assign(f, emptyFilter());
-                    state.search = '';
-                    search.value = payer.value = member.value = category.value = min.value = max.value = '';
-                    min.classList.remove('bad');
-                    max.classList.remove('bad');
-                    onChange();
-                }
-            }, 'Filter zurücksetzen'));
+            h('button', { class: 'link-btn small', type: 'button', onclick: reset }, 'Filter zurücksetzen'));
+        box.reset = reset;
+        return box;
     }
 
     /* Salden */
@@ -2007,7 +2010,24 @@
         adjust: 'Erst kommt die Korrektur (z. B. +5 für ein extra Getränk, -5 für einen Rabatt), der Rest wird gleich geteilt.',
         items: 'Tipp an, wer was hatte. Mehrere Namen teilen sich eine Position. Was niemand antippt, zählt als allgemeine Kosten.'
     };
-    const REPEAT_LABELS = { none: 'Nicht wiederholen', weekly: 'Jede Woche', biweekly: 'Alle zwei Wochen', monthly: 'Jeden Monat', yearly: 'Jedes Jahr' };
+    const REPEAT_UNITS = {
+        weekly: ['Jede Woche', 'Wochen', 'Woche'],
+        monthly: ['Jeden Monat', 'Monate', 'Monat'],
+        yearly: ['Jedes Jahr', 'Jahre', 'Jahr']
+    };
+
+    /** Alte Serien „alle zwei Wochen“ sind wöchentlich mit doppeltem Intervall. */
+    function repeatParts(e) {
+        const every = C.seriesEvery(e);
+        return e.repeat === 'biweekly' ? { repeat: 'weekly', every: every * 2 } : { repeat: e.repeat, every: every };
+    }
+
+    /** „Jeden Monat“, „Alle 3 Monate“ … */
+    function repeatLabel(e) {
+        const r = repeatParts(e);
+        if (r.repeat === 'none' || !REPEAT_UNITS[r.repeat]) return 'Nicht wiederholen';
+        return r.every === 1 ? REPEAT_UNITS[r.repeat][0] : 'Alle ' + r.every + ' ' + REPEAT_UNITS[r.repeat][1];
+    }
 
     /** Einklappbarer Abschnitt. `value` zeigt auch im zugeklappten Zustand den aktuellen Stand. */
     function fold(title, value, body, open) {
@@ -2053,7 +2073,8 @@
             date: existing ? existing.date : C.todayStr(),
             category: existing ? C.findCategory(doc, existing.category).id : 'general',
             note: existing ? existing.note : '',
-            repeat: existing ? existing.repeat : 'none',
+            repeat: existing ? repeatParts(existing).repeat : 'none',
+            everyText: existing ? String(repeatParts(existing).every) : '1',
             payMode: 'single',
             payer: me,
             paid: {},
@@ -2495,6 +2516,10 @@
             if (!desc) return fail('Bitte gib eine Beschreibung ein.');
             if (!total) return fail('Bitte gib einen gültigen Betrag ein.');
             if (!form.date) return fail('Bitte wähle ein Datum.', moreFold);
+            const every = readEvery();
+            if (form.repeat !== 'none' && form.type !== 'items' && !every) {
+                return fail('Bitte gib als Intervall eine ganze Zahl von 1 bis ' + C.MAX_EVERY + ' ein.', moreFold);
+            }
             const paid = readPayers(total);
             if (paid.error) return fail(paid.error, payFold);
             const read = readSplit();
@@ -2518,6 +2543,7 @@
             if (existing && existing.parent) record.parent = existing.parent;
             if (existing && existing.series) record.series = true;
             if (form.refund) record.refund = true;
+            if (record.repeat !== 'none') record.every = every;
             if (form.type === 'items') {
                 record.items = read.items;
                 record.claims = savedClaims(read.items);
@@ -2536,13 +2562,47 @@
             go('/g/' + doc.id + (form.type === 'items' || (existing && existing.series) ? '/expense/' + eid : ''));
         }
 
-        const repeatField = h('div', { class: 'field' },
-            h('label', { for: 'expRepeat' }, 'Wiederholen'),
-            h('select', {
-                id: 'expRepeat', value: form.repeat,
-                onchange: function (e) { form.repeat = e.target.value; refresh(); }
-            }, C.REPEATS.filter(function (r) { return r !== 'none' || !(existing && existing.series); })
-                .map(function (r) { return h('option', { value: r }, REPEAT_LABELS[r]); })));
+        /** Intervall aus dem Eingabefeld, oder null wenn ungültig. */
+        function readEvery() {
+            const n = Number(form.everyText.trim());
+            return Number.isInteger(n) && n >= 1 && n <= C.MAX_EVERY ? n : null;
+        }
+
+        const everyUnit = h('span', { class: 'every-unit' });
+        const everyInput = h('input', {
+            id: 'expEvery', type: 'text', inputmode: 'numeric', value: form.everyText, autocomplete: 'off',
+            oninput: function (e) {
+                form.everyText = e.target.value;
+                drawEvery();
+                refresh();
+            }
+        });
+        const everyField = h('div', { class: 'field' },
+            h('label', { for: 'expEvery' }, 'Intervall'),
+            h('div', { class: 'every-row' }, h('span', null, 'Alle'), everyInput, everyUnit));
+
+        function drawEvery() {
+            everyField.hidden = form.repeat === 'none';
+            const unit = REPEAT_UNITS[form.repeat];
+            everyUnit.textContent = unit ? (readEvery() === 1 ? unit[2] : unit[1]) : '';
+            everyInput.classList.toggle('bad', !!form.everyText.trim() && !readEvery());
+        }
+
+        const repeatField = h('div', null,
+            h('div', { class: 'field' },
+                h('label', { for: 'expRepeat' }, 'Wiederholen'),
+                h('select', {
+                    id: 'expRepeat', value: form.repeat,
+                    onchange: function (e) {
+                        form.repeat = e.target.value;
+                        drawEvery();
+                        refresh();
+                    }
+                }, [['none', 'Nicht wiederholen'], ['weekly', 'Wöchentlich'], ['monthly', 'Monatlich'], ['yearly', 'Jährlich']]
+                    .filter(function (r) { return r[0] !== 'none' || !(existing && existing.series); })
+                    .map(function (r) { return h('option', { value: r[0] }, r[1]); }))),
+            everyField);
+        drawEvery();
 
         const payFold = fold('Bezahlt von', payValue, payArea);
         const payFoldTitle = payFold.querySelector('.fold-title');
@@ -2740,7 +2800,7 @@
 
         const series = e.parent ? doc.expenses[e.parent] : null;
         const repeatInfo = !e.series ? null
-            : e.del ? REPEAT_LABELS[e.repeat] : REPEAT_LABELS[e.repeat] + ' · ' + nextBookingText(doc, e);
+            : e.del ? repeatLabel(e) : repeatLabel(e) + ' · ' + nextBookingText(doc, e);
 
         return h('div', null,
             backLink(doc),
