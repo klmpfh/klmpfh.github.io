@@ -1278,7 +1278,8 @@
 
     function activeFilterCount() {
         const f = state.filter;
-        return ['payer', 'member', 'category'].filter(function (k) { return f[k]; }).length
+        return (state.search.trim() ? 1 : 0)
+            + ['payer', 'member', 'category'].filter(function (k) { return f[k]; }).length
             + (filterBound(f.min) !== null || filterBound(f.max) !== null ? 1 : 0);
     }
 
@@ -1420,6 +1421,7 @@
                 state.filterOpen = !state.filterOpen;
                 filterButton.setAttribute('aria-expanded', String(state.filterOpen));
                 filterBox.hidden = !state.filterOpen;
+                if (state.filterOpen) filterBox.querySelector('#filterSearch').focus();
             }
         });
         const filterBox = viewFilterBox(doc, me, update);
@@ -1437,24 +1439,23 @@
             members.length < 2 ? h('div', { class: 'notice' },
                 'Du bist noch allein hier. ',
                 h('a', { href: '#/g/' + doc.id + '/settings' }, 'Lade deine Freunde ein.')) : null,
-            h('div', { class: 'search' },
-                h('input', {
-                    type: 'search', placeholder: 'Suchen', 'aria-label': 'Ausgaben durchsuchen',
-                    value: state.search,
-                    oninput: function (e) {
-                        state.search = e.target.value;
-                        update();
-                    }
-                }),
-                filterButton),
+            h('div', { class: 'filter-bar' }, filterButton),
             filterBox,
             summary,
             list));
     }
 
-    /** Filter nach Betrag, Person und Kategorie. Personen, die gegangen sind, bleiben wählbar. */
+    /** Suche und Filter nach Betrag, Person und Kategorie. Personen, die gegangen sind, bleiben wählbar. */
     function viewFilterBox(doc, me, onChange) {
         const f = state.filter;
+        const search = h('input', {
+            id: 'filterSearch', type: 'search', placeholder: 'Name, Notiz oder Kommentar', autocomplete: 'off',
+            value: state.search,
+            oninput: function (e) {
+                state.search = e.target.value;
+                onChange();
+            }
+        });
         const people = Object.keys(doc.members)
             .map(function (id) { return doc.members[id]; })
             .sort(function (a, b) { return a.name.localeCompare(b.name, 'de'); });
@@ -1490,6 +1491,7 @@
         const max = amountInput('filterMax', 'max', 'bis');
 
         return h('div', { class: 'filter-box' },
+            h('div', { class: 'field' }, h('label', { for: 'filterSearch' }, 'Suchen'), search),
             h('div', { class: 'field-row' },
                 h('div', { class: 'field' }, h('label', { for: 'filterPayer' }, 'Bezahlt von'), payer),
                 h('div', { class: 'field' }, h('label', { for: 'filterMember' }, 'Beteiligt'), member)),
@@ -1502,7 +1504,8 @@
                 class: 'link-btn small', type: 'button',
                 onclick: function () {
                     Object.assign(f, emptyFilter());
-                    payer.value = member.value = category.value = min.value = max.value = '';
+                    state.search = '';
+                    search.value = payer.value = member.value = category.value = min.value = max.value = '';
                     min.classList.remove('bad');
                     max.classList.remove('bad');
                     onChange();
