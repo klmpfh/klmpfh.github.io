@@ -793,6 +793,71 @@
         return null;
     }
 
+    /* ---------- Fixkosten & Vorausberechnung ---------- */
+
+    /** Wie oft eine Serie im Schnitt pro Monat bucht (ein Jahr = 365,25 Tage). */
+    function perMonth(series) {
+        var every = seriesEvery(series);
+        if (series.repeat === 'weekly') return 365.25 / 7 / 12 / every;
+        if (series.repeat === 'biweekly') return 365.25 / 14 / 12 / every;
+        if (series.repeat === 'monthly') return 1 / every;
+        if (series.repeat === 'yearly') return 1 / 12 / every;
+        return 0;
+    }
+
+    function addTo(map, id, value) {
+        if (value) map[id] = (map[id] || 0) + value;
+    }
+
+    /**
+     * Laufende Serien einer Währung, auf einen Monat umgerechnet: Was fällt im Schnitt
+     * jeden Monat an, und wer trägt davon wie viel? Rückzahlungen zählen negativ.
+     * Liefert {total, items: [{series, monthly}], owed: {id: betrag}}, gerundet auf Cent.
+     */
+    function fixedCosts(doc, cur) {
+        var total = 0;
+        var owedRaw = {};
+        var items = liveSeries(doc).filter(function (e) { return e.currency === cur; }).map(function (e) {
+            var factor = perMonth(e) * expenseSign(e);
+            var owed = computeOwed(e) || {};
+            Object.keys(owed).forEach(function (id) { addTo(owedRaw, id, owed[id] * factor); });
+            total += e.amount * factor;
+            return { series: e, monthly: Math.round(e.amount * factor) };
+        }).sort(function (a, b) { return Math.abs(b.monthly) - Math.abs(a.monthly) || (a.series.id < b.series.id ? -1 : 1); });
+        var owed = {};
+        Object.keys(owedRaw).forEach(function (id) { owed[id] = Math.round(owedRaw[id]); });
+        return { total: Math.round(total), items: items, owed: owed };
+    }
+
+    /**
+     * Was die Serien bis einschließlich `until` noch buchen werden, genau wie
+     * expandRecurring es an den Terminen tun wird (nach heute und nach dem letzten
+     * gebuchten Eintrag). Liefert {count, total, items: [{series, dates}], owed, paid}.
+     */
+    function forecast(doc, cur, today, until) {
+        var latest = latestOccurrences(doc);
+        var out = { count: 0, total: 0, items: [], owed: {}, paid: {} };
+        liveSeries(doc).filter(function (e) { return e.currency === cur; }).forEach(function (e) {
+            var dates = [];
+            var every = seriesEvery(e);
+            for (var n = 0; n <= 5000; n++) {
+                var date = occurrence(e.date, e.repeat, n, every);
+                if (date > until) break;
+                if (date > today && (!latest[e.id] || date > latest[e.id])) dates.push(date);
+            }
+            if (!dates.length) return;
+            var sign = expenseSign(e);
+            var owed = computeOwed(e) || {};
+            Object.keys(owed).forEach(function (id) { addTo(out.owed, id, sign * owed[id] * dates.length); });
+            Object.keys(e.payers).forEach(function (id) { addTo(out.paid, id, sign * e.payers[id] * dates.length); });
+            out.count += dates.length;
+            out.total += sign * e.amount * dates.length;
+            out.items.push({ series: e, dates: dates });
+        });
+        out.items.sort(function (a, b) { return a.dates[0] < b.dates[0] ? -1 : a.dates[0] > b.dates[0] ? 1 : 0; });
+        return out;
+    }
+
     /* ---------- Gruppen-Dokument ---------- */
 
     var COLLECTIONS = ['members', 'expenses', 'payments', 'comments', 'activity', 'categories'];
@@ -1770,6 +1835,8 @@
         liveSeries: liveSeries,
         occurrencesOf: occurrencesOf,
         nextOccurrence: nextOccurrence,
+        fixedCosts: fixedCosts,
+        forecast: forecast,
         dataFingerprint: dataFingerprint,
         emptyGroup: emptyGroup,
         lastT: lastT,

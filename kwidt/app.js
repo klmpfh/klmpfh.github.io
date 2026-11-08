@@ -2311,7 +2311,7 @@
         // Zugeklappt zeigt die Zeile, was als Nächstes dran ist.
         const first = series[0];
         const firstDate = C.nextOccurrence(doc, first, today);
-        const preview = series.length + ' · ' + (firstDate
+        const preview = series.length + ' Stück · ' + (firstDate
             ? 'nächste: ' + first.desc + ' am ' + formatDate(firstDate) + ' (' + daysUntil(firstDate) + ')'
             : 'keine weitere geplant');
         const body = h('div', { class: 'list' }, series.map(function (e) {
@@ -2573,6 +2573,113 @@
             rows);
     }
 
+    /** Personen mit Beträgen in einer Liste: aktive Mitglieder und alle, die in `maps` vorkommen. */
+    function statPeople(doc, maps) {
+        const ids = activeMembers(doc).map(function (m) { return m.id; });
+        maps.forEach(function (map) {
+            Object.keys(map || {}).forEach(function (id) { if (ids.indexOf(id) === -1) ids.push(id); });
+        });
+        return ids;
+    }
+
+    /** Fixkosten: alle laufenden Wiederholungen auf einen Monat umgerechnet. */
+    function viewFixedCosts(doc, cur) {
+        const fixed = C.fixedCosts(doc, cur);
+        if (!fixed.items.length) return null;
+        const me = meId(doc.id);
+        return h('section', { class: 'panel' },
+            h('h2', null, 'Fixkosten'),
+            h('div', { class: 'stat-total' }, money(fixed.total, cur), h('span', { class: 'stat-unit' }, ' im Monat')),
+            h('div', { class: 'small muted', style: 'margin-bottom:10px' }, 'Aus ' + fixed.items.length + (fixed.items.length === 1 ? ' Wiederholung' : ' Wiederholungen')
+                + ', im Schnitt pro Monat. Was seltener als monatlich anfällt, zählt anteilig.'
+                + (me && fixed.owed[me] ? ' Dein Anteil: ' + money(fixed.owed[me], cur) + '.' : '')),
+            fixed.items.map(function (item) {
+                return h('div', { class: 'kv' },
+                    h('span', null, item.series.desc,
+                        h('div', { class: 'small muted' }, repeatLabel(item.series) + ' · ' + money(C.expenseSign(item.series) * item.series.amount, cur))),
+                    h('span', null, money(item.monthly, cur)));
+            }),
+            h('div', { class: 'link-title', style: 'margin-top:12px' }, 'Pro Person und Monat'),
+            statPeople(doc, [fixed.owed]).map(function (id) {
+                return h('div', { class: 'kv' },
+                    h('span', null, memberName(doc, id) + (id === me ? ' (du)' : '')),
+                    h('span', null, money(fixed.owed[id] || 0, cur)));
+            }));
+    }
+
+    /** Datum in n Monaten, als JJJJ-MM-TT. */
+    function monthsAhead(n) {
+        const d = new Date();
+        d.setMonth(d.getMonth() + n);
+        return C.todayStr(d);
+    }
+
+    /** Was die Wiederholungen bis zu einem Datum noch buchen, und wie die Salden dann stehen. */
+    function viewForecast(doc, cur) {
+        if (!C.liveSeries(doc).some(function (e) { return e.currency === cur; })) return null;
+        const me = meId(doc.id);
+        const today = C.todayStr();
+        if (!state.forecastDate || state.forecastDate <= today) state.forecastDate = monthsAhead(3);
+        const result = h('div', null);
+
+        function draw() {
+            result.textContent = '';
+            const until = state.forecastDate;
+            if (!until || until <= today) {
+                result.appendChild(h('div', { class: 'small muted' }, 'Bitte ein Datum nach heute wählen.'));
+                return;
+            }
+            const fc = C.forecast(doc, cur, today, until);
+            if (!fc.count) {
+                result.appendChild(h('div', { class: 'small muted' }, 'Bis dahin ist keine Buchung fällig.'));
+                return;
+            }
+            const balances = C.computeBalances(doc)[cur] || {};
+            result.appendChild(h('div', { class: 'stat-total' }, money(fc.total, cur)));
+            result.appendChild(h('div', { class: 'small muted', style: 'margin-bottom:10px' },
+                fc.count + (fc.count === 1 ? ' Buchung' : ' Buchungen') + ' bis einschließlich ' + formatDate(until, true)));
+            fc.items.forEach(function (item) {
+                const each = C.expenseSign(item.series) * item.series.amount;
+                result.appendChild(h('div', { class: 'kv' },
+                    h('span', null, item.series.desc,
+                        h('div', { class: 'small muted' }, item.dates.length + '× ' + money(each, cur) + ' · ' + item.dates.map(function (d) { return formatDate(d); }).join(', '))),
+                    h('span', null, money(each * item.dates.length, cur))));
+            });
+            result.appendChild(h('div', { class: 'link-title', style: 'margin-top:12px' }, 'Verteilung und Salden'));
+            result.appendChild(h('div', { class: 'table-wrap' },
+                h('table', { class: 'stat' },
+                    h('thead', null, h('tr', null,
+                        h('th', { scope: 'col' }, 'Person'),
+                        h('th', { scope: 'col' }, 'Trägt'),
+                        h('th', { scope: 'col' }, 'Zahlt'),
+                        h('th', { scope: 'col' }, 'Saldo dann'))),
+                    h('tbody', null, statPeople(doc, [fc.owed, fc.paid]).map(function (id) {
+                        const after = (balances[id] || 0) + (fc.paid[id] || 0) - (fc.owed[id] || 0);
+                        return h('tr', null,
+                            h('td', null, memberName(doc, id) + (id === me ? ' (du)' : '')),
+                            h('td', null, money(fc.owed[id] || 0, cur)),
+                            h('td', null, money(fc.paid[id] || 0, cur)),
+                            h('td', { class: after > 0 ? 'pos' : after < 0 ? 'neg' : '' }, money(after, cur)));
+                    })))));
+            result.appendChild(h('p', { class: 'small muted', style: 'margin-top:8px' },
+                '„Saldo dann“ ist der heutige Saldo plus diese Buchungen, angenommen, sonst ändert sich nichts. Positiv: bekommt Geld, negativ: schuldet. Gebucht wird erst, wenn ein Termin da ist.'));
+        }
+        draw();
+
+        return h('section', { class: 'panel' },
+            h('h2', null, 'Vorausberechnung'),
+            h('div', { class: 'field' },
+                h('label', { for: 'forecastDate' }, 'Wiederholungen vorausrechnen bis'),
+                h('input', {
+                    id: 'forecastDate', type: 'date', value: state.forecastDate, min: C.todayStr(new Date(Date.now() + 86400000)),
+                    onchange: function (e) {
+                        state.forecastDate = e.target.value;
+                        draw();
+                    }
+                })),
+            result);
+    }
+
     function viewStatsTab(doc) {
         const currencies = C.currenciesUsed(doc);
         const cur = currencies.indexOf(state.statsCur) !== -1 ? state.statsCur : currencies[0];
@@ -2589,7 +2696,10 @@
             }, currencies.map(function (c) { return h('option', { value: c }, c); }))) : null;
 
         if (!stats.count) {
-            return h('section', { class: 'panel' }, picker, h('div', { class: 'empty' }, 'Noch nichts auszuwerten.'));
+            return h('div', null,
+                h('section', { class: 'panel' }, picker, h('div', { class: 'empty' }, 'Noch nichts auszuwerten.')),
+                viewFixedCosts(doc, cur),
+                viewForecast(doc, cur));
         }
 
         const maxCategory = stats.byCategory[0].amount;
@@ -2610,6 +2720,8 @@
                         h('div', { class: 'small muted' }, 'Ergebnis'),
                         h('div', { class: 'stat-total ' + (stats.total > 0 ? 'neg' : stats.total < 0 ? 'pos' : '') }, money(-stats.total, cur)),
                         h('div', { class: 'small muted' }, 'Einnahmen minus Ausgaben')))),
+            viewFixedCosts(doc, cur),
+            viewForecast(doc, cur),
             h('section', { class: 'panel' },
                 h('h2', null, 'Nach Kategorie'),
                 stats.byCategory.map(function (row) {
