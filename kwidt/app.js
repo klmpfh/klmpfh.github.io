@@ -29,7 +29,11 @@
     const toastEl = document.getElementById('toast');
 
     let store = { groups: {}, me: {}, last: null, seen: {} };
-    const state = { formActive: false, pendingRender: false, unsaved: false, search: '', statsCur: null, lastPath: null };
+    const state = { formActive: false, pendingRender: false, unsaved: false, search: '', filter: emptyFilter(), filterOpen: false, statsCur: null, lastPath: null };
+
+    function emptyFilter() {
+        return { payer: '', member: '', category: '', min: '', max: '' };
+    }
 
     /* ---------- Helfer ---------- */
 
@@ -649,7 +653,11 @@
                 go('/');
                 return;
             }
-            if (Sync.gid !== route.gid) state.search = '';
+            if (Sync.gid !== route.gid) {
+                state.search = '';
+                state.filter = emptyFilter();
+                state.filterOpen = false;
+            }
             if (store.last !== route.gid) {
                 store.last = route.gid;
                 persist();
@@ -895,7 +903,69 @@
                 },
                     h('option', { value: '' }, 'Bitte wählen'),
                     imported.members.map(function (m) { return h('option', { value: m }, m); }))));
+            importSummary.appendChild(importCategoriesField());
             importSummary.appendChild(h('button', { class: 'link-btn small', type: 'button', onclick: clearImport }, 'Import verwerfen'));
+        }
+
+        /**
+         * Welche Kategorien soll es geben? Zur Wahl stehen die Vorgaben und Titel, die
+         * mehrmals vorkommen. Ausgaben, die genauso heißen, bekommen die Kategorie.
+         */
+        function importCategoriesField() {
+            const options = C.groupCategories(C.emptyGroup(C.newGroupId()))
+                .filter(function (c) { return c.id !== 'general'; })
+                .map(function (c) { return { label: c.label, count: 0 }; })
+                .concat(C.splidCategorySuggestions(imported));
+            imported.categories = options.map(function (o) { return o.label; });
+
+            function countFor(label) {
+                const key = label.toLocaleLowerCase('de');
+                return imported.expenses.filter(function (x) { return C.tidyText(x.desc, 120).toLocaleLowerCase('de') === key; }).length;
+            }
+            function chip(label, on) {
+                const count = countFor(label);
+                return h('button', {
+                    class: 'chip', type: 'button', 'aria-pressed': String(on),
+                    title: count ? count + (count === 1 ? ' Ausgabe heißt so' : ' Ausgaben heißen so') : null,
+                    onclick: function (e) {
+                        const nowOn = e.currentTarget.getAttribute('aria-pressed') !== 'true';
+                        e.currentTarget.setAttribute('aria-pressed', String(nowOn));
+                        imported.categories = imported.categories.filter(function (l) { return l !== label; });
+                        if (nowOn) imported.categories.push(label);
+                    }
+                }, label, count ? h('span', { class: 'chip-count' }, String(count)) : null);
+            }
+
+            const chips = h('div', { class: 'chips' }, options.map(function (o) { return chip(o.label, true); }));
+            const addInput = h('input', {
+                type: 'text', maxlength: 40, placeholder: 'Weitere Kategorie', 'aria-label': 'Weitere Kategorie', autocomplete: 'off',
+                onkeydown: function (e) {
+                    if (e.key !== 'Enter') return;
+                    e.preventDefault();
+                    add();
+                }
+            });
+            function add() {
+                const label = C.tidyText(addInput.value, 40);
+                if (!label) return;
+                addInput.value = '';
+                const key = label.toLocaleLowerCase('de');
+                const known = Array.from(chips.children).filter(function (el) {
+                    return el.firstChild.textContent.toLocaleLowerCase('de') === key;
+                })[0];
+                if (known) {
+                    if (known.getAttribute('aria-pressed') !== 'true') known.click();
+                    return;
+                }
+                imported.categories.push(label);
+                chips.appendChild(chip(label, true));
+            }
+
+            return h('div', { class: 'field', style: 'margin:0 0 8px' },
+                h('span', { class: 'field-label' }, 'Welche Kategorien soll es geben?'),
+                h('div', { class: 'field-hint', style: 'margin:0 0 8px' }, 'Ausgaben, die genauso heißen wie eine Kategorie, bekommen sie. Die Zahl zeigt, wie viele das sind.'),
+                chips,
+                h('div', { class: 'add-row' }, addInput, h('button', { class: 'btn btn-small', type: 'button', onclick: add }, 'Hinzufügen')));
         }
 
         async function onImport(e) {
@@ -1145,8 +1215,9 @@
                 groupAvatar(doc.meta.name, true),
                 h('h1', null, doc.meta.name),
                 h('a', { id: 'syncPill', class: syncPillClass(), href: '#/g/' + doc.id + '/settings' }, syncLabel()),
-                h('div', { class: 'data-state', title: 'Gleiche Emojis auf zwei Geräten bedeuten: gleicher Stand.' },
-                    h('span', null, 'Stand'), C.dataFingerprint(doc).join(' '))),
+                h('div', { class: 'data-state', title: 'Gleiches Emoji auf zwei Geräten heißt: gleicher Stand.' },
+                    h('span', null, 'Stand'), C.dataFingerprint(doc),
+                    h('div', { class: 'data-state-hint' }, 'Ändert sich, wenn Daten geändert werden'))),
             summary ? h('section', { class: 'panel' }, summary) : null,
             h('div', { class: 'group-actions' },
                 h('a', { class: 'btn', href: '#/g/' + doc.id + '/expense' }, '+ Ausgabe'),
@@ -1165,9 +1236,11 @@
     function payerText(doc, e, me) {
         const payers = Object.keys(e.payers).filter(function (id) { return e.payers[id] > 0; });
         const amount = money(e.amount, e.currency);
-        if (payers.length > 1) return payers.length + ' Personen haben ' + amount + ' bezahlt';
-        if (payers[0] === me) return 'Du hast ' + amount + ' bezahlt';
-        return memberName(doc, payers[0]) + ' hat ' + amount + ' bezahlt';
+        const verb = e.refund ? ' bekommen' : ' bezahlt';
+        const prefix = e.refund ? 'Rückzahlung: ' : '';
+        if (payers.length > 1) return prefix + payers.length + ' Personen haben ' + amount + verb;
+        if (payers[0] === me) return prefix + 'Du hast ' + amount + verb;
+        return prefix + memberName(doc, payers[0]) + ' hat ' + amount + verb;
     }
 
     function paymentText(doc, p, me) {
@@ -1179,42 +1252,100 @@
 
     function expenseEffect(e, me) {
         const owed = C.computeOwed(e) || {};
-        const net = (e.payers[me] || 0) - (owed[me] || 0);
+        const net = C.expenseSign(e) * ((e.payers[me] || 0) - (owed[me] || 0));
         if (net > 0) return h('span', { class: 'side' }, h('span', { class: 'muted' }, 'du bekommst'), h('strong', { class: 'pos' }, money(net, e.currency)));
         if (net < 0) return h('span', { class: 'side' }, h('span', { class: 'muted' }, 'du schuldest'), h('strong', { class: 'neg' }, money(-net, e.currency)));
         return h('span', { class: 'side muted' }, e.payers[me] || owed[me] ? 'ausgeglichen' : 'nicht beteiligt');
     }
 
-    function matchesSearch(doc, entry, term) {
+    /** Der Suchbegriff gilt für Name, Notiz, Positionen und Kommentare. */
+    function matchesSearch(entry, term, commentTexts) {
         if (!term) return true;
         const parts = entry.kind === 'expense'
-            ? [entry.e.desc, entry.e.note, C.findCategory(doc, entry.e.category).label]
-                .concat(Object.keys(entry.e.payers).map(function (id) { return memberName(doc, id); }))
-                .concat(Object.keys(entry.e.split.values).map(function (id) { return memberName(doc, id); }))
+            ? [entry.e.desc, entry.e.note]
                 .concat((entry.e.items || []).map(function (item) { return item.name; }))
-            : [entry.p.note, memberName(doc, entry.p.from), memberName(doc, entry.p.to), 'zahlung'];
-        return parts.join(' ').toLowerCase().indexOf(term) !== -1;
+                .concat(commentTexts[entry.e.id] || [])
+            : [entry.p.note, 'zahlung'];
+        return parts.join('\n').toLocaleLowerCase('de').indexOf(term) !== -1;
     }
 
-    function renderEntries(container, doc, me) {
-        const term = state.search.trim().toLowerCase();
+    /** Betragsgrenze aus dem Filter als Zahl in ganzen Einheiten (12,50 → 12.5), sonst null. */
+    function filterBound(text) {
+        if (!String(text).trim()) return null;
+        const minor = C.parseAmount(text, 'EUR');
+        return minor === null ? null : minor / 100;
+    }
+
+    function activeFilterCount() {
+        const f = state.filter;
+        return ['payer', 'member', 'category'].filter(function (k) { return f[k]; }).length
+            + (filterBound(f.min) !== null || filterBound(f.max) !== null ? 1 : 0);
+    }
+
+    /** Zahlungen zählen mit: Wer überweist, hat gezahlt, beide sind beteiligt. Eine Kategorie haben sie nicht. */
+    function matchesFilter(doc, entry) {
+        const f = state.filter;
+        const min = filterBound(f.min);
+        const max = filterBound(f.max);
+        const x = entry.kind === 'expense' ? entry.e : entry.p;
+        const value = x.amount / Math.pow(10, C.currencyDecimals(x.currency));
+        if (min !== null && value < min) return false;
+        if (max !== null && value > max) return false;
+        if (entry.kind === 'payment') {
+            if (f.category) return false;
+            if (f.payer && x.from !== f.payer) return false;
+            if (f.member && x.from !== f.member && x.to !== f.member) return false;
+            return true;
+        }
+        if (f.category && C.findCategory(doc, x.category).id !== f.category) return false;
+        if (f.payer && !(x.payers[f.payer] > 0)) return false;
+        if (f.member && !((C.computeOwed(x) || {})[f.member] > 0)) return false;
+        return true;
+    }
+
+    function renderEntries(container, doc, me, summary) {
+        const term = state.search.trim().toLocaleLowerCase('de');
+        const filtering = !!term || activeFilterCount() > 0;
         const commentCounts = {};
+        const commentTexts = {};
         Object.keys(doc.comments).forEach(function (id) {
             const c = doc.comments[id];
-            if (!c.del) commentCounts[c.expense] = (commentCounts[c.expense] || 0) + 1;
+            if (c.del) return;
+            commentCounts[c.expense] = (commentCounts[c.expense] || 0) + 1;
+            (commentTexts[c.expense] = commentTexts[c.expense] || []).push(c.text);
         });
 
         const entries = C.liveExpenses(doc).map(function (e) { return { kind: 'expense', date: e.date, t: e.t, e: e }; })
             .concat(C.livePayments(doc).map(function (p) { return { kind: 'payment', date: p.date, t: p.t, p: p }; }))
-            .filter(function (entry) { return matchesSearch(doc, entry, term); })
+            .filter(function (entry) { return matchesSearch(entry, term, commentTexts) && matchesFilter(doc, entry); })
             .sort(function (a, b) {
                 if (a.date !== b.date) return a.date < b.date ? 1 : -1;
                 return b.t - a.t;
             });
 
+        if (summary) {
+            summary.textContent = '';
+            summary.hidden = !filtering || !entries.length;
+            if (filtering && entries.length) {
+                const expenses = entries.filter(function (entry) { return entry.kind === 'expense'; });
+                const totals = {};
+                expenses.forEach(function (entry) {
+                    totals[entry.e.currency] = (totals[entry.e.currency] || 0) + C.expenseSign(entry.e) * entry.e.amount;
+                });
+                const parts = [];
+                if (expenses.length) {
+                    parts.push(expenses.length + (expenses.length === 1 ? ' Ausgabe' : ' Ausgaben') + ': '
+                        + Object.keys(totals).map(function (cur) { return money(totals[cur], cur); }).join(' + '));
+                }
+                const payments = entries.length - expenses.length;
+                if (payments) parts.push(payments + (payments === 1 ? ' Zahlung' : ' Zahlungen'));
+                summary.textContent = parts.join(' · ');
+            }
+        }
+
         container.textContent = '';
         if (!entries.length) {
-            container.appendChild(h('div', { class: 'empty' }, term ? 'Nichts gefunden.' : [
+            container.appendChild(h('div', { class: 'empty' }, filtering ? 'Nichts gefunden.' : [
                 h('span', { class: 'big', 'aria-hidden': 'true' }, '🧾'),
                 'Noch keine Ausgaben. Trag die erste ein.'
             ]));
@@ -1274,29 +1405,109 @@
                     categoryIcon(doc, e.category),
                     h('span', { class: 'body' },
                         h('div', { class: 'title' }, e.desc),
-                        h('div', { class: 'sub' }, REPEAT_LABELS[e.repeat] + ' · ' + nextBookingText(doc, e))),
-                    h('span', { class: 'side' }, h('strong', null, money(e.amount, e.currency))));
+                        h('div', { class: 'sub' }, (e.refund ? 'Rückzahlung · ' : '') + REPEAT_LABELS[e.repeat] + ' · ' + nextBookingText(doc, e))),
+                    h('span', { class: 'side' }, h('strong', null, money(C.expenseSign(e) * e.amount, e.currency))));
             })));
     }
 
     function viewExpensesTab(doc, balances, me) {
         const list = h('div', { class: 'list' });
-        renderEntries(list, doc, me);
+        const summary = h('div', { class: 'filter-summary', hidden: true });
         const members = activeMembers(doc);
+        const filterButton = h('button', {
+            class: 'btn btn-small filter-toggle', type: 'button', 'aria-expanded': String(state.filterOpen),
+            onclick: function () {
+                state.filterOpen = !state.filterOpen;
+                filterButton.setAttribute('aria-expanded', String(state.filterOpen));
+                filterBox.hidden = !state.filterOpen;
+            }
+        });
+        const filterBox = viewFilterBox(doc, me, update);
+        filterBox.hidden = !state.filterOpen;
+
+        function update() {
+            const count = activeFilterCount();
+            filterButton.textContent = count ? 'Filter (' + count + ')' : 'Filter';
+            filterButton.classList.toggle('on', count > 0);
+            renderEntries(list, doc, me, summary);
+        }
+        update();
+
         return h('div', null, viewSeriesPanel(doc), h('section', { class: 'panel' },
             members.length < 2 ? h('div', { class: 'notice' },
                 'Du bist noch allein hier. ',
                 h('a', { href: '#/g/' + doc.id + '/settings' }, 'Lade deine Freunde ein.')) : null,
             h('div', { class: 'search' },
                 h('input', {
-                    type: 'text', placeholder: 'Suchen', 'aria-label': 'Ausgaben durchsuchen',
+                    type: 'search', placeholder: 'Suchen', 'aria-label': 'Ausgaben durchsuchen',
                     value: state.search,
                     oninput: function (e) {
                         state.search = e.target.value;
-                        renderEntries(list, doc, me);
+                        update();
                     }
-                })),
+                }),
+                filterButton),
+            filterBox,
+            summary,
             list));
+    }
+
+    /** Filter nach Betrag, Person und Kategorie. Personen, die gegangen sind, bleiben wählbar. */
+    function viewFilterBox(doc, me, onChange) {
+        const f = state.filter;
+        const people = Object.keys(doc.members)
+            .map(function (id) { return doc.members[id]; })
+            .sort(function (a, b) { return a.name.localeCompare(b.name, 'de'); });
+
+        function personSelect(id, key) {
+            return h('select', {
+                id: id, value: f[key],
+                onchange: function (e) { f[key] = e.target.value; onChange(); }
+            },
+                h('option', { value: '' }, 'Alle'),
+                people.map(function (m) { return h('option', { value: m.id }, m.id === me ? m.name + ' (du)' : m.name); }));
+        }
+        function amountInput(id, key, placeholder) {
+            return h('input', {
+                id: id, type: 'text', inputmode: 'decimal', placeholder: placeholder, autocomplete: 'off', value: f[key],
+                oninput: function (e) {
+                    f[key] = e.target.value;
+                    e.target.classList.toggle('bad', !!e.target.value.trim() && filterBound(e.target.value) === null);
+                    onChange();
+                }
+            });
+        }
+
+        const payer = personSelect('filterPayer', 'payer');
+        const member = personSelect('filterMember', 'member');
+        const category = h('select', {
+            id: 'filterCategory', value: f.category,
+            onchange: function (e) { f.category = e.target.value; onChange(); }
+        },
+            h('option', { value: '' }, 'Alle'),
+            C.groupCategories(doc).map(function (c) { return h('option', { value: c.id }, categoryLabel(c)); }));
+        const min = amountInput('filterMin', 'min', 'von');
+        const max = amountInput('filterMax', 'max', 'bis');
+
+        return h('div', { class: 'filter-box' },
+            h('div', { class: 'field-row' },
+                h('div', { class: 'field' }, h('label', { for: 'filterPayer' }, 'Bezahlt von'), payer),
+                h('div', { class: 'field' }, h('label', { for: 'filterMember' }, 'Beteiligt'), member)),
+            h('div', { class: 'field-row' },
+                h('div', { class: 'field' }, h('label', { for: 'filterCategory' }, 'Kategorie'), category),
+                h('div', { class: 'field' },
+                    h('label', { for: 'filterMin' }, 'Betrag'),
+                    h('div', { class: 'range-row' }, min, h('span', { 'aria-hidden': 'true' }, '–'), max))),
+            h('button', {
+                class: 'link-btn small', type: 'button',
+                onclick: function () {
+                    Object.assign(f, emptyFilter());
+                    payer.value = member.value = category.value = min.value = max.value = '';
+                    min.classList.remove('bad');
+                    max.classList.remove('bad');
+                    onChange();
+                }
+            }, 'Filter zurücksetzen'));
     }
 
     /* Salden */
@@ -1391,7 +1602,7 @@
     function barRow(label, value, max, cur) {
         return h('div', { class: 'bar-row' },
             h('span', { class: 'label' }, label),
-            h('span', { class: 'bar', 'aria-hidden': 'true' }, h('span', { style: 'width:' + (max ? value / max * 100 : 0).toFixed(1) + '%' })),
+            h('span', { class: 'bar', 'aria-hidden': 'true' }, h('span', { style: 'width:' + (max > 0 ? Math.max(0, value) / max * 100 : 0).toFixed(1) + '%' })),
             h('span', { class: 'value' }, money(value, cur)));
     }
 
@@ -1538,7 +1749,7 @@
                 h('p', { class: 'small muted' }, 'Wie der kurze Link: Er enthält nur die Adresse der Gruppe.'),
                 qrBox),
             h('p', { class: 'small muted', style: 'margin-top:14px' }, 'Wer einen Link hat, kann die Gruppe lesen und bearbeiten. Für den Live-Abgleich wird der öffentliche Dienst PeerJS genutzt, die Daten selbst gehen verschlüsselt von Gerät zu Gerät.'),
-            h('p', { class: 'small muted', style: 'margin-top:8px' }, 'Die Emojis neben „Stand“ oben sind ein Fingerabdruck eurer Eingaben: Sehen sie auf zwei Geräten gleich aus, seid ihr auf demselben Stand.'));
+            h('p', { class: 'small muted', style: 'margin-top:8px' }, 'Das Emoji neben „Stand“ oben ist ein Fingerabdruck eurer Eingaben: Sieht es auf zwei Geräten gleich aus, seid ihr auf demselben Stand.'));
     }
 
     function viewMembersPanel(doc, balances, me) {
@@ -1622,7 +1833,7 @@
 
     function viewCategoriesPanel(doc) {
         const list = C.groupCategories(doc).filter(function (c) { return c.id !== 'general'; });
-        const addInput = h('input', { type: 'text', maxlength: 40, placeholder: '🐶 Haustier', 'aria-label': 'Neue Kategorie', autocomplete: 'off' });
+        const addInput = h('input', { type: 'text', maxlength: 40, placeholder: 'Neue Kategorie', 'aria-label': 'Neue Kategorie', autocomplete: 'off' });
 
         function save(kind, label) {
             logActivity(doc, kind, '', label);
@@ -1640,7 +1851,7 @@
         }
 
         const body = [
-            h('p', { class: 'small muted', style: 'margin-bottom:6px' }, 'Gelten für die ganze Gruppe. Ein Emoji im Namen wird zum Symbol. Entfernst du eine Kategorie, zeigen ihre Ausgaben keine Kategorie mehr, bis du sie wieder ergänzt.'),
+            h('p', { class: 'small muted', style: 'margin-bottom:6px' }, 'Gelten für die ganze Gruppe. Heißt eine Ausgabe genauso wie eine Kategorie, wird sie ausgewählt. Entfernst du eine Kategorie, zeigen ihre Ausgaben keine Kategorie mehr, bis du sie wieder ergänzt.'),
             list.map(function (c) {
                 return h('div', { class: 'category-row' },
                     h('span', null, categoryLabel(c)),
@@ -1758,6 +1969,8 @@
         const existingItems = existing && existing.items ? existing.items : [];
         const form = {
             desc: existing ? existing.desc : '',
+            // Rückzahlung: Jemand hat Geld bekommen (z. B. vom Stromversorger), das allen zusteht.
+            refund: existing ? !!existing.refund : false,
             amountText: existing ? C.amountToInput(existing.amount, existing.currency) : '',
             currency: existing ? existing.currency : doc.meta.currency,
             date: existing ? existing.date : C.todayStr(),
@@ -1829,9 +2042,33 @@
         }, 'Betrag auf die Summe setzen');
         const previews = {};
 
+        // Heißt die Ausgabe wie eine Kategorie, wird diese gewählt. Passt der Name nicht
+        // mehr, gilt wieder, was zuletzt von Hand gewählt war.
+        let manualCategory = form.category;
+        const categorySelect = h('select', {
+            id: 'expCategory', value: form.category,
+            onchange: function (e) {
+                form.category = e.target.value;
+                manualCategory = form.category;
+                refresh();
+            }
+        }, C.groupCategories(doc).map(function (c) { return h('option', { value: c.id }, categoryLabel(c)); }));
         const descInput = h('input', {
             id: 'expDesc', type: 'text', maxlength: 120, value: form.desc, placeholder: 'Pizza, Tanken, Miete …', autocomplete: 'off',
-            oninput: function (e) { form.desc = e.target.value; }
+            oninput: function (e) {
+                form.desc = e.target.value;
+                const match = C.categoryByName(doc, form.desc);
+                const category = match ? match.id : manualCategory;
+                if (category !== form.category) {
+                    form.category = category;
+                    categorySelect.value = category;
+                    refresh();
+                }
+            },
+            onchange: function (e) {
+                form.desc = C.tidyText(e.target.value, 120);
+                e.target.value = form.desc;
+            }
         });
         const amountInput = h('input', {
             id: 'expAmount', type: 'text', inputmode: 'decimal', value: form.amountText, placeholder: '0,00', autocomplete: 'off',
@@ -2040,7 +2277,7 @@
             payArea.textContent = '';
             if (form.payMode === 'single') {
                 payArea.appendChild(h('select', {
-                    id: 'payer', value: form.payer, 'aria-label': 'Bezahlt von',
+                    id: 'payer', value: form.payer, 'aria-label': form.refund ? 'Bekommen hat' : 'Bezahlt von',
                     onchange: function (e) {
                         if (e.target.value === '__multi') {
                             form.payMode = 'multi';
@@ -2062,7 +2299,7 @@
                         h('span', { class: 'name' }, memberName(doc, id)),
                         h('input', {
                             type: 'text', inputmode: 'decimal', value: form.paid[id] || '', placeholder: '0,00',
-                            'aria-label': 'Bezahlt von ' + memberName(doc, id),
+                            'aria-label': (form.refund ? 'Bekommen hat ' : 'Bezahlt von ') + memberName(doc, id),
                             oninput: function (e) { form.paid[id] = e.target.value; refresh(); }
                         }));
                 }),
@@ -2070,7 +2307,7 @@
                 h('button', {
                     class: 'link-btn small', type: 'button',
                     onclick: function () { form.payMode = 'single'; drawPayers(); refresh(); }
-                }, 'Nur eine Person hat bezahlt')));
+                }, form.refund ? 'Nur eine Person hat es bekommen' : 'Nur eine Person hat bezahlt')));
         }
 
         function addItem(name, amountText) {
@@ -2133,7 +2370,7 @@
                     }
                 }, SPLIT_LABELS[type]));
             });
-            splitHint.textContent = SPLIT_HINTS[form.type];
+            splitHint.textContent = form.refund && form.type === 'equal' ? 'Alle Angehakten bekommen gleich viel.' : SPLIT_HINTS[form.type];
             generalLabel.hidden = form.type !== 'items';
             repeatField.hidden = form.type === 'items' || !!(existing && existing.parent);
             drawItems();
@@ -2176,7 +2413,7 @@
                 if (section) section.open = true;
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             }
-            const desc = form.desc.trim();
+            const desc = C.tidyText(form.desc, 120);
             const total = amount();
             if (!desc) return fail('Bitte gib eine Beschreibung ein.');
             if (!total) return fail('Bitte gib einen gültigen Betrag ein.');
@@ -2203,6 +2440,7 @@
             };
             if (existing && existing.parent) record.parent = existing.parent;
             if (existing && existing.series) record.series = true;
+            if (form.refund) record.refund = true;
             if (form.type === 'items') {
                 record.items = read.items;
                 record.claims = savedClaims(read.items);
@@ -2230,16 +2468,46 @@
                 .map(function (r) { return h('option', { value: r }, REPEAT_LABELS[r]); })));
 
         const payFold = fold('Bezahlt von', payValue, payArea);
+        const payFoldTitle = payFold.querySelector('.fold-title');
+        const formTitle = h('h2');
+        const submitButton = h('button', { class: 'btn btn-block', type: 'submit' });
+        const kindButtons = {};
+        const kindSeg = h('div', { class: 'seg kind-seg', role: 'group', 'aria-label': 'Art' },
+            [['expense', 'Ausgabe'], ['refund', 'Rückzahlung']].map(function (kind) {
+                kindButtons[kind[0]] = h('button', {
+                    type: 'button',
+                    onclick: function () {
+                        form.refund = kind[0] === 'refund';
+                        applyKind();
+                        drawPayers();
+                        drawSplit();
+                        refresh();
+                    }
+                }, kind[1]);
+                return kindButtons[kind[0]];
+            }));
+        const kindHint = h('p', { class: 'small muted', style: 'margin:-6px 0 12px' },
+            'Zum Beispiel Geld vom Stromversorger: Wer es bekommen hat, gibt den anderen ihren Teil ab.');
+
+        /** Ausgabe oder Rückzahlung: Nur die Texte unterscheiden sich, die Felder sind dieselben. */
+        function applyKind() {
+            const noun = form.refund ? 'Rückzahlung' : 'Ausgabe';
+            kindButtons.expense.setAttribute('aria-pressed', String(!form.refund));
+            kindButtons.refund.setAttribute('aria-pressed', String(form.refund));
+            kindHint.hidden = !form.refund;
+            payFoldTitle.textContent = form.refund ? 'Bekommen hat' : 'Bezahlt von';
+            formTitle.textContent = !existing ? (form.refund ? 'Neue Rückzahlung' : 'Neue Ausgabe')
+                : existing.series ? 'Serie bearbeiten' : noun + ' bearbeiten';
+            submitButton.textContent = existing ? 'Änderungen speichern' : noun + ' speichern';
+        }
+        applyKind();
         const splitFold = fold('Aufteilung', splitValue, [seg, splitHint, itemsArea, generalLabel, splitRows, splitSum, adoptSum]);
         const moreFold = fold('Mehr', moreValue, [
             h('div', { class: 'field-row' },
                 h('div', { class: 'field' }, h('label', { for: 'expDate' }, existing && existing.series ? 'Beginn' : 'Datum'), dateInput),
                 h('div', { class: 'field' },
                     h('label', { for: 'expCategory' }, 'Kategorie'),
-                    h('select', {
-                        id: 'expCategory', value: form.category,
-                        onchange: function (e) { form.category = e.target.value; refresh(); }
-                    }, C.groupCategories(doc).map(function (c) { return h('option', { value: c.id }, categoryLabel(c)); })))),
+                    categorySelect)),
             repeatField,
             h('div', { class: 'field', style: 'margin-bottom:0' },
                 h('label', { for: 'expNote' }, 'Notiz'),
@@ -2255,7 +2523,9 @@
         const view = h('div', null,
             existing ? backLink(doc, 'expense/' + existing.id, 'Zurück') : backLink(doc),
             h('form', { class: 'panel', onsubmit: submit, novalidate: true },
-                h('h2', null, !existing ? 'Neue Ausgabe' : existing.series ? 'Serie bearbeiten' : 'Ausgabe bearbeiten'),
+                formTitle,
+                kindSeg,
+                kindHint,
                 existing && existing.series ? h('p', { class: 'small muted', style: 'margin-bottom:12px' }, 'Das gilt für alle künftigen Buchungen. Bisherige Einträge bleiben und lassen sich einzeln bearbeiten.') : null,
                 existing && existing.parent ? h('p', { class: 'small muted', style: 'margin-bottom:12px' }, 'Das ändert nur diesen einen Eintrag, nicht die Serie.') : null,
                 error,
@@ -2266,7 +2536,7 @@
                         amountInput,
                         currencySelect(form.currency, function (e) { form.currency = e.target.value; refresh(); }, { 'aria-label': 'Währung' }))),
                 h('div', { class: 'folds' }, payFold, splitFold, moreFold),
-                h('button', { class: 'btn btn-block', type: 'submit' }, existing ? 'Änderungen speichern' : 'Ausgabe speichern')));
+                submitButton));
 
         refresh();
         return view;
@@ -2410,14 +2680,14 @@
                     c.emoji ? h('div', { class: 'emoji', 'aria-hidden': 'true' }, c.emoji) : null,
                     h('h1', null, e.desc),
                     h('div', { class: 'amount' }, money(e.amount, cur)),
-                    h('div', { class: 'small muted' }, (e.series ? 'Seit ' : '') + formatDate(e.date, true) + (c.id !== 'general' ? ' · ' + c.label : '')),
+                    h('div', { class: 'small muted' }, (e.refund ? 'Rückzahlung · ' : '') + (e.series ? 'Seit ' : '') + formatDate(e.date, true) + (c.id !== 'general' ? ' · ' + c.label : '')),
                     repeatInfo ? h('div', { class: 'small muted' }, '🔁 ' + repeatInfo) : null,
                     series ? h('div', { class: 'small' }, h('a', { href: '#/g/' + doc.id + '/expense/' + series.id }, '🔁 Zur Serie')) : null),
-                h('h2', null, payers.length > 1 ? 'Bezahlt haben' : 'Bezahlt hat'),
+                h('h2', null, e.refund ? (payers.length > 1 ? 'Bekommen haben' : 'Bekommen hat') : (payers.length > 1 ? 'Bezahlt haben' : 'Bezahlt hat')),
                 payers.map(function (id) {
                     return h('div', { class: 'kv' }, h('span', null, memberName(doc, id)), h('span', null, money(e.payers[id], cur)));
                 }),
-                h('h2', null, 'Anteile'),
+                h('h2', null, e.refund ? 'Steht zu' : 'Anteile'),
                 shareIds.map(function (id) {
                     return h('div', { class: 'kv' }, h('span', null, memberName(doc, id)), h('span', null, money(owed[id], cur)));
                 }),

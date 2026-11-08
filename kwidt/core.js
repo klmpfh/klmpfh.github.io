@@ -20,21 +20,22 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    // 'general' ist der Standard und heißt: keine Kategorie, also auch kein Symbol.
+    // 'general' ist der Standard und heißt: keine Kategorie. Die Vorgaben haben kein
+    // Symbol, wer eins möchte, schreibt ein Emoji in den Namen einer Kategorie.
     var CATEGORIES = [
-        { id: 'general',   emoji: '',   label: 'Keine Kategorie' },
-        { id: 'food',      emoji: '🍕', label: 'Essen & Trinken' },
-        { id: 'groceries', emoji: '🛒', label: 'Einkauf' },
-        { id: 'bar',       emoji: '🍻', label: 'Bar & Ausgehen' },
-        { id: 'travel',    emoji: '✈️', label: 'Reise' },
-        { id: 'transport', emoji: '🚗', label: 'Transport' },
-        { id: 'lodging',   emoji: '🛏️', label: 'Unterkunft' },
-        { id: 'home',      emoji: '🏠', label: 'Wohnen' },
-        { id: 'utilities', emoji: '💡', label: 'Nebenkosten' },
-        { id: 'fun',       emoji: '🎟️', label: 'Freizeit' },
-        { id: 'gift',      emoji: '🎁', label: 'Geschenk' },
-        { id: 'health',    emoji: '💊', label: 'Gesundheit' },
-        { id: 'other',     emoji: '📦', label: 'Sonstiges' }
+        { id: 'general',   emoji: '', label: 'Keine Kategorie' },
+        { id: 'food',      emoji: '', label: 'Essen & Trinken' },
+        { id: 'groceries', emoji: '', label: 'Einkauf' },
+        { id: 'bar',       emoji: '', label: 'Bar & Ausgehen' },
+        { id: 'travel',    emoji: '', label: 'Reise' },
+        { id: 'transport', emoji: '', label: 'Transport' },
+        { id: 'lodging',   emoji: '', label: 'Unterkunft' },
+        { id: 'home',      emoji: '', label: 'Wohnen' },
+        { id: 'utilities', emoji: '', label: 'Nebenkosten' },
+        { id: 'fun',       emoji: '', label: 'Freizeit' },
+        { id: 'gift',      emoji: '', label: 'Geschenk' },
+        { id: 'health',    emoji: '', label: 'Gesundheit' },
+        { id: 'other',     emoji: '', label: 'Sonstiges' }
     ];
 
     var CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF', 'SEK', 'NOK', 'DKK', 'PLN', 'CZK', 'HUF',
@@ -358,6 +359,16 @@
             .filter(function (p) { return !p.del; });
     }
 
+    /**
+     * Eine Rückzahlung (`refund`) ist eine Ausgabe mit umgekehrtem Vorzeichen: In `payers`
+     * steht, wer das Geld bekommen hat, und die Aufteilung sagt, wem es zusteht.
+     * Beispiel: A bekommt 300 € vom Stromversorger zurück, aufgeteilt auf A, B und C.
+     * Dann schuldet A den anderen beiden je 100 €.
+     */
+    function expenseSign(e) {
+        return e.refund ? -1 : 1;
+    }
+
     /** {currency: {memberId: saldo}}; positiv = bekommt Geld, negativ = schuldet. */
     function computeBalances(doc) {
         var out = {};
@@ -368,8 +379,9 @@
         liveExpenses(doc).forEach(function (e) {
             var owed = computeOwed(e);
             if (!owed) return;
-            Object.keys(e.payers).forEach(function (id) { add(e.currency, id, e.payers[id]); });
-            Object.keys(owed).forEach(function (id) { add(e.currency, id, -owed[id]); });
+            var sign = expenseSign(e);
+            Object.keys(e.payers).forEach(function (id) { add(e.currency, id, sign * e.payers[id]); });
+            Object.keys(owed).forEach(function (id) { add(e.currency, id, -sign * owed[id]); });
         });
         livePayments(doc).forEach(function (p) {
             add(p.currency, p.from, p.amount);
@@ -393,6 +405,9 @@
         var records = doc.categories || {};
         var builtin = CATEGORIES.filter(function (c) {
             return !(records[c.id] && records[c.id].del);
+        }).map(function (c) {
+            // Eine entfernte und mit Emoji wieder ergänzte Vorgabe behält dieses Symbol.
+            return records[c.id] && records[c.id].emoji ? { id: c.id, label: c.label, emoji: records[c.id].emoji } : c;
         });
         var own = Object.keys(records)
             .map(function (id) { return records[id]; })
@@ -408,10 +423,24 @@
 
     /** "🐶 Haustier" → Symbol und Name. Ohne Emoji gibt es kein Symbol. */
     function parseCategoryName(text) {
-        var clean = String(text).replace(/\s+/g, ' ').trim();
+        var clean = tidyText(String(text), 200);
         var emoji = clean.match(RE_EMOJI);
-        var label = emoji ? clean.replace(emoji[0], ' ').replace(/\s+/g, ' ').trim() : clean;
-        return { emoji: emoji ? emoji[0] : '', label: label.slice(0, 30) };
+        var label = emoji ? clean.replace(emoji[0], ' ') : clean;
+        return { emoji: emoji ? emoji[0] : '', label: tidyText(label, 30) };
+    }
+
+    /** Vergleichsform eines Namens: ohne Groß/klein, Symbol und überzählige Leerzeichen. */
+    function nameKey(text) {
+        return parseCategoryName(text).label.toLocaleLowerCase('de');
+    }
+
+    /** Die Kategorie, die genauso heißt wie `name` (z. B. die Beschreibung einer Ausgabe), sonst null. */
+    function categoryByName(doc, name) {
+        var key = nameKey(name);
+        if (!key) return null;
+        return groupCategories(doc).filter(function (c) {
+            return c.id !== CATEGORIES[0].id && c.label.toLocaleLowerCase('de') === key;
+        })[0] || null;
     }
 
     /**
@@ -421,7 +450,7 @@
     function addCategory(doc, text) {
         var parts = parseCategoryName(text);
         if (!parts.label) return null;
-        function same(c) { return c.label.toLowerCase() === parts.label.toLowerCase(); }
+        function same(c) { return c.label.toLocaleLowerCase('de') === parts.label.toLocaleLowerCase('de'); }
         if (groupCategories(doc).some(same)) return { exists: true };
 
         var removedBuiltin = CATEGORIES.filter(same)[0];
@@ -431,7 +460,7 @@
         var id = removedBuiltin ? removedBuiltin.id : removedOwn ? removedOwn.id : newId();
         var record = {
             id: id, t: nextT(doc), label: removedBuiltin ? removedBuiltin.label : parts.label,
-            emoji: removedBuiltin ? removedBuiltin.emoji : parts.emoji || (removedOwn ? removedOwn.emoji : ''), del: false
+            emoji: parts.emoji || (removedOwn ? removedOwn.emoji : ''), del: false
         };
         doc.categories[id] = record;
         return { category: record };
@@ -502,8 +531,9 @@
             var owed = computeOwed(e);
             if (!owed) return;
             var net = {};
-            Object.keys(e.payers).forEach(function (id) { net[id] = (net[id] || 0) + e.payers[id]; });
-            Object.keys(owed).forEach(function (id) { net[id] = (net[id] || 0) - owed[id]; });
+            var sign = expenseSign(e);
+            Object.keys(e.payers).forEach(function (id) { net[id] = (net[id] || 0) + sign * e.payers[id]; });
+            Object.keys(owed).forEach(function (id) { net[id] = (net[id] || 0) - sign * owed[id]; });
             simplifyDebts(net).forEach(function (t) { owe(t.from, t.to, t.amount); });
         });
         livePayments(doc).forEach(function (p) {
@@ -548,12 +578,14 @@
             if (e.currency !== cur) return;
             var owed = computeOwed(e);
             if (!owed) return;
-            total += e.amount;
+            // Rückzahlungen mindern die Ausgaben, auch die ihrer Kategorie.
+            var sign = expenseSign(e);
+            total += sign * e.amount;
             count++;
             var categoryId = findCategory(doc, e.category).id;
-            categories[categoryId] = (categories[categoryId] || 0) + e.amount;
-            Object.keys(e.payers).forEach(function (id) { member(id).paid += e.payers[id]; });
-            Object.keys(owed).forEach(function (id) { member(id).share += owed[id]; });
+            categories[categoryId] = (categories[categoryId] || 0) + sign * e.amount;
+            Object.keys(e.payers).forEach(function (id) { member(id).paid += sign * e.payers[id]; });
+            Object.keys(owed).forEach(function (id) { member(id).share += sign * owed[id]; });
         });
         return {
             total: total,
@@ -758,6 +790,13 @@
     }
 
     function clip(v, max) { return typeof v === 'string' ? v.slice(0, max) : ''; }
+
+    /** Für Namen: Leerzeichen am Rand weg, auch nach dem Kürzen, mehrere innen werden eins. */
+    var RE_EDGE_SPACE = /^[\s\u200B\uFEFF]+|[\s\u200B\uFEFF]+$/g;
+    function tidyText(v, max) {
+        if (typeof v !== 'string') return '';
+        return v.replace(RE_EDGE_SPACE, '').replace(/\s+/g, ' ').slice(0, max).replace(RE_EDGE_SPACE, '');
+    }
     function isT(v) { return typeof v === 'number' && isFinite(v) && v >= 0; }
     function isMoney(v) { return Number.isSafeInteger(v) && v > 0 && v <= MAX_AMOUNT; }
     function isCurrency(v) { return typeof v === 'string' && /^[A-Z]{3}$/.test(v); }
@@ -787,7 +826,7 @@
 
     function cleanMember(m) {
         if (!RE_ID.test(m.id) || !isT(m.t)) return null;
-        var name = clip(m.name, 40).trim();
+        var name = tidyText(m.name, 40);
         if (!name) return null;
         return { id: m.id, t: m.t, name: name, left: !!m.left };
     }
@@ -801,7 +840,7 @@
             seen[item.id] = true;
             return true;
         }).map(function (item) {
-            return { id: item.id, name: clip(item.name, 60).trim() || 'Position', amount: item.amount };
+            return { id: item.id, name: tidyText(item.name, 60) || 'Position', amount: item.amount };
         });
     }
 
@@ -825,7 +864,7 @@
             id: e.id,
             t: e.t,
             by: clip(e.by, 16),
-            desc: clip(e.desc, 120).trim() || 'Ausgabe',
+            desc: tidyText(e.desc, 120) || 'Ausgabe',
             amount: e.amount,
             currency: e.currency,
             date: e.date,
@@ -842,6 +881,7 @@
             out.claims = cleanClaims(e.claims);
         }
         if (e.series === true) out.series = true;
+        if (e.refund === true) out.refund = true;
         return payersValid(out) && computeOwed(out) ? out : null;
     }
 
@@ -862,7 +902,7 @@
 
     function cleanCategory(c) {
         if (!(RE_ID.test(c.id) || isBuiltinCategory(c.id)) || c.id === CATEGORIES[0].id || !isT(c.t)) return null;
-        var label = clip(c.label, 30).trim();
+        var label = tidyText(c.label, 30);
         if (!label && !c.del) return null;
         return { id: c.id, t: c.t, label: label, emoji: clip(c.emoji, 16), del: !!c.del };
     }
@@ -890,7 +930,7 @@
             id: raw.id,
             meta: {
                 t: m.t,
-                name: clip(m.name, 60).trim(),
+                name: tidyText(m.name, 60),
                 currency: isCurrency(m.currency) ? m.currency : 'EUR',
                 simplify: m.simplify !== false
             },
@@ -915,16 +955,50 @@
 
     /* ---------- Stand der Daten ---------- */
 
-    var STATE_EMOJIS = Array.from('🐶🐱🐭🐰🦊🐻🐼🐨🐯🦁🐮🐷🐸🐵🐔🐧🐦🦆🦉🐴🦄🐝🦋🐌🐞🐢🐍🐙🦀🐬🐳🦈' +
-        '🌵🌲🌴🍄🌻🌈⭐🌙🔥💧⛄🍎🍌🍉🍇🍓🍕🍔🌭🍩🍪🎂☕🍺🎈🎁🎸🎲🚲🚀⚽🔑');
+    /**
+     * Alle einzelnen Emojis bis Unicode 13 (2020), neuere fehlen auf älteren Geräten noch.
+     * Ohne Flaggen und Hauttöne. Die Liste steht fest im Code statt per \p{Emoji} erzeugt:
+     * Browser kennen verschiedene Unicode-Versionen, und jedes Gerät muss für denselben
+     * Stand dasselbe Emoji zeigen. Codepunkte hexadezimal, "a-b" ist ein Bereich.
+     */
+    var STATE_EMOJIS = (function () {
+        var emoji = '231a-231b,23e9-23ec,23f0,23f3,25fd-25fe,2614-2615,2648-2653,267f,2693,26a1,26aa-26ab,26bd-26be,' +
+        '26c4-26c5,26ce,26d4,26ea,26f2-26f3,26f5,26fa,26fd,2705,270a-270b,2728,274c,274e,2753-2755,2757,' +
+        '2795-2797,27b0,27bf,2b1b-2b1c,2b50,2b55,1f004,1f0cf,1f18e,1f191-1f19a,1f201,1f21a,1f22f,1f232-1f236,' +
+        '1f238-1f23a,1f250-1f251,1f300-1f320,1f32d-1f335,1f337-1f37c,1f37e-1f393,1f3a0-1f3ca,1f3cf-1f3d3,' +
+        '1f3e0-1f3f0,1f3f4,1f3f8-1f3fa,1f400-1f43e,1f440,1f442-1f4fc,1f4ff-1f53d,1f54b-1f54e,1f550-1f567,' +
+        '1f57a,1f595-1f596,1f5a4,1f5fb-1f64f,1f680-1f6c5,1f6cc,1f6d0-1f6d2,1f6d5-1f6d7,1f6eb-1f6ec,' +
+        '1f6f4-1f6fc,1f7e0-1f7eb,1f90c-1f93a,1f93c-1f945,1f947-1f978,1f97a-1f9cb,1f9cd-1f9ff,1fa70-1fa74,' +
+        '1fa78-1fa7a,1fa80-1fa86,1fa90-1faa8,1fab0-1fab6,1fac0-1fac2,1fad0-1fad6';
+        // Diese sind ohne Zusatz eigentlich Textzeichen, U+FE0F macht sie bunt.
+        var text = '203c,2049,2139,2194-2199,21a9-21aa,2328,23cf,23ed-23ef,23f1-23f2,23f8-23fa,24c2,25aa-25ab,25b6,25c0,' +
+        '25fb-25fc,2600-2604,260e,2611,2618,261d,2620,2622-2623,2626,262a,262e-262f,2638-263a,2640,2642,' +
+        '265f-2660,2663,2665-2666,2668,267b,267e,2692,2694-2697,2699,269b-269c,26a0,26a7,26b0-26b1,26c8,26cf,' +
+        '26d1,26d3,26e9,26f0-26f1,26f4,26f7-26f9,2702,2708-2709,270c-270d,270f,2712,2714,2716,271d,2721,' +
+        '2733-2734,2744,2747,2763-2764,27a1,2934-2935,2b05-2b07,3030,303d,3297,3299,1f170-1f171,1f17e-1f17f,' +
+        '1f202,1f237,1f321,1f324-1f32c,1f336,1f37d,1f396-1f397,1f399-1f39b,1f39e-1f39f,1f3cb-1f3ce,' +
+        '1f3d4-1f3df,1f3f3,1f3f5,1f3f7,1f43f,1f441,1f4fd,1f549-1f54a,1f56f-1f570,1f573-1f579,1f587,' +
+        '1f58a-1f58d,1f590,1f5a5,1f5a8,1f5b1-1f5b2,1f5bc,1f5c2-1f5c4,1f5d1-1f5d3,1f5dc-1f5de,1f5e1,1f5e3,' +
+        '1f5e8,1f5ef,1f5f3,1f5fa,1f6cb,1f6cd-1f6cf,1f6e0-1f6e5,1f6e9,1f6f0,1f6f3';
+        var list = [];
+        function read(ranges, suffix) {
+            ranges.split(',').forEach(function (range) {
+                var ends = range.split('-').map(function (hex) { return parseInt(hex, 16); });
+                for (var cp = ends[0]; cp <= (ends[1] || ends[0]); cp++) list.push({ cp: cp, text: String.fromCodePoint(cp) + suffix });
+            });
+        }
+        read(emoji, '');
+        read(text, '\uFE0F');
+        return list.sort(function (a, b) { return a.cp - b.cp; }).map(function (x) { return x.text; });
+    })();
 
     function sortedPairs(map) {
         return Object.keys(map || {}).sort().map(function (key) { return [key, map[key]]; });
     }
 
     /**
-     * Fünf Emojis als Fingerabdruck der Eingaben: Sehen sie auf zwei Geräten gleich aus,
-     * ist der Stand gleich. Zählt nur, was die Daten ausmacht: Zeitstempel und Verlauf
+     * Ein Emoji als Fingerabdruck der Eingaben: Sieht es auf zwei Geräten gleich aus,
+     * ist der Stand gleich (bei gut 1300 Emojis verwechselt man zwei Stände fast nie). Zählt nur, was die Daten ausmacht: Zeitstempel und Verlauf
      * nicht, gelöschte Einträge auch nicht, weil sie einem Gerät noch fehlen dürfen.
      */
     function dataFingerprint(doc) {
@@ -938,7 +1012,7 @@
             if (e.del) return;
             var claims = Object.keys(e.claims || {}).filter(function (key) { return e.claims[key].on; }).sort();
             lines.push(JSON.stringify(['expense', id, e.desc, e.amount, e.currency, e.date, e.category, e.note,
-                sortedPairs(e.payers), e.split.type, sortedPairs(e.split.values), e.repeat, !!e.series, e.items || [], claims]));
+                sortedPairs(e.payers), e.split.type, sortedPairs(e.split.values), e.repeat, !!e.series, e.items || [], claims, !!e.refund]));
         });
         livePayments(doc).forEach(function (p) {
             lines.push(JSON.stringify(['payment', p.id, p.from, p.to, p.amount, p.currency, p.date, p.note]));
@@ -958,9 +1032,7 @@
         h ^= h >>> 13;
         h = Math.imul(h, 0xc2b2ae35);
         h ^= h >>> 16;
-        var out = [];
-        for (var i = 0; i < 5; i++) out.push(STATE_EMOJIS[(h >>> (i * 6)) & 63]);
-        return out;
+        return STATE_EMOJIS[(h >>> 0) % STATE_EMOJIS.length];
     }
 
     /* ---------- Gruppensymbol ---------- */
@@ -1323,8 +1395,45 @@
         };
     }
 
-    /** Trägt die gelesenen Ausgaben und Zahlungen in die Gruppe ein. `ids` ordnet Namen den Personen zu. */
+    /**
+     * Kategorie-Vorschläge für einen Import: Titel, die mindestens zweimal vorkommen
+     * (ohne Groß/klein), in der häufigsten Schreibweise. Vorgaben sind nicht dabei.
+     * Liefert [{label, count}], häufigste zuerst.
+     */
+    function splidCategorySuggestions(data) {
+        var groups = {};
+        data.expenses.forEach(function (e) {
+            var label = parseCategoryName(e.desc).label;
+            var key = label.toLocaleLowerCase('de');
+            if (!key) return;
+            var g = groups[key] || (groups[key] = { count: 0, spellings: {} });
+            g.count++;
+            g.spellings[label] = (g.spellings[label] || 0) + 1;
+        });
+        var builtin = CATEGORIES.map(function (c) { return c.label.toLocaleLowerCase('de'); });
+        return Object.keys(groups)
+            .filter(function (key) { return groups[key].count >= 2 && builtin.indexOf(key) === -1; })
+            .map(function (key) {
+                var sp = groups[key].spellings;
+                var label = Object.keys(sp).sort(function (a, b) { return sp[b] - sp[a] || (a < b ? -1 : 1); })[0];
+                return { label: label, count: groups[key].count };
+            })
+            .sort(function (a, b) { return b.count - a.count || a.label.localeCompare(b.label, 'de'); });
+    }
+
+    /**
+     * Trägt die gelesenen Ausgaben und Zahlungen in die Gruppe ein. `ids` ordnet Namen den Personen zu.
+     * `data.categories` (Namen) legt fest, welche Kategorien es gibt: Nicht genannte Vorgaben
+     * fallen weg. Ausgaben, die genauso heißen wie eine Kategorie, bekommen sie.
+     */
     function importSplid(doc, data, ids, by) {
+        if (data.categories) {
+            var wanted = data.categories.map(nameKey);
+            CATEGORIES.slice(1).forEach(function (c) {
+                if (wanted.indexOf(c.label.toLocaleLowerCase('de')) === -1) removeCategory(doc, c.id);
+            });
+            data.categories.forEach(function (label) { addCategory(doc, label); });
+        }
         function mapped(names, value) {
             var out = {};
             Object.keys(names).forEach(function (name) { out[ids[name]] = value(names[name]); });
@@ -1334,7 +1443,7 @@
             var id = newId();
             doc.expenses[id] = {
                 id: id, t: nextT(doc), by: by, desc: e.desc, amount: e.amount, currency: e.currency, date: e.date,
-                category: 'general', note: '',
+                category: (categoryByName(doc, e.desc) || CATEGORIES[0]).id, note: '',
                 payers: mapped(e.payers, function (v) { return v; }),
                 split: e.equal
                     ? { type: 'equal', values: mapped(e.shares, function () { return 1; }) }
@@ -1377,12 +1486,14 @@
         liveExpenses(doc).forEach(function (e) {
             var owed = computeOwed(e) || {};
             var category = findCategory(doc, e.category);
+            var sign = expenseSign(e);
             rows.push({
                 date: e.date,
-                cells: [e.date, 'Ausgabe', e.desc, category.id === 'general' ? '' : category.label, csvAmount(e.amount, e.currency), e.currency,
+                cells: [e.date, e.refund ? 'Rückzahlung' : 'Ausgabe', e.desc, category.id === 'general' ? '' : category.label,
+                    csvAmount(sign * e.amount, e.currency), e.currency,
                     Object.keys(e.payers).filter(function (id) { return e.payers[id] > 0; }).map(name).join(', ')
                 ].concat(memberIds.map(function (id) {
-                    return owed[id] ? csvAmount(owed[id], e.currency) : '';
+                    return owed[id] ? csvAmount(sign * owed[id], e.currency) : '';
                 }))
             });
         });
@@ -1403,6 +1514,9 @@
     return {
         groupCategories: groupCategories,
         findCategory: findCategory,
+        categoryByName: categoryByName,
+        tidyText: tidyText,
+        splidCategorySuggestions: splidCategorySuggestions,
         addCategory: addCategory,
         removeCategory: removeCategory,
         CURRENCIES: CURRENCIES,
@@ -1420,6 +1534,7 @@
         parseQuantity: parseQuantity,
         distribute: distribute,
         computeOwed: computeOwed,
+        expenseSign: expenseSign,
         claimantsOf: claimantsOf,
         itemShares: itemShares,
         setClaim: setClaim,

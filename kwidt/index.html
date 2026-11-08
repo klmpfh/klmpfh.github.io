@@ -349,6 +349,8 @@
 
     .data-state { margin-top: 8px; font-size: 18px; line-height: 1.2; letter-spacing: 1px; }
     .data-state span { margin-right: 8px; font-size: 12px; font-weight: 600; letter-spacing: 0; color: var(--muted); }
+    .data-state-hint { margin-top: 2px; font-size: 11px; letter-spacing: 0; color: var(--muted); }
+    .kind-seg { margin-bottom: 14px; }
 
     .my-balance { text-align: center; font-size: 16px; font-weight: 600; line-height: 1.5; }
     .kwidt-banner {
@@ -385,7 +387,17 @@
     .tabs a:hover { color: var(--primary-strong); }
     .tabs a[aria-current="page"] { color: var(--primary-strong); border-bottom-color: var(--primary); }
 
-    .search { margin-bottom: 12px; }
+    .search { display: flex; gap: 8px; margin-bottom: 12px; }
+    .search input { flex: 1; min-width: 0; }
+    .filter-toggle { flex: none; background: var(--surface); color: var(--primary-strong); }
+    .filter-toggle.on { background: var(--primary); color: #fff; }
+    .filter-box { margin-bottom: 12px; padding: 12px; border-radius: 8px; background: var(--theme-gray-150); }
+    .filter-box .field { margin-bottom: 10px; }
+    .range-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 6px; }
+    .range-row input { padding-left: 8px; padding-right: 8px; }
+    input.bad { border-color: var(--neg); }
+    .filter-summary { font-size: 13px; color: var(--muted); font-weight: 600; margin: 0 0 8px; }
+    .chip-count { margin-left: 6px; font-size: 11px; opacity: 0.75; }
 
     .empty { text-align: center; color: var(--muted); font-size: 14px; padding: 18px 8px; line-height: 1.5; }
     .empty .big { display: block; font-size: 34px; margin-bottom: 6px; }
@@ -500,14 +512,14 @@
 <div class="container">
     <main id="app"></main>
     <noscript>Kwidt braucht JavaScript.</noscript>
-    <div class="footer-info">v<span id="versionNumber">1.6</span></div>
+    <div class="footer-info">v<span id="versionNumber">1.8</span></div>
 </div>
 <div id="toast" role="status" hidden></div>
 
 <script src="../fileshare/vendor/peerjs.min.js"></script>
 <script src="../fileshare/vendor/qrcode.min.js"></script>
 <!-- ?v= immer zusammen mit der Versionsnummer oben ändern: Sonst läuft die neue Seite mit alten Skripten aus dem Browser-Cache. -->
-<script src="core.js?v=1.6"></script>
-<script src="app.js?v=1.6"></script>
+<script src="core.js?v=1.8"></script>
+<script src="app.js?v=1.8"></script>
 </body>
 </html>
