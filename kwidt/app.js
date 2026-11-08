@@ -29,7 +29,7 @@
     const toastEl = document.getElementById('toast');
 
     let store = { groups: {}, me: {}, last: null, seen: {} };
-    const state = { formActive: false, pendingRender: false, unsaved: false, search: '', filter: emptyFilter(), filterOpen: false, statsCur: null, lastPath: null };
+    const state = { formActive: false, pendingRender: false, unsaved: false, search: '', filter: emptyFilter(), filterOpen: false, statsCur: null, statsCategory: '', lastPath: null };
 
     function emptyFilter() {
         return { payer: '', member: '', category: '', min: '', max: '' };
@@ -1216,7 +1216,7 @@
                 h('h1', null, doc.meta.name),
                 h('a', { id: 'syncPill', class: syncPillClass(), href: '#/g/' + doc.id + '/settings' }, syncLabel()),
                 h('div', { class: 'data-state', title: 'Gleicher Code auf zwei Geräten heißt: gleicher Stand.' },
-                    h('span', null, 'Stand'), h('code', null, C.dataFingerprint(doc)),
+                    h('span', null, 'Stand'), h('code', null, C.dataFingerprint(doc).replace(/^(..)/, '$1 ')),
                     h('div', { class: 'data-state-hint' }, 'Ändert sich, wenn Daten geändert werden'))),
             summary ? h('section', { class: 'panel' }, summary) : null,
             h('div', { class: 'group-actions' },
@@ -1390,7 +1390,10 @@
                         h('div', { class: 'title' }, paymentText(doc, p, me)),
                         h('div', { class: 'sub' }, formatDate(p.date) + (p.note ? ' · ' + p.note : ''))),
                     amountColumns('payment', p.amount, p.currency),
-                    h('span', { class: 'side' })));
+                    // Nur wenn das Geld an dich geht; sonst bleibt die Spalte leer.
+                    p.to === me
+                        ? h('span', { class: 'side' }, h('span', { class: 'muted' }, 'du bekommst'), h('strong', { class: 'pos' }, money(p.amount, p.currency)))
+                        : h('span', { class: 'side' })));
             }
         });
     }
@@ -1623,6 +1626,51 @@
             h('span', { class: 'value' }, money(value, cur)));
     }
 
+    /**
+     * Pro Monat, für eine gewählte Kategorie oder alle zusammen. Monate ohne Eintrag
+     * zeigen „–“, so fällt z. B. ein Monat ohne Internet-Rechnung sofort auf.
+     */
+    function viewMonthPanel(doc, table, cur) {
+        if (!table.rows.length) return null;
+        if (state.statsCategory && table.categories.indexOf(state.statsCategory) === -1) state.statsCategory = '';
+        const rows = h('div', null);
+
+        function draw() {
+            const id = state.statsCategory;
+            const values = table.rows.map(function (row) {
+                return id ? (id in row.cells ? row.cells[id] : null) : (row.total || null);
+            });
+            const max = Math.max.apply(null, values.map(function (v) { return v || 0; }));
+            rows.textContent = '';
+            table.rows.forEach(function (row, i) {
+                const p = row.month.split('-').map(Number);
+                const label = new Date(p[0], p[1] - 1, 1).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+                rows.appendChild(values[i] === null
+                    ? h('div', { class: 'bar-row' },
+                        h('span', { class: 'label' }, label),
+                        h('span', { class: 'bar', 'aria-hidden': 'true' }),
+                        h('span', { class: 'value muted' }, '–'))
+                    : barRow(label, values[i], max, cur));
+            });
+        }
+        draw();
+
+        return h('section', { class: 'panel' },
+            h('h2', null, 'Nach Monat'),
+            h('div', { class: 'field' },
+                h('label', { for: 'statsCategory' }, 'Kategorie'),
+                h('select', {
+                    id: 'statsCategory', value: state.statsCategory || '',
+                    onchange: function (e) {
+                        state.statsCategory = e.target.value;
+                        draw();
+                    }
+                },
+                    h('option', { value: '' }, 'Alle Kategorien'),
+                    table.categories.map(function (id) { return h('option', { value: id }, categoryText(doc, id)); }))),
+            rows);
+    }
+
     function viewStatsTab(doc) {
         const currencies = C.currenciesUsed(doc);
         const cur = currencies.indexOf(state.statsCur) !== -1 ? state.statsCur : currencies[0];
@@ -1646,14 +1694,26 @@
         return h('div', null,
             h('section', { class: 'panel' },
                 picker,
-                h('h2', null, 'Gesamtausgaben'),
-                h('div', { class: 'stat-total' }, money(stats.total, cur)),
-                h('div', { class: 'small muted' }, stats.count + (stats.count === 1 ? ' Ausgabe' : ' Ausgaben'))),
+                h('h2', null, 'Überblick'),
+                h('div', { class: 'stat-sums' },
+                    h('div', null,
+                        h('div', { class: 'small muted' }, 'Gesamtausgaben'),
+                        h('div', { class: 'stat-total neg' }, money(stats.spent.amount, cur)),
+                        h('div', { class: 'small muted' }, stats.spent.count + (stats.spent.count === 1 ? ' Ausgabe' : ' Ausgaben'))),
+                    h('div', null,
+                        h('div', { class: 'small muted' }, 'Gesamteinnahmen'),
+                        h('div', { class: 'stat-total pos' }, money(stats.income.amount, cur)),
+                        h('div', { class: 'small muted' }, stats.income.count + (stats.income.count === 1 ? ' Rückzahlung' : ' Rückzahlungen'))),
+                    h('div', null,
+                        h('div', { class: 'small muted' }, 'Ergebnis'),
+                        h('div', { class: 'stat-total ' + (stats.total > 0 ? 'neg' : stats.total < 0 ? 'pos' : '') }, money(-stats.total, cur)),
+                        h('div', { class: 'small muted' }, 'Einnahmen minus Ausgaben')))),
             h('section', { class: 'panel' },
                 h('h2', null, 'Nach Kategorie'),
                 stats.byCategory.map(function (row) {
                     return barRow(categoryText(doc, row.id), row.amount, maxCategory, cur);
                 })),
+            viewMonthPanel(doc, stats.byMonth, cur),
             h('section', { class: 'panel' },
                 h('h2', null, 'Nach Person'),
                 h('div', { class: 'table-wrap' },

@@ -570,6 +570,9 @@
         var members = {};
         var total = 0;
         var count = 0;
+        var spent = { amount: 0, count: 0 };
+        var income = { amount: 0, count: 0 };
+        var months = {};
         function member(id) {
             if (!members[id]) members[id] = { id: id, paid: 0, share: 0 };
             return members[id];
@@ -582,20 +585,56 @@
             var sign = expenseSign(e);
             total += sign * e.amount;
             count++;
+            var bucket = e.refund ? income : spent;
+            bucket.amount += e.amount;
+            bucket.count++;
             var categoryId = findCategory(doc, e.category).id;
             categories[categoryId] = (categories[categoryId] || 0) + sign * e.amount;
+            var month = months[e.date.slice(0, 7)] || (months[e.date.slice(0, 7)] = {});
+            month[categoryId] = (month[categoryId] || 0) + sign * e.amount;
             Object.keys(e.payers).forEach(function (id) { member(id).paid += sign * e.payers[id]; });
             Object.keys(owed).forEach(function (id) { member(id).share += sign * owed[id]; });
         });
+        var byCategory = Object.keys(categories)
+            .map(function (id) { return { id: id, amount: categories[id] }; })
+            .sort(byAmountDesc);
         return {
             total: total,
             count: count,
-            byCategory: Object.keys(categories)
-                .map(function (id) { return { id: id, amount: categories[id] }; })
-                .sort(byAmountDesc),
+            // Ausgaben und Einnahmen (Rückzahlungen) getrennt, beide positiv.
+            spent: spent,
+            income: income,
+            byCategory: byCategory,
+            byMonth: monthTable(months, byCategory.map(function (row) { return row.id; })),
             byMember: Object.keys(members)
                 .map(function (id) { return members[id]; })
                 .sort(function (a, b) { return b.share - a.share || (a.id < b.id ? -1 : 1); })
+        };
+    }
+
+    /**
+     * Beträge pro Monat und Kategorie, neuester Monat zuerst. Monate ganz ohne Ausgaben
+     * zwischen dem ersten und letzten sind dabei, damit auffällt, wenn etwas ausblieb.
+     * Liefert {categories, rows: [{month, cells: {id: betrag}, total}]}.
+     */
+    function monthTable(months, categoryIds) {
+        var keys = Object.keys(months).sort();
+        if (!keys.length) return { categories: categoryIds, rows: [] };
+        var all = [];
+        var y = +keys[0].slice(0, 4);
+        var m = +keys[0].slice(5, 7);
+        var last = keys[keys.length - 1];
+        for (var key = keys[0]; key <= last; key = y + '-' + pad2(m)) {
+            all.push(key);
+            if (++m > 12) { m = 1; y++; }
+        }
+        return {
+            categories: categoryIds,
+            rows: all.reverse().map(function (k) {
+                var cells = months[k] || {};
+                var total = Object.keys(cells).reduce(function (sum, id) { return sum + cells[id]; }, 0);
+                return { month: k, cells: cells, total: total };
+            })
         };
     }
 
@@ -960,9 +999,10 @@
     }
 
     /**
-     * Fünf Hex-Zeichen als Fingerabdruck der Eingaben: Sind sie auf zwei Geräten gleich,
-     * ist der Stand gleich. Das sind gut eine Million Möglichkeiten, zwei verschiedene
-     * Stände sehen also nur mit etwa 1 : 1.000.000 gleich aus. Zählt nur, was die Daten ausmacht: Zeitstempel und Verlauf
+     * Vier Hex-Zeichen als Fingerabdruck der Eingaben: Sind sie auf zwei Geräten gleich,
+     * ist der Stand gleich. Das sind 65.536 Möglichkeiten, zwei verschiedene Stände sehen
+     * also nur mit etwa 1 : 65.000 gleich aus. Mehr Zeichen vergleicht niemand genau,
+     * und ein Irrtum kostet wenig: Der nächste Abgleich führt ohnehin alles zusammen. Zählt nur, was die Daten ausmacht: Zeitstempel und Verlauf
      * nicht, gelöschte Einträge auch nicht, weil sie einem Gerät noch fehlen dürfen.
      */
     function dataFingerprint(doc) {
@@ -996,7 +1036,7 @@
         h ^= h >>> 13;
         h = Math.imul(h, 0xc2b2ae35);
         h ^= h >>> 16;
-        return ((h >>> 0) + 0x100000000).toString(16).slice(1, 6).toUpperCase();
+        return ((h >>> 0) + 0x100000000).toString(16).slice(1, 5).toUpperCase();
     }
 
     /* ---------- Gruppensymbol ---------- */

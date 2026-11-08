@@ -424,9 +424,14 @@
 
     /* Statistik: eine Reihe = Bezeichnung, Balken, Wert */
     .stat-total { font-size: 28px; font-weight: 800; color: var(--text-strong); font-variant-numeric: tabular-nums; }
+    .stat-total.pos { color: var(--pos); }
+    .stat-total.neg { color: var(--neg); }
+    .stat-sums { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+    .stat-sums .stat-total { font-size: 22px; }
     .bar-row {
         display: grid;
-        grid-template-columns: minmax(0, 40%) minmax(0, 1fr) auto;
+        /* Feste Wertspalte, damit alle Balken gleich lang sind. */
+        grid-template-columns: minmax(0, 40%) minmax(0, 1fr) 7.5em;
         align-items: center;
         gap: 10px;
         padding: 7px 0;
@@ -521,7 +526,7 @@
 
     @media (max-width: 480px) {
         .split-row { grid-template-columns: minmax(0, 1fr) 84px 76px; }
-        .bar-row { grid-template-columns: minmax(0, 1fr) auto; }
+        .bar-row { grid-template-columns: minmax(0, 1fr) 7.5em; }
         .bar-row .bar { grid-column: 1 / -1; grid-row: 2; }
     }
 </style>
@@ -532,14 +537,14 @@
 <div class="container">
     <main id="app"></main>
     <noscript>Kwidt braucht JavaScript.</noscript>
-    <div class="footer-info">v<span id="versionNumber">1.11</span></div>
+    <div class="footer-info">v<span id="versionNumber">1.15</span></div>
 </div>
 <div id="toast" role="status" hidden></div>
 
 <script src="../fileshare/vendor/peerjs.min.js"></script>
 <script src="../fileshare/vendor/qrcode.min.js"></script>
 <!-- ?v= immer zusammen mit der Versionsnummer oben ändern: Sonst läuft die neue Seite mit alten Skripten aus dem Browser-Cache. -->
-<script src="core.js?v=1.11"></script>
-<script src="app.js?v=1.11"></script>
+<script src="core.js?v=1.15"></script>
+<script src="app.js?v=1.15"></script>
 </body>
 </html>
