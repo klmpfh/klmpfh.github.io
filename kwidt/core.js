@@ -955,50 +955,14 @@
 
     /* ---------- Stand der Daten ---------- */
 
-    /**
-     * Alle einzelnen Emojis bis Unicode 13 (2020), neuere fehlen auf älteren Geräten noch.
-     * Ohne Flaggen und Hauttöne. Die Liste steht fest im Code statt per \p{Emoji} erzeugt:
-     * Browser kennen verschiedene Unicode-Versionen, und jedes Gerät muss für denselben
-     * Stand dasselbe Emoji zeigen. Codepunkte hexadezimal, "a-b" ist ein Bereich.
-     */
-    var STATE_EMOJIS = (function () {
-        var emoji = '231a-231b,23e9-23ec,23f0,23f3,25fd-25fe,2614-2615,2648-2653,267f,2693,26a1,26aa-26ab,26bd-26be,' +
-        '26c4-26c5,26ce,26d4,26ea,26f2-26f3,26f5,26fa,26fd,2705,270a-270b,2728,274c,274e,2753-2755,2757,' +
-        '2795-2797,27b0,27bf,2b1b-2b1c,2b50,2b55,1f004,1f0cf,1f18e,1f191-1f19a,1f201,1f21a,1f22f,1f232-1f236,' +
-        '1f238-1f23a,1f250-1f251,1f300-1f320,1f32d-1f335,1f337-1f37c,1f37e-1f393,1f3a0-1f3ca,1f3cf-1f3d3,' +
-        '1f3e0-1f3f0,1f3f4,1f3f8-1f3fa,1f400-1f43e,1f440,1f442-1f4fc,1f4ff-1f53d,1f54b-1f54e,1f550-1f567,' +
-        '1f57a,1f595-1f596,1f5a4,1f5fb-1f64f,1f680-1f6c5,1f6cc,1f6d0-1f6d2,1f6d5-1f6d7,1f6eb-1f6ec,' +
-        '1f6f4-1f6fc,1f7e0-1f7eb,1f90c-1f93a,1f93c-1f945,1f947-1f978,1f97a-1f9cb,1f9cd-1f9ff,1fa70-1fa74,' +
-        '1fa78-1fa7a,1fa80-1fa86,1fa90-1faa8,1fab0-1fab6,1fac0-1fac2,1fad0-1fad6';
-        // Diese sind ohne Zusatz eigentlich Textzeichen, U+FE0F macht sie bunt.
-        var text = '203c,2049,2139,2194-2199,21a9-21aa,2328,23cf,23ed-23ef,23f1-23f2,23f8-23fa,24c2,25aa-25ab,25b6,25c0,' +
-        '25fb-25fc,2600-2604,260e,2611,2618,261d,2620,2622-2623,2626,262a,262e-262f,2638-263a,2640,2642,' +
-        '265f-2660,2663,2665-2666,2668,267b,267e,2692,2694-2697,2699,269b-269c,26a0,26a7,26b0-26b1,26c8,26cf,' +
-        '26d1,26d3,26e9,26f0-26f1,26f4,26f7-26f9,2702,2708-2709,270c-270d,270f,2712,2714,2716,271d,2721,' +
-        '2733-2734,2744,2747,2763-2764,27a1,2934-2935,2b05-2b07,3030,303d,3297,3299,1f170-1f171,1f17e-1f17f,' +
-        '1f202,1f237,1f321,1f324-1f32c,1f336,1f37d,1f396-1f397,1f399-1f39b,1f39e-1f39f,1f3cb-1f3ce,' +
-        '1f3d4-1f3df,1f3f3,1f3f5,1f3f7,1f43f,1f441,1f4fd,1f549-1f54a,1f56f-1f570,1f573-1f579,1f587,' +
-        '1f58a-1f58d,1f590,1f5a5,1f5a8,1f5b1-1f5b2,1f5bc,1f5c2-1f5c4,1f5d1-1f5d3,1f5dc-1f5de,1f5e1,1f5e3,' +
-        '1f5e8,1f5ef,1f5f3,1f5fa,1f6cb,1f6cd-1f6cf,1f6e0-1f6e5,1f6e9,1f6f0,1f6f3';
-        var list = [];
-        function read(ranges, suffix) {
-            ranges.split(',').forEach(function (range) {
-                var ends = range.split('-').map(function (hex) { return parseInt(hex, 16); });
-                for (var cp = ends[0]; cp <= (ends[1] || ends[0]); cp++) list.push({ cp: cp, text: String.fromCodePoint(cp) + suffix });
-            });
-        }
-        read(emoji, '');
-        read(text, '\uFE0F');
-        return list.sort(function (a, b) { return a.cp - b.cp; }).map(function (x) { return x.text; });
-    })();
-
     function sortedPairs(map) {
         return Object.keys(map || {}).sort().map(function (key) { return [key, map[key]]; });
     }
 
     /**
-     * Ein Emoji als Fingerabdruck der Eingaben: Sieht es auf zwei Geräten gleich aus,
-     * ist der Stand gleich (bei gut 1300 Emojis verwechselt man zwei Stände fast nie). Zählt nur, was die Daten ausmacht: Zeitstempel und Verlauf
+     * Fünf Hex-Zeichen als Fingerabdruck der Eingaben: Sind sie auf zwei Geräten gleich,
+     * ist der Stand gleich. Das sind gut eine Million Möglichkeiten, zwei verschiedene
+     * Stände sehen also nur mit etwa 1 : 1.000.000 gleich aus. Zählt nur, was die Daten ausmacht: Zeitstempel und Verlauf
      * nicht, gelöschte Einträge auch nicht, weil sie einem Gerät noch fehlen dürfen.
      */
     function dataFingerprint(doc) {
@@ -1032,7 +996,7 @@
         h ^= h >>> 13;
         h = Math.imul(h, 0xc2b2ae35);
         h ^= h >>> 16;
-        return STATE_EMOJIS[(h >>> 0) % STATE_EMOJIS.length];
+        return ((h >>> 0) + 0x100000000).toString(16).slice(1, 6).toUpperCase();
     }
 
     /* ---------- Gruppensymbol ---------- */

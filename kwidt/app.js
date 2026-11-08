@@ -1215,8 +1215,8 @@
                 groupAvatar(doc.meta.name, true),
                 h('h1', null, doc.meta.name),
                 h('a', { id: 'syncPill', class: syncPillClass(), href: '#/g/' + doc.id + '/settings' }, syncLabel()),
-                h('div', { class: 'data-state', title: 'Gleiches Emoji auf zwei Geräten heißt: gleicher Stand.' },
-                    h('span', null, 'Stand'), C.dataFingerprint(doc),
+                h('div', { class: 'data-state', title: 'Gleicher Code auf zwei Geräten heißt: gleicher Stand.' },
+                    h('span', null, 'Stand'), h('code', null, C.dataFingerprint(doc)),
                     h('div', { class: 'data-state-hint' }, 'Ändert sich, wenn Daten geändert werden'))),
             summary ? h('section', { class: 'panel' }, summary) : null,
             h('div', { class: 'group-actions' },
@@ -1248,11 +1248,20 @@
         return memberName(doc, p.from) + ' hat ' + memberName(doc, p.to) + ' gezahlt';
     }
 
-    /** Spalte mit dem ganzen Betrag, vor dem, was davon auf dich entfällt. */
-    function amountColumn(label, minor, cur) {
-        return h('span', { class: 'total' }, h('span', { class: 'muted' }, label), h('strong', null, money(minor, cur)));
+    /**
+     * Zwei Spalten für den ganzen Betrag, damit die Liste wie eine Tabelle lesbar ist:
+     * Zahlungen zwischen Personen links, Ausgaben (rot) und Rückzahlungen (grün) rechts.
+     * Die jeweils andere bleibt leer, hält aber ihren Platz.
+     */
+    function amountColumns(kind, minor, cur) {
+        const labels = { payment: 'Zahlung', expense: 'Ausgabe', refund: 'Rückzahlung' };
+        const cell = h('span', null, h('span', { class: 'muted' }, labels[kind]), h('strong', null, money(minor, cur)));
+        const empty = h('span');
+        return [
+            h('span', { class: 'col col-pay' }, kind === 'payment' ? cell : empty),
+            h('span', { class: 'col col-amount ' + (kind === 'refund' ? 'is-refund' : 'is-expense') }, kind === 'payment' ? empty : cell)
+        ];
     }
-
     function expenseEffect(e, me) {
         const owed = C.computeOwed(e) || {};
         const net = C.expenseSign(e) * ((e.payers[me] || 0) - (owed[me] || 0));
@@ -1372,16 +1381,15 @@
                     h('span', { class: 'body' },
                         h('div', { class: 'title' }, e.desc, isRecurring ? ' 🔁' : ''),
                         h('div', { class: 'sub' }, formatDate(e.date) + ' · ' + payerText(doc, e, me) + (comments ? ' · 💬 ' + comments : ''))),
-                    amountColumn(e.refund ? 'Rückzahlung' : 'Ausgabe', e.amount, e.currency),
+                    amountColumns(e.refund ? 'refund' : 'expense', e.amount, e.currency),
                     expenseEffect(e, me)));
             } else {
                 const p = entry.p;
                 container.appendChild(h('a', { class: 'item', href: '#/g/' + doc.id + '/pay/' + p.id },
-                    h('span', { class: 'icon', 'aria-hidden': 'true' }, '🤝'),
                     h('span', { class: 'body' },
                         h('div', { class: 'title' }, paymentText(doc, p, me)),
                         h('div', { class: 'sub' }, formatDate(p.date) + (p.note ? ' · ' + p.note : ''))),
-                    amountColumn('Zahlung', p.amount, p.currency),
+                    amountColumns('payment', p.amount, p.currency),
                     h('span', { class: 'side' })));
             }
         });
@@ -1758,7 +1766,7 @@
                 h('p', { class: 'small muted' }, 'Wie der kurze Link: Er enthält nur die Adresse der Gruppe.'),
                 qrBox),
             h('p', { class: 'small muted', style: 'margin-top:14px' }, 'Wer einen Link hat, kann die Gruppe lesen und bearbeiten. Für den Live-Abgleich wird der öffentliche Dienst PeerJS genutzt, die Daten selbst gehen verschlüsselt von Gerät zu Gerät.'),
-            h('p', { class: 'small muted', style: 'margin-top:8px' }, 'Das Emoji neben „Stand“ oben ist ein Fingerabdruck eurer Eingaben: Sieht es auf zwei Geräten gleich aus, seid ihr auf demselben Stand.'));
+            h('p', { class: 'small muted', style: 'margin-top:8px' }, 'Der Code neben „Stand“ oben ist ein Fingerabdruck eurer Eingaben: Ist er auf zwei Geräten gleich, seid ihr auf demselben Stand.'));
     }
 
     function viewMembersPanel(doc, balances, me) {

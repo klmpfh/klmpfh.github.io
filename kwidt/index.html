@@ -314,14 +314,19 @@
     .item .sub { font-size: 13px; color: var(--muted); margin-top: 2px; line-height: 1.35; overflow-wrap: anywhere; }
     .item .side { text-align: right; flex: none; font-size: 13px; max-width: 45%; }
     .item .side strong { display: block; font-size: 15px; font-variant-numeric: tabular-nums; }
-    /* Ausgaben-Liste wie eine Tabelle: Betrag und dein Anteil stehen in festen Spalten untereinander. */
-    .item .total { flex: none; width: 84px; text-align: right; font-size: 12px; }
-    .item .total strong { display: block; font-size: 14px; color: var(--text-strong); font-variant-numeric: tabular-nums; }
-    .item .total ~ .side { width: 88px; max-width: none; font-size: 12px; }
-    .item .total ~ .side strong { font-size: 14px; }
-    @media (max-width: 380px) {
-        .item .total { width: 74px; }
-        .item .total ~ .side { width: 78px; }
+    /* Ausgaben-Liste wie eine Tabelle: Zahlung, Betrag und dein Anteil in festen Spalten. */
+    .item .col { flex: none; width: 82px; text-align: right; font-size: 12px; }
+    .item .col strong { display: block; font-size: 14px; font-variant-numeric: tabular-nums; }
+    .item .col-pay strong { color: var(--text-strong); }
+    .item .col-amount.is-expense strong { color: var(--neg); }
+    .item .col-amount.is-refund strong { color: var(--pos); }
+    .item .col ~ .side { width: 86px; max-width: none; font-size: 12px; }
+    .item .col ~ .side strong { font-size: 14px; }
+    /* Schmal: Die Zahlen rutschen unter den Titel, die Spalten bleiben untereinander. */
+    @media (max-width: 560px) {
+        .item:has(.col) { flex-wrap: wrap; row-gap: 6px; }
+        .item:has(.col) .body { flex: 1 1 calc(100% - 50px); }
+        .item .col-pay { margin-left: auto; }
     }
 
     .month {
@@ -356,7 +361,14 @@
     .pill.live::before { background: var(--pos); }
     .pill.waiting::before { background: var(--theme-warning); }
 
-    .data-state { margin-top: 8px; font-size: 18px; line-height: 1.2; letter-spacing: 1px; }
+    .data-state { margin-top: 8px; font-size: 18px; line-height: 1.2; }
+    .data-state code {
+        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 2px;
+        color: var(--text-strong);
+    }
     .data-state span { margin-right: 8px; font-size: 12px; font-weight: 600; letter-spacing: 0; color: var(--muted); }
     .data-state-hint { margin-top: 2px; font-size: 11px; letter-spacing: 0; color: var(--muted); }
     .kind-seg { margin-bottom: 14px; }
@@ -520,14 +532,14 @@
 <div class="container">
     <main id="app"></main>
     <noscript>Kwidt braucht JavaScript.</noscript>
-    <div class="footer-info">v<span id="versionNumber">1.10</span></div>
+    <div class="footer-info">v<span id="versionNumber">1.11</span></div>
 </div>
 <div id="toast" role="status" hidden></div>
 
 <script src="../fileshare/vendor/peerjs.min.js"></script>
 <script src="../fileshare/vendor/qrcode.min.js"></script>
 <!-- ?v= immer zusammen mit der Versionsnummer oben ändern: Sonst läuft die neue Seite mit alten Skripten aus dem Browser-Cache. -->
-<script src="core.js?v=1.10"></script>
-<script src="app.js?v=1.10"></script>
+<script src="core.js?v=1.11"></script>
+<script src="app.js?v=1.11"></script>
 </body>
 </html>
