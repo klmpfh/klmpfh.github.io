@@ -614,7 +614,8 @@
         if (parts[0] === 'new') return { name: 'new' };
         if (parts[0] === 'p' && C.RE_ID.test(parts[1] || '')) return { name: 'contact', id: parts[1] };
         if (parts[0] === 'offsets') return { name: 'offsets' };
-        if (parts[0] !== 'g' || !C.RE_GROUP_ID.test(parts[1] || '')) return { name: 'home' };
+        if (HOME_TABS.some(function (t) { return t[0] === parts[0]; })) return { name: 'home', tab: parts[0] };
+        if (parts[0] !== 'g' || !C.RE_GROUP_ID.test(parts[1] || '')) return { name: 'home', tab: null };
         return {
             name: 'group',
             gid: parts[1],
@@ -679,7 +680,7 @@
         app.appendChild(route.name === 'new' ? viewNewGroup()
             : route.name === 'contact' ? viewContact(route.id)
                 : route.name === 'offsets' ? viewOffsetLog()
-                    : viewHome());
+                    : viewHome(route.tab));
     }
 
     async function handleJoin() {
@@ -754,7 +755,33 @@
         return others.concat(me ? [memberName(doc, me) + ' (du)'] : []).join(', ');
     }
 
-    function viewHome() {
+    const HOME_TABS = [['info', 'Infos'], ['gruppen', 'Gruppen'], ['personen', 'Personen'], ['backup', 'Backup']];
+
+    /**
+     * Startseite mit Reitern. Ohne Reiter in der Adresse: Gruppen, oder Infos,
+     * solange es noch keine Gruppe gibt.
+     */
+    function viewHome(tab) {
+        const hasGroups = Object.keys(store.groups).length > 0;
+        const current = tab || (hasGroups ? 'gruppen' : 'info');
+        const content = {
+            info: viewInfoTab,
+            gruppen: viewGroupsTab,
+            personen: viewPeopleTab,
+            backup: viewBackupTab
+        }[current]();
+
+        return h('div', null,
+            h('header', { class: 'page-head' },
+                h('h1', null, 'Kwidt'),
+                h('p', null, 'Gemeinsame Ausgaben aufteilen, bis alle kwidt sind.')),
+            h('nav', { class: 'tabs', 'aria-label': 'Bereiche der Startseite' }, HOME_TABS.map(function (t) {
+                return h('a', { href: '#/' + t[0], 'aria-current': t[0] === current ? 'page' : null }, t[1]);
+            })),
+            content);
+    }
+
+    function viewGroupsTab() {
         const docs = Object.keys(store.groups).map(function (gid) { return store.groups[gid]; });
         docs.sort(function (a, b) { return C.lastT(b) - C.lastT(a); });
 
@@ -784,9 +811,6 @@
         const totalKeys = Object.keys(totals).filter(function (cur) { return totals[cur]; });
 
         return h('div', null,
-            h('header', { class: 'page-head' },
-                h('h1', null, 'Kwidt'),
-                h('p', null, 'Gemeinsame Ausgaben aufteilen, bis alle kwidt sind.')),
             totalKeys.length ? h('section', { class: 'panel' },
                 h('h2', null, 'Über alle Gruppen'),
                 h('div', { class: 'my-balance' }, totalKeys.map(function (cur) {
@@ -799,15 +823,35 @@
                     'Noch keine Gruppe. Leg eine an, zum Beispiel für den nächsten Urlaub, die WG oder den Grillabend. Ein Paar ist einfach eine Gruppe mit zwei Personen.'),
                 h('div', { class: 'actions' },
                     h('a', { class: 'btn', href: '#/new' }, '+ Neue Gruppe oder importieren')),
-                h('div', { class: 'field-hint' }, 'Hier kommen auch einzelne Gruppen rein: die CSV einer Gruppe aus Kwidt oder eine Excel-Datei aus Splid.')),
-            viewPeoplePanel(),
-            h('section', { class: 'panel' },
-                h('h2', null, 'Backup'),
-                h('p', { class: 'small muted' }, 'Sichert alle Gruppen dieses Browsers in einer Datei, dazu die verknüpften Personen und die Verrechnungen. Beim Laden wird sie mit dem vorhandenen Stand zusammengeführt.'),
-                h('div', { class: 'actions' },
-                    docs.length ? h('button', { class: 'btn btn-small', type: 'button', onclick: exportAll }, 'Backup sichern') : null,
-                    h('label', { class: 'btn btn-small' }, 'Backup laden',
-                        h('input', { type: 'file', accept: 'application/json,.json', hidden: true, onchange: importBackup })))),
+                h('div', { class: 'field-hint' }, 'Hier kommen auch einzelne Gruppen rein: die CSV einer Gruppe aus Kwidt oder eine Excel-Datei aus Splid.')));
+    }
+
+    function viewPeopleTab() {
+        return viewPeoplePanel() || h('section', { class: 'panel' },
+            h('h2', null, 'Personen über Gruppen hinweg'),
+            h('div', { class: 'empty' }, 'Leg zuerst Gruppen an. Danach kannst du hier dieselbe Person aus verschiedenen Gruppen verknüpfen.'),
+            h('div', { class: 'actions' }, h('a', { class: 'btn', href: '#/gruppen' }, 'Zu den Gruppen')));
+    }
+
+    function viewBackupTab() {
+        const hasGroups = Object.keys(store.groups).length > 0;
+        return h('section', { class: 'panel' },
+            h('h2', null, 'Backup'),
+            h('p', { class: 'small muted' }, 'Sichert alle Gruppen dieses Browsers in einer Datei, dazu die verknüpften Personen und die Verrechnungen. Beim Laden wird sie mit dem vorhandenen Stand zusammengeführt.'),
+            h('div', { class: 'actions' },
+                hasGroups ? h('button', { class: 'btn btn-small', type: 'button', onclick: exportAll }, 'Backup sichern') : null,
+                h('label', { class: 'btn btn-small' }, 'Backup laden',
+                    h('input', { type: 'file', accept: 'application/json,.json', hidden: true, onchange: importBackup }))),
+            h('p', { class: 'small muted', style: 'margin-top:10px' }, 'Deine Daten liegen nur in diesem Browser. Werden die Browserdaten gelöscht, sind sie weg, wenn es kein Backup und kein anderes Gerät mit der Gruppe gibt.'));
+    }
+
+    function viewInfoTab() {
+        const hasGroups = Object.keys(store.groups).length > 0;
+        return h('div', null,
+            hasGroups ? null : h('section', { class: 'panel start-panel' },
+                h('h2', null, 'Los geht’s'),
+                h('p', { class: 'small muted', style: 'margin-bottom:10px' }, 'Leg eine Gruppe für eure gemeinsamen Ausgaben an oder importiere eine aus Splid oder einer Kwidt-CSV.'),
+                h('a', { class: 'btn btn-block', href: '#/gruppen' }, 'Erste Gruppe anlegen')),
             h('section', { class: 'panel' },
                 h('h2', null, 'So funktioniert es'),
                 h('p', { class: 'small muted' }, 'Es gibt keine Anmeldung. Deine Gruppen liegen nur in diesem Browser, nicht auf einem Server. Jede Person hat ihre eigene Kopie.'),
@@ -1121,7 +1165,7 @@
     function viewContact(cid) {
         const contact = store.contacts[cid];
         if (!contact) {
-            setTimeout(function () { go('/'); }, 0);
+            setTimeout(function () { go('/personen'); }, 0);
             return h('div');
         }
         // Fällige Wiederholungen nachbuchen, sonst rechnet die Übersicht mit altem Stand.
@@ -1131,7 +1175,7 @@
         if (offsetFlow && offsetFlow.cid !== cid) offsetFlow = null;
 
         return h('div', null,
-            h('a', { class: 'back', href: '#/' }, '‹ Startseite'),
+            h('a', { class: 'back', href: '#/personen' }, '‹ Personen'),
             h('header', { class: 'group-head' },
                 h('h1', null, contact.name),
                 h('p', { class: 'small muted' }, 'Nur auf diesem Gerät. Die Gruppen erfahren nichts von dieser Verknüpfung.')),
@@ -1269,7 +1313,7 @@
                         delete store.contacts[contact.id];
                         offsetFlow = null;
                         persist();
-                        go('/');
+                        go('/personen');
                     }
                 }, 'Person entfernen')));
     }
@@ -1569,7 +1613,7 @@
 
     function viewOffsetLog() {
         return h('div', null,
-            h('a', { class: 'back', href: '#/' }, '‹ Startseite'),
+            h('a', { class: 'back', href: '#/personen' }, '‹ Personen'),
             viewOffsetEntries(contactOffsets(null), 'Alle Verrechnungen')
             || h('section', { class: 'panel' }, h('div', { class: 'empty' }, 'Noch keine Verrechnungen.')));
     }
@@ -1902,7 +1946,7 @@
         manualPeople.appendChild(friends);
 
         return h('div', null,
-            h('a', { class: 'back', href: '#/' }, '‹ Gruppen'),
+            h('a', { class: 'back', href: '#/gruppen' }, '‹ Gruppen'),
             h('form', { class: 'panel', onsubmit: submit },
                 h('h2', null, 'Neue Gruppe'),
                 error,
@@ -1966,7 +2010,7 @@
 
     function viewWaiting(doc) {
         return h('div', null,
-            h('a', { class: 'back', href: '#/' }, '‹ Gruppen'),
+            h('a', { class: 'back', href: '#/gruppen' }, '‹ Gruppen'),
             h('section', { class: 'panel' },
                 h('div', { class: 'empty' },
                     h('span', { class: 'big', 'aria-hidden': 'true' }, '📡'),
@@ -2005,7 +2049,7 @@
         }
 
         return h('div', null,
-            h('a', { class: 'back', href: '#/' }, '‹ Gruppen'),
+            h('a', { class: 'back', href: '#/gruppen' }, '‹ Gruppen'),
             h('header', { class: 'group-head' },
                 groupAvatar(doc.meta.name, true),
                 h('h1', null, doc.meta.name)),
@@ -2054,7 +2098,7 @@
         }[tab](doc, balances, me);
 
         return h('div', null,
-            h('a', { class: 'back', href: '#/' }, '‹ Gruppen'),
+            h('a', { class: 'back', href: '#/gruppen' }, '‹ Gruppen'),
             // Kompakt: Symbol, Name und Stand in einer Zeile, darunter der Abgleich.
             h('header', { class: 'group-head' },
                 h('div', { class: 'group-title' },
