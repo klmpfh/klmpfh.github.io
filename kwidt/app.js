@@ -663,6 +663,7 @@
                 state.search = '';
                 state.filter = emptyFilter();
                 state.filterOpen = false;
+                state.seriesOpen = false;
             }
             if (store.last !== route.gid) {
                 store.last = route.gid;
@@ -768,8 +769,8 @@
                 h('span', { class: 'body' },
                     h('div', { class: 'title' }, doc.meta.name || 'Einladung'),
                     h('div', { class: 'sub' }, doc.meta.t
-                        ? [memberCount + (memberCount === 1 ? ' Person' : ' Personen') + ' · Stand ',
-                            h('code', { class: 'state-code', title: 'Gleicher Code auf zwei Geräten heißt: gleicher Stand.' }, C.dataFingerprint(doc))]
+                        ? [memberCount + (memberCount === 1 ? ' Person' : ' Personen') + ' · Datenstand ',
+                            h('code', { class: 'state-code', title: 'Gleicher Code auf zwei Geräten heißt: gleicher Datenstand.' }, C.dataFingerprint(doc))]
                         : 'Wartet auf Daten'),
                     doc.meta.t ? h('div', { class: 'sub names' }, memberNamesText(doc)) : null,
                     doc.meta.t ? h('div', { class: 'sub' }, groupTimesText(doc)) : null),
@@ -838,7 +839,7 @@
                     'Filter nach Person, Kategorie, Betrag und Text',
                     'Mehrere Währungen in einer Gruppe',
                     'Import aus Splid und aus der eigenen CSV',
-                    'Stand-Code: Zwei Geräte auf einen Blick vergleichen',
+                    'Datenstand-Code: Zwei Geräte auf einen Blick vergleichen',
                     'Personen über Gruppen hinweg: Schulden verrechnen und in einer Gruppe zusammenführen, etwa WG gegen Urlaub. Die Verknüpfung liegt nur auf deinem Gerät (und im Backup), keine Gruppe erfährt etwas über die anderen'
                 ])));
     }
@@ -1410,7 +1411,7 @@
                 const paid = pay && r.gid === flow.target ? net : 0;
                 const after = r.amount - entry - paid;
                 return h('div', { class: 'offset-row' + (r.gid === flow.target ? ' is-target' : '') },
-                    h('div', null, h('strong', null, r.doc.meta.name), r.gid === flow.target ? ' · Zielgruppe' : '', ' · Stand ', h('code', { class: 'state-code' }, C.dataFingerprint(r.doc))),
+                    h('div', null, h('strong', null, r.doc.meta.name), r.gid === flow.target ? ' · Zielgruppe' : '', ' · Datenstand ', h('code', { class: 'state-code' }, C.dataFingerprint(r.doc))),
                     h('div', { class: 'small muted' }, 'Person dort: ' + linkLabel(r.doc, r.member)),
                     h('div', { class: 'small muted' }, 'Du heißt dort: ' + memberName(r.doc, r.me) + ' · ' + modeText(r.doc) + ' · ' + syncStatusText(flow.pull[r.gid] || 'offline')),
                     h('div', { class: 'small' }, 'jetzt: ' + owedText(r.amount, cur)
@@ -2054,13 +2055,15 @@
 
         return h('div', null,
             h('a', { class: 'back', href: '#/' }, '‹ Gruppen'),
+            // Kompakt: Symbol, Name und Stand in einer Zeile, darunter der Abgleich.
             h('header', { class: 'group-head' },
-                groupAvatar(doc.meta.name, true),
-                h('h1', null, doc.meta.name),
-                h('a', { id: 'syncPill', class: syncPillClass(), href: '#/g/' + doc.id + '/settings' }, syncLabel()),
-                h('div', { class: 'data-state', title: 'Gleicher Code auf zwei Geräten heißt: gleicher Stand.' },
-                    h('span', null, 'Stand'), h('code', null, C.dataFingerprint(doc)),
-                    h('div', { class: 'data-state-hint' }, 'Ändert sich, wenn Daten geändert werden'))),
+                h('div', { class: 'group-title' },
+                    groupAvatar(doc.meta.name),
+                    h('h1', null, doc.meta.name),
+                    h('div', { class: 'data-state', title: 'Gleicher Code auf zwei Geräten heißt: gleicher Datenstand.' },
+                        h('span', null, 'Datenstand'), h('code', null, C.dataFingerprint(doc)))),
+                h('div', { class: 'group-status' },
+                    h('a', { id: 'syncPill', class: syncPillClass(), href: '#/g/' + doc.id + '/settings' }, syncLabel()))),
             summary ? h('section', { class: 'panel' }, summary) : null,
             h('div', { class: 'group-actions' },
                 h('a', { class: 'btn', href: '#/g/' + doc.id + '/expense' }, '+ Ausgabe'),
@@ -2261,16 +2264,23 @@
             return (C.nextOccurrence(doc, a, today) || '') < (C.nextOccurrence(doc, b, today) || '') ? -1 : 1;
         });
         if (!series.length) return null;
-        return h('section', { class: 'panel' },
-            h('h2', null, 'Wiederkehrend'),
-            h('div', { class: 'list' }, series.map(function (e) {
+        // Zugeklappt zeigt die Zeile, was als Nächstes dran ist.
+        const first = series[0];
+        const firstDate = C.nextOccurrence(doc, first, today);
+        const preview = series.length + ' · ' + (firstDate
+            ? 'nächste: ' + first.desc + ' am ' + formatDate(firstDate) + ' (' + daysUntil(firstDate) + ')'
+            : 'keine weitere geplant');
+        const body = h('div', { class: 'list' }, series.map(function (e) {
                 return h('a', { class: 'item', href: '#/g/' + doc.id + '/expense/' + e.id },
                     categoryIcon(doc, e.category),
                     h('span', { class: 'body' },
                         h('div', { class: 'title' }, e.desc),
                         h('div', { class: 'sub' }, (e.refund ? 'Rückzahlung · ' : '') + repeatLabel(e) + ' · ' + nextBookingText(doc, e))),
                     h('span', { class: 'side' }, h('strong', null, money(C.expenseSign(e) * e.amount, e.currency))));
-            })));
+            }));
+        const section = fold('Wiederkehrend', h('span', { class: 'fold-value' }, preview), body, state.seriesOpen);
+        section.addEventListener('toggle', function () { state.seriesOpen = section.open; });
+        return h('section', { class: 'panel panel-fold' }, section);
     }
 
     function viewExpensesTab(doc, balances, me) {
@@ -2678,7 +2688,7 @@
                 h('p', { class: 'small muted' }, 'Wie der kurze Link: Er enthält nur die Adresse der Gruppe.'),
                 qrBox),
             h('p', { class: 'small muted', style: 'margin-top:14px' }, 'Wer einen Link hat, kann die Gruppe lesen und bearbeiten. Für den Live-Abgleich wird der öffentliche Dienst PeerJS genutzt, die Daten selbst gehen verschlüsselt von Gerät zu Gerät.'),
-            h('p', { class: 'small muted', style: 'margin-top:8px' }, 'Der Code neben „Stand“ oben ist ein Fingerabdruck eurer Eingaben: Ist er auf zwei Geräten gleich, seid ihr auf demselben Stand.'));
+            h('p', { class: 'small muted', style: 'margin-top:8px' }, 'Der Code neben „Datenstand“ oben ist ein Fingerabdruck eurer Eingaben: Ist er auf zwei Geräten gleich, seid ihr auf demselben Stand. Er ändert sich mit jeder Änderung an den Daten.'));
     }
 
     function viewMembersPanel(doc, balances, me) {

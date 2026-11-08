@@ -362,6 +362,13 @@
     .pill.waiting::before { background: var(--theme-warning); }
 
     .data-state { margin-top: 8px; font-size: 18px; line-height: 1.2; }
+    /* Symbol, Name und Stand bleiben in einer Zeile; bei langen Namen bricht nur der Name um. */
+    .group-title { display: flex; align-items: center; justify-content: center; gap: 10px; }
+    .group-title .avatar { flex: none; }
+    .group-title h1 { flex: 0 1 auto; min-width: 0; font-size: 22px; line-height: 1.2; }
+    .group-title .data-state { flex: none; margin-top: 0; white-space: nowrap; }
+    .group-status { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; }
+    .group-status .pill { margin-top: 0; }
     .data-state code {
         font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
         font-size: 16px;
@@ -402,7 +409,6 @@
     .fact-list.pro li::before { content: "+"; color: var(--pos); }
     .fact-list.con li::before { content: "–"; color: var(--neg); }
     .fact-list.feature li::before { content: "✓"; color: var(--primary); }
-    .data-state-hint { margin-top: 2px; font-size: 11px; letter-spacing: 0; color: var(--muted); }
     .kind-seg { margin-bottom: 14px; }
 
     .my-balance { text-align: center; font-size: 16px; font-weight: 600; line-height: 1.5; }
@@ -572,14 +578,14 @@
 <div class="container">
     <main id="app"></main>
     <noscript>Kwidt braucht JavaScript.</noscript>
-    <div class="footer-info">v<span id="versionNumber">1.31</span></div>
+    <div class="footer-info">v<span id="versionNumber">1.35</span></div>
 </div>
 <div id="toast" role="status" hidden></div>
 
 <script src="../fileshare/vendor/peerjs.min.js"></script>
 <script src="../fileshare/vendor/qrcode.min.js"></script>
 <!-- ?v= immer zusammen mit der Versionsnummer oben ändern: Sonst läuft die neue Seite mit alten Skripten aus dem Browser-Cache. -->
-<script src="core.js?v=1.31"></script>
-<script src="app.js?v=1.31"></script>
+<script src="core.js?v=1.35"></script>
+<script src="app.js?v=1.35"></script>
 </body>
 </html>
