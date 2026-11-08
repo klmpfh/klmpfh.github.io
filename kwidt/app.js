@@ -744,7 +744,10 @@
                 groupAvatar(doc.meta.name),
                 h('span', { class: 'body' },
                     h('div', { class: 'title' }, doc.meta.name || 'Einladung'),
-                    h('div', { class: 'sub' }, doc.meta.t ? memberCount + (memberCount === 1 ? ' Person' : ' Personen') : 'Wartet auf Daten')),
+                    h('div', { class: 'sub' }, doc.meta.t
+                        ? [memberCount + (memberCount === 1 ? ' Person' : ' Personen') + ' · Stand ',
+                            h('code', { class: 'state-code', title: 'Gleicher Code auf zwei Geräten heißt: gleicher Stand.' }, C.dataFingerprint(doc))]
+                        : 'Wartet auf Daten')),
                 h('span', { class: 'side' }, mine.length
                     ? mine.map(function (b) {
                         return h('div', null, h('span', { class: 'muted' }, b.amount > 0 ? 'du bekommst ' : 'du schuldest '), balanceSpan(b.amount, b.cur));
