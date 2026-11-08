@@ -610,6 +610,7 @@
         const qIndex = raw.indexOf('?');
         const path = qIndex === -1 ? raw : raw.slice(0, qIndex);
         const params = new URLSearchParams(qIndex === -1 ? '' : raw.slice(qIndex + 1));
+        if (path.indexOf('transfer=') === 0) return { name: 'transfer', value: path.slice(9) };
         const parts = path.split('/').filter(Boolean);
         if (parts[0] === 'new') return { name: 'new' };
         if (parts[0] === 'p' && C.RE_ID.test(parts[1] || '')) return { name: 'contact', id: parts[1] };
@@ -678,6 +679,7 @@
 
         Sync.stop();
         app.appendChild(route.name === 'new' ? viewNewGroup()
+            : route.name === 'transfer' ? viewTransferIn(route.value)
             : route.name === 'contact' ? viewContact(route.id)
                 : route.name === 'offsets' ? viewOffsetLog()
                     : viewHome(route.tab));
@@ -835,14 +837,14 @@
 
     function viewBackupTab() {
         const hasGroups = Object.keys(store.groups).length > 0;
-        return h('section', { class: 'panel' },
-            h('h2', null, 'Backup'),
+        return h('div', null, viewTransferPanel(), h('section', { class: 'panel' },
+            h('h2', null, 'Backup als Datei'),
             h('p', { class: 'small muted' }, 'Sichert alle Gruppen dieses Browsers in einer Datei, dazu die verknüpften Personen und die Verrechnungen. Beim Laden wird sie mit dem vorhandenen Stand zusammengeführt.'),
             h('div', { class: 'actions' },
                 hasGroups ? h('button', { class: 'btn btn-small', type: 'button', onclick: exportAll }, 'Backup sichern') : null,
                 h('label', { class: 'btn btn-small' }, 'Backup laden',
                     h('input', { type: 'file', accept: 'application/json,.json', hidden: true, onchange: importBackup }))),
-            h('p', { class: 'small muted', style: 'margin-top:10px' }, 'Deine Daten liegen nur in diesem Browser. Werden die Browserdaten gelöscht, sind sie weg, wenn es kein Backup und kein anderes Gerät mit der Gruppe gibt.'));
+            h('p', { class: 'small muted', style: 'margin-top:10px' }, 'Deine Daten liegen nur in diesem Browser. Werden die Browserdaten gelöscht, sind sie weg, wenn es kein Backup und kein anderes Gerät mit der Gruppe gibt.')));
     }
 
     function viewInfoTab() {
@@ -895,14 +897,68 @@
             h('ul', { class: 'fact-list ' + kind }, items.map(function (text) { return h('li', null, text); })));
     }
 
-    function exportAll() {
+    /** Alles, was dieses Gerät hat: für die Backup-Datei und die Übertragung auf ein anderes Gerät. */
+    function backupData() {
         const me = {};
         const groups = Object.keys(store.groups).map(function (gid) {
             if (store.me[gid]) me[gid] = store.me[gid];
             return store.groups[gid];
         });
-        download('kwidt-backup-' + C.todayStr() + '.json', 'application/json',
-            JSON.stringify({ app: 'quitt', version: 1, groups: groups, me: me, contacts: store.contacts, offsets: store.offsets }, null, 1));
+        const appVersion = (document.getElementById('versionNumber') || {}).textContent || '';
+        return { app: 'quitt', version: 1, appVersion: appVersion, groups: groups, me: me, contacts: store.contacts, offsets: store.offsets };
+    }
+
+    function exportAll() {
+        download('kwidt-backup-' + C.todayStr() + '.json', 'application/json', JSON.stringify(backupData(), null, 1));
+    }
+
+    /** „3 Gruppen, 2 Personen und 1 Verrechnung“ */
+    function countsText(groups, people, logs) {
+        const parts = [groups + (groups === 1 ? ' Gruppe' : ' Gruppen')];
+        if (people) parts.push(people + (people === 1 ? ' Person' : ' Personen'));
+        if (logs) parts.push(logs + (logs === 1 ? ' Verrechnung' : ' Verrechnungen'));
+        return parts.length > 1 ? parts.slice(0, -1).join(', ') + ' und ' + parts[parts.length - 1] : parts[0];
+    }
+
+    function backupSummary(data) {
+        return countsText(data.groups.length, Object.keys(cleanContacts(data.contacts)).length, Object.keys(cleanOffsets(data.offsets)).length);
+    }
+
+    /**
+     * Führt ein Backup mit dem Stand hier zusammen: Gruppen wie beim Abgleich, wer du bist
+     * nur, wo es hier noch fehlt. Personen: neue kommen dazu, bekannte bekommen fehlende
+     * Verknüpfungen (pro Gruppe bleibt die vorhandene). Verrechnungs-Log: neue Einträge kommen dazu.
+     */
+    function applyBackup(data) {
+        let count = 0;
+        data.groups.forEach(function (raw) {
+            const doc = C.sanitizeGroup(raw);
+            if (!doc) return;
+            if (store.groups[doc.id]) C.mergeGroups(store.groups[doc.id], doc);
+            else store.groups[doc.id] = doc;
+            const me = data.me && data.me[doc.id];
+            if (typeof me === 'string' && !store.me[doc.id]) store.me[doc.id] = me;
+            count++;
+        });
+        const contacts = cleanContacts(data.contacts);
+        Object.keys(contacts).forEach(function (id) {
+            const local = store.contacts[id];
+            if (!local) {
+                store.contacts[id] = contacts[id];
+                return;
+            }
+            contacts[id].links.forEach(function (l) {
+                if (!local.links.some(function (x) { return x.gid === l.gid; })) local.links.push(l);
+            });
+        });
+        const offsets = cleanOffsets(data.offsets);
+        Object.keys(offsets).forEach(function (id) { if (!store.offsets[id]) store.offsets[id] = offsets[id]; });
+        persist();
+        return {
+            text: countsText(count, Object.keys(contacts).length, Object.keys(offsets).length),
+            // Sicherungen aus Versionen vor den Personen haben das Feld gar nicht.
+            noContacts: data.contacts === undefined
+        };
     }
 
     async function importBackup(e) {
@@ -912,28 +968,278 @@
         try {
             const data = JSON.parse(await file.text());
             if (!data || data.app !== 'quitt' || !Array.isArray(data.groups)) throw new Error('Kein Kwidt-Backup');
-            let count = 0;
-            data.groups.forEach(function (raw) {
-                const doc = C.sanitizeGroup(raw);
-                if (!doc) return;
-                if (store.groups[doc.id]) C.mergeGroups(store.groups[doc.id], doc);
-                else store.groups[doc.id] = doc;
-                const me = data.me && data.me[doc.id];
-                if (typeof me === 'string' && !store.me[doc.id]) store.me[doc.id] = me;
-                count++;
-            });
-            // Kontakte und Verrechnungs-Log: Was es hier schon gibt, bleibt wie es ist.
-            const contacts = cleanContacts(data.contacts);
-            Object.keys(contacts).forEach(function (id) { if (!store.contacts[id]) store.contacts[id] = contacts[id]; });
-            const offsets = cleanOffsets(data.offsets);
-            Object.keys(offsets).forEach(function (id) { if (!store.offsets[id]) store.offsets[id] = offsets[id]; });
-            persist();
+            const result = applyBackup(data);
             render();
-            toast(count + (count === 1 ? ' Gruppe' : ' Gruppen') + ' geladen.');
+            toast(result.text + ' geladen.' + (result.noContacts ? ' Diese Sicherung enthält keine Personen, sie stammt aus einer älteren Kwidt-Version.' : ''),
+                'OK', function () { /* nur schließen */ });
         } catch (err) {
             console.warn('Kwidt: Backup nicht lesbar.', err);
             toast('Diese Datei ist kein Kwidt-Backup.');
         }
+    }
+
+    /* ---------- Übertragung auf ein anderes Gerät ---------- */
+    /*
+     * Einmal-Übertragung aller Daten wie ein Backup. Das sendende Gerät meldet sich bei
+     * PeerJS unter einer zufälligen Sitzungs-ID an und zeigt Link und QR-Code. Der Link
+     * trägt nach dem # einen Schlüssel, der nie an einen Server geht. Das empfangende
+     * Gerät beweist mit dem Schlüssel, dass es den Link hat; erst dann kommen die Daten,
+     * zusätzlich zu WebRTC mit AES-GCM verschlüsselt. Nach einer Übertragung oder nach
+     * zehn Minuten meldet sich das sendende Gerät ab: Die Sitzung ist verbrannt.
+     */
+    const TRANSFER_TTL = 10 * 60 * 1000;
+    const TRANSFER_PREFIX = PEER_PREFIX + 'transfer-';
+    let transferOut = null;
+    let transferIn = null;
+
+    function randomBytes(n) {
+        const bytes = new Uint8Array(n);
+        crypto.getRandomValues(bytes);
+        return bytes;
+    }
+
+    function transferKey(keyText) {
+        return crypto.subtle.importKey('raw', fromBase64Url(keyText), 'AES-GCM', false, ['encrypt', 'decrypt']);
+    }
+
+    async function sealText(key, text) {
+        const iv = randomBytes(12);
+        const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, new TextEncoder().encode(text));
+        return { iv: toBase64Url(iv), data: toBase64Url(new Uint8Array(data)) };
+    }
+
+    async function openText(key, box) {
+        const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromBase64Url(box.iv) }, key, fromBase64Url(box.data));
+        return new TextDecoder().decode(plain);
+    }
+
+    function transferPossible() {
+        return typeof Peer !== 'undefined' && !!(window.crypto && crypto.subtle);
+    }
+
+    function showTransfer() {
+        if (location.hash === '#/backup') softRender();
+    }
+
+    function endTransfer(t, status) {
+        if (t.ended) return;
+        t.ended = true;
+        t.status = status;
+        clearTimeout(t.timer);
+        clearTimeout(t.ackTimer);
+        // Kurz warten, damit die letzte Nachricht noch rausgeht.
+        setTimeout(function () { try { t.peer.destroy(); } catch (e) { /* schon zu */ } }, 800);
+        showTransfer();
+    }
+
+    function startTransfer() {
+        if (transferOut && !transferOut.ended) endTransfer(transferOut, 'cancelled');
+        if (!transferPossible()) {
+            toast('Übertragen geht in diesem Browser nicht.');
+            return;
+        }
+        const session = Array.from(randomBytes(16), function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+        const keyText = toBase64Url(randomBytes(32));
+        const t = {
+            session: session, keyText: keyText, status: 'connecting', until: Date.now() + TRANSFER_TTL, used: false, ended: false,
+            link: location.origin + location.pathname + '#transfer=' + session + '.' + keyText
+        };
+        transferOut = t;
+        t.timer = setTimeout(function () { endTransfer(t, 'expired'); }, TRANSFER_TTL);
+        try {
+            t.peer = new Peer(TRANSFER_PREFIX + session, { debug: 0 });
+        } catch (e) {
+            endTransfer(t, 'error');
+            return;
+        }
+        t.peer.on('open', function () {
+            if (!t.ended && t.status === 'connecting') {
+                t.status = 'waiting';
+                showTransfer();
+            }
+        });
+        t.peer.on('connection', function (conn) {
+            if (t.used || t.ended) {
+                conn.on('open', function () { conn.close(); });
+                return;
+            }
+            conn.on('data', async function (msg) {
+                if (!msg || msg.app !== 'quitt' || t.ended) return;
+                if (msg.type === 'transfer-received') {
+                    endTransfer(t, 'sent');
+                    return;
+                }
+                if (msg.type !== 'transfer-hello' || t.used) return;
+                try {
+                    const key = await transferKey(t.keyText);
+                    // Nur wer den Schlüssel aus dem Link hat, kann das richtig verschlüsseln.
+                    if (await openText(key, msg.proof) !== 'kwidt-transfer:' + t.session) throw new Error('Falscher Schlüssel');
+                    t.used = true;
+                    t.status = 'sending';
+                    showTransfer();
+                    conn.send({ app: 'quitt', type: 'transfer-data', box: await sealText(key, JSON.stringify(backupData())) });
+                    // Bestätigt das andere Gerät nicht, ist die Sitzung trotzdem verbraucht.
+                    t.ackTimer = setTimeout(function () { endTransfer(t, 'sent'); }, 30000);
+                } catch (e) {
+                    // Meist ein unvollständig kopierter Link. Die Sitzung bleibt gültig.
+                    try { conn.send({ app: 'quitt', type: 'transfer-denied' }); } catch (x) { /* schon zu */ }
+                    setTimeout(function () { try { conn.close(); } catch (x) { /* schon zu */ } }, 500);
+                }
+            });
+        });
+        t.peer.on('error', function () {
+            if (!t.used) endTransfer(t, 'error');
+        });
+        showTransfer();
+    }
+
+    function transferStatusText(t) {
+        const until = new Date(t.until).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+        switch (t.status) {
+            case 'connecting': return 'Verbinde mit PeerJS …';
+            case 'waiting': return 'Wartet auf das andere Gerät. Gültig bis ' + until + ' Uhr, für genau eine Übertragung.';
+            case 'sending': return 'Überträgt …';
+            case 'sent': return 'Übertragen. Der Link ist jetzt verbraucht.';
+            case 'expired': return 'Abgelaufen. Der Link gilt nicht mehr.';
+            case 'cancelled': return 'Abgebrochen. Der Link gilt nicht mehr.';
+            default: return 'PeerJS ist gerade nicht erreichbar. Bitte später noch einmal versuchen oder ein Backup als Datei nutzen.';
+        }
+    }
+
+    function viewTransferPanel() {
+        const t = transferOut;
+        const active = t && !t.ended;
+        const body = [];
+        if (t) {
+            body.push(h('div', { class: active ? 'small' : 'notice', style: active ? 'margin:8px 0' : 'margin:10px 0 0' }, transferStatusText(t)));
+        }
+        if (active && t.status !== 'connecting') {
+            const qrBox = h('div', { class: 'qr-card' });
+            if (typeof QRCode !== 'undefined') {
+                const box = h('div');
+                qrBox.appendChild(box);
+                new QRCode(box, { text: t.link, width: 220, height: 220, colorDark: '#14121a', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.L });
+            }
+            const input = h('input', { type: 'text', readonly: 'readonly', value: t.link, 'aria-label': 'Link zum Übertragen', onfocus: function (e) { e.target.select(); } });
+            body.push(qrBox,
+                h('div', { class: 'add-row' }, input,
+                    h('button', {
+                        class: 'btn', type: 'button',
+                        onclick: async function () { toast(await copyText(t.link) ? 'Link kopiert.' : 'Kopieren hat nicht geklappt.'); }
+                    }, 'Kopieren')),
+                h('p', { class: 'small muted', style: 'margin-top:8px' }, 'Öffne den Link auf dem anderen Gerät oder scanne den QR-Code. Lass diese Seite offen, bis „Übertragen“ erscheint. Wer den Link hat, bekommt alle Daten, also nur an dich selbst schicken.'));
+        }
+        return h('section', { class: 'panel' },
+            h('h2', null, 'Auf ein anderes Gerät übertragen'),
+            h('p', { class: 'small muted' }, 'Schickt alle Daten wie ein Backup direkt an ein anderes Gerät, zum Beispiel vom PC aufs Handy. Dort werden sie mit dem vorhandenen Stand zusammengeführt. Beide Geräte müssen dafür gleichzeitig online sein.'),
+            body,
+            h('div', { class: 'actions' },
+                active
+                    ? h('button', { class: 'btn btn-small', type: 'button', onclick: function () { endTransfer(t, 'cancelled'); } }, 'Abbrechen')
+                    : h('button', { class: 'btn btn-small', type: 'button', disabled: !Object.keys(store.groups).length, onclick: startTransfer }, t ? 'Neuen Link erstellen' : 'Link und QR-Code erstellen')));
+    }
+
+    /* Empfangen */
+
+    function viewTransferIn(value) {
+        if (!transferIn || transferIn.value !== value) receiveTransfer(value);
+        const t = transferIn;
+        const back = h('a', { class: 'back', href: '#/gruppen' }, '‹ Startseite');
+
+        function close(path) {
+            try { t.peer.destroy(); } catch (e) { /* schon zu */ }
+            transferIn = null;
+            history.replaceState(null, '', '#/' + path);
+            render();
+        }
+
+        let content;
+        if (t.status === 'received') {
+            content = [
+                h('p', null, 'Vom anderen Gerät: ' + t.summary + '.'),
+                h('p', { class: 'small muted' }, 'Beim Übernehmen wird das mit den Daten hier zusammengeführt. Es geht nichts verloren, was hier schon ist.'),
+                h('div', { class: 'actions' },
+                    h('button', {
+                        class: 'btn', type: 'button',
+                        onclick: function () {
+                            const result = applyBackup(t.data);
+                            close('gruppen');
+                            toast(result.text + ' übernommen.', 'OK', function () { /* nur schließen */ });
+                        }
+                    }, 'Übernehmen'),
+                    h('button', { class: 'btn btn-small', type: 'button', onclick: function () { close(''); } }, 'Verwerfen'))
+            ];
+        } else if (t.status === 'connecting') {
+            content = h('p', { class: 'small muted' }, 'Verbinde mit dem anderen Gerät …');
+        } else {
+            content = [
+                h('div', { class: 'notice' }, t.status === 'invalid' ? 'Dieser Link ist ungültig. Wurde er vollständig kopiert?'
+                    : t.status === 'denied' ? 'Der Schlüssel im Link passt nicht. Wurde der Link vollständig kopiert? Der Link auf dem anderen Gerät gilt weiter.'
+                    : t.status === 'unsupported' ? 'Übertragen geht in diesem Browser nicht.'
+                        : 'Das andere Gerät ist nicht erreichbar. Der Link ist abgelaufen, schon benutzt, oder die Seite dort ist geschlossen.'),
+                h('div', { class: 'actions' }, h('button', { class: 'btn btn-small', type: 'button', onclick: function () { close(''); } }, 'Zur Startseite'))
+            ];
+        }
+        return h('div', null, back, h('section', { class: 'panel' }, h('h2', null, 'Daten empfangen'), content));
+    }
+
+    function receiveTransfer(value) {
+        const t = { value: value, status: 'connecting' };
+        transferIn = t;
+        const m = /^([0-9a-f]{32})\.([A-Za-z0-9_-]{43})$/.exec(value);
+        if (!m) {
+            t.status = 'invalid';
+            return;
+        }
+        if (!transferPossible()) {
+            t.status = 'unsupported';
+            return;
+        }
+        const session = m[1];
+        const keyText = m[2];
+        function fail() {
+            if (transferIn !== t || t.status !== 'connecting') return;
+            t.status = 'gone';
+            try { t.peer.destroy(); } catch (e) { /* schon zu */ }
+            render();
+        }
+        const timer = setTimeout(fail, 20000);
+        t.peer = new Peer({ debug: 0 });
+        t.peer.on('error', fail);
+        t.peer.on('open', function () {
+            const conn = t.peer.connect(TRANSFER_PREFIX + session, { reliable: true });
+            conn.on('open', async function () {
+                const key = await transferKey(keyText);
+                conn.send({ app: 'quitt', type: 'transfer-hello', proof: await sealText(key, 'kwidt-transfer:' + session) });
+            });
+            conn.on('data', async function (msg) {
+                if (!msg || msg.app !== 'quitt' || transferIn !== t) return;
+                if (msg.type === 'transfer-denied') {
+                    clearTimeout(timer);
+                    t.status = 'denied';
+                    try { t.peer.destroy(); } catch (e) { /* schon zu */ }
+                    render();
+                    return;
+                }
+                if (msg.type !== 'transfer-data') return;
+                try {
+                    const key = await transferKey(keyText);
+                    const data = JSON.parse(await openText(key, msg.box));
+                    if (!data || data.app !== 'quitt' || !Array.isArray(data.groups)) throw new Error('Keine Kwidt-Daten');
+                    clearTimeout(timer);
+                    t.data = data;
+                    t.summary = backupSummary(data);
+                    t.status = 'received';
+                    conn.send({ app: 'quitt', type: 'transfer-received' });
+                    setTimeout(function () { try { t.peer.destroy(); } catch (e) { /* schon zu */ } }, 800);
+                } catch (e) {
+                    clearTimeout(timer);
+                    t.status = 'gone';
+                }
+                render();
+            });
+            conn.on('error', fail);
+        });
     }
 
     /* ---------- Personen über Gruppen hinweg ---------- */
