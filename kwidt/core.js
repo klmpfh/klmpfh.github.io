@@ -45,6 +45,9 @@
     // 'biweekly' gibt es nur noch für alte Serien, neue sind 'weekly' mit every: 2.
     var REPEATS = ['none', 'weekly', 'biweekly', 'monthly', 'yearly'];
     var MAX_EVERY = 99;
+    // Offene Buchungen, die man auf einmal eintragen kann; gespeichert wird die Anzahl ab Beginn.
+    var MAX_OPEN = 999;
+    var MAX_COUNT = 100000;
 
     var MAX_AMOUNT = 1e12;
     var MAX_ITEMS = 200;
@@ -712,6 +715,49 @@
         return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate());
     }
 
+    /** Anzahl der Termine einer Serie, oder 0 für unbegrenzt. */
+    function seriesCount(e) {
+        var count = e && e.count;
+        return Number.isInteger(count) && count >= 1 && count <= MAX_COUNT ? count : 0;
+    }
+
+    /** Letzter erlaubter Tag einer Serie, oder '' für unbegrenzt. */
+    function seriesUntil(e) {
+        return e && RE_DATE.test(String(e.until)) ? e.until : '';
+    }
+
+    /**
+     * Darf der n-te Termin (am Tag `date`) noch gebucht werden? Ende und Anzahl sind
+     * beide freiwillig; sind beide gesetzt, endet die Serie mit dem, was zuerst eintritt.
+     * Die Anzahl zählt ab dem Beginn der Vorlage, der erste Termin ist n = 0.
+     */
+    function withinSeries(series, n, date) {
+        var count = seriesCount(series);
+        var until = seriesUntil(series);
+        return (!count || n < count) && (!until || date <= until);
+    }
+
+    /** Letzter Termin einer begrenzten Serie, oder null wenn sie unbegrenzt läuft. */
+    function lastOccurrence(series) {
+        var count = seriesCount(series);
+        var until = seriesUntil(series);
+        if (!count && !until) return null;
+        var every = seriesEvery(series);
+        var last = '';
+        for (var n = 0; n < (count || 100000); n++) {
+            var date = occurrence(series.date, series.repeat, n, every);
+            if (until && date > until) break;
+            last = date;
+        }
+        return last;
+    }
+
+    /** Hat eine begrenzte Serie ihren letzten Termin hinter sich (oder gar keinen)? */
+    function seriesFinished(series, today) {
+        var last = lastOccurrence(series);
+        return last !== null && last <= today;
+    }
+
     function latestOccurrences(doc) {
         var latest = {};
         Object.keys(doc.expenses).forEach(function (key) {
@@ -719,6 +765,28 @@
             if (e.parent && (!latest[e.parent] || e.date > latest[e.parent])) latest[e.parent] = e.date;
         });
         return latest;
+    }
+
+    /**
+     * Wie viele Termine der Serie (ab ihrem Beginn) schon erledigt sind: alle bis
+     * einschließlich des zuletzt gebuchten Eintrags, auch gelöschte. Gebucht wird nur
+     * danach, also sind das genau die Termine, die nicht mehr kommen. `rhythm` (Datum,
+     * Wiederholung, Intervall) erlaubt die Rechnung für eine geänderte Vorlage.
+     */
+    function bookedCount(doc, series, rhythm) {
+        var r = rhythm || series;
+        var latest = latestOccurrences(doc)[series.id];
+        if (!latest) return 0;
+        var every = seriesEvery(r);
+        var n = 0;
+        while (n < 100000 && occurrence(r.date, r.repeat, n, every) <= latest) n++;
+        return n;
+    }
+
+    /** Noch offene Buchungen einer Serie mit Anzahl, oder null wenn sie keine Anzahl hat. */
+    function openCount(doc, series) {
+        var count = seriesCount(series);
+        return count ? Math.max(0, count - bookedCount(doc, series)) : null;
     }
 
     function bookOccurrence(doc, series, date) {
@@ -729,6 +797,8 @@
         copy.parent = series.id;
         delete copy.series;
         delete copy.every;
+        delete copy.until;
+        delete copy.count;
         doc.expenses[copy.id] = copy;
     }
 
@@ -761,7 +831,7 @@
             }
             for (var n = 0; n <= 520; n++) {
                 var date = occurrence(series.date, series.repeat, n, seriesEvery(series));
-                if (date > today) break;
+                if (date > today || !withinSeries(series, n, date)) break;
                 if (doc.expenses[series.id + '~' + date] || (latest[series.id] && date <= latest[series.id])) continue;
                 bookOccurrence(doc, series, date);
                 created++;
@@ -770,10 +840,11 @@
         return created;
     }
 
-    /** Laufende Serien, ohne beendete. */
-    function liveSeries(doc) {
+    /** Laufende Serien, ohne beendete und ohne solche, deren letzter Termin vorbei ist. */
+    function liveSeries(doc, today) {
+        today = today || todayStr();
         return Object.keys(doc.expenses).map(function (k) { return doc.expenses[k]; })
-            .filter(function (e) { return e.series && !e.del && e.repeat !== 'none'; });
+            .filter(function (e) { return e.series && !e.del && e.repeat !== 'none' && !seriesFinished(e, today); });
     }
 
     /** Alle Einträge einer Serie, neueste zuerst, auch gelöschte. */
@@ -788,6 +859,7 @@
         var latest = latestOccurrences(doc)[series.id];
         for (var n = 0; n <= 520; n++) {
             var date = occurrence(series.date, series.repeat, n, seriesEvery(series));
+            if (!withinSeries(series, n, date)) return null;
             if (date > today && (!latest || date > latest)) return date;
         }
         return null;
@@ -856,12 +928,12 @@
     function forecast(doc, cur, today, until) {
         var latest = latestOccurrences(doc);
         var out = { count: 0, total: 0, items: [], owed: {}, paid: {} };
-        liveSeries(doc).filter(function (e) { return e.currency === cur; }).forEach(function (e) {
+        liveSeries(doc, today).filter(function (e) { return e.currency === cur; }).forEach(function (e) {
             var dates = [];
             var every = seriesEvery(e);
             for (var n = 0; n <= 5000; n++) {
                 var date = occurrence(e.date, e.repeat, n, every);
-                if (date > until) break;
+                if (date > until || !withinSeries(e, n, date)) break;
                 if (date > today && (!latest[e.id] || date > latest[e.id])) dates.push(date);
             }
             if (!dates.length) return;
@@ -1059,6 +1131,9 @@
         if (e.refund === true) out.refund = true;
         // Bestehende Wiederholungen ohne Intervall bekommen hier eine 1.
         if (out.repeat !== 'none') out.every = seriesEvery(e);
+        // Ende und Anzahl sind freiwillig; fehlen sie (auch bei alten Serien), läuft die Serie unbegrenzt.
+        if (out.repeat !== 'none' && seriesUntil(e)) out.until = e.until;
+        if (out.repeat !== 'none' && seriesCount(e)) out.count = e.count;
         return payersValid(out) && computeOwed(out) ? out : null;
     }
 
@@ -1164,7 +1239,9 @@
             var claims = Object.keys(e.claims || {}).filter(function (key) { return e.claims[key].on; }).sort();
             lines.push(JSON.stringify(['expense', id, e.desc, e.amount, e.currency, e.date, e.category, e.note,
                 sortedPairs(e.payers), e.split.type, sortedPairs(e.split.values), e.repeat, !!e.series, e.items || [], claims, !!e.refund,
-                e.repeat !== 'none' ? seriesEvery(e) : 0]));
+                e.repeat !== 'none' ? seriesEvery(e) : 0]
+                // Nur anhängen, wenn gesetzt: So bleibt der Fingerabdruck alter Daten gleich.
+                .concat(seriesUntil(e) || seriesCount(e) ? [seriesUntil(e), seriesCount(e)] : [])));
         });
         livePayments(doc).forEach(function (p) {
             lines.push(JSON.stringify(['payment', p.id, p.from, p.to, p.amount, p.currency, p.date, p.note, p.offset || '']));
@@ -1830,7 +1907,14 @@
         SPLIT_TYPES: SPLIT_TYPES,
         REPEATS: REPEATS,
         MAX_EVERY: MAX_EVERY,
+        MAX_COUNT: MAX_COUNT,
+        MAX_OPEN: MAX_OPEN,
+        bookedCount: bookedCount,
+        openCount: openCount,
         seriesEvery: seriesEvery,
+        seriesCount: seriesCount,
+        seriesUntil: seriesUntil,
+        seriesFinished: seriesFinished,
         RE_GROUP_ID: RE_GROUP_ID,
         RE_ID: RE_ID,
         RE_EXPENSE_ID: RE_EXPENSE_ID,

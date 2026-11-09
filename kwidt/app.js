@@ -2674,7 +2674,7 @@
                     categoryIcon(doc, e.category),
                     h('span', { class: 'body' },
                         h('div', { class: 'title' }, e.desc),
-                        h('div', { class: 'sub' }, (e.refund ? 'Rückzahlung · ' : '') + repeatLabel(e) + ' · ' + nextBookingText(doc, e))),
+                        h('div', { class: 'sub' }, (e.refund ? 'Rückzahlung · ' : '') + repeatLabel(e, doc) + ' · ' + nextBookingText(doc, e))),
                     h('span', { class: 'side' }, h('strong', null, money(C.expenseSign(e) * e.amount, e.currency))));
             }));
         const section = fold('Wiederkehrend', h('span', { class: 'fold-value' }, preview), body, state.seriesOpen);
@@ -2949,7 +2949,7 @@
             fixed.items.map(function (item) {
                 return h('div', { class: 'kv' },
                     h('span', null, item.series.desc,
-                        h('div', { class: 'small muted' }, repeatLabel(item.series) + ' · ' + money(C.expenseSign(item.series) * item.series.amount, cur))),
+                        h('div', { class: 'small muted' }, repeatLabel(item.series, doc) + ' · ' + money(C.expenseSign(item.series) * item.series.amount, cur))),
                     h('span', null, money(item.monthly, cur)));
             }),
             h('div', { class: 'link-title', style: 'margin-top:12px' }, 'Pro Person und Monat'),
@@ -3414,11 +3414,17 @@
         return e.repeat === 'biweekly' ? { repeat: 'weekly', every: every * 2 } : { repeat: e.repeat, every: every };
     }
 
-    /** „Jeden Monat“, „Alle 3 Monate“ … */
-    function repeatLabel(e) {
+    /** „Jeden Monat“, „Alle 3 Monate, noch 4 offen, bis 31.12.2027“ … Mit `doc` zählt die Anzahl, was noch offen ist. */
+    function repeatLabel(e, doc) {
         const r = repeatParts(e);
         if (r.repeat === 'none' || !REPEAT_UNITS[r.repeat]) return 'Nicht wiederholen';
-        return r.every === 1 ? REPEAT_UNITS[r.repeat][0] : 'Alle ' + r.every + ' ' + REPEAT_UNITS[r.repeat][1];
+        let label = r.every === 1 ? REPEAT_UNITS[r.repeat][0] : 'Alle ' + r.every + ' ' + REPEAT_UNITS[r.repeat][1];
+        if (C.seriesCount(e)) {
+            const open = doc ? C.openCount(doc, e) : null;
+            label += open === null ? ', ' + C.seriesCount(e) + '-mal' : open ? ', noch ' + open + ' offen' : ', alle gebucht';
+        }
+        if (C.seriesUntil(e)) label += ', bis ' + formatDate(C.seriesUntil(e), true);
+        return label;
     }
 
     /** Einklappbarer Abschnitt. `value` zeigt auch im zugeklappten Zustand den aktuellen Stand. */
@@ -3467,6 +3473,10 @@
             note: existing ? existing.note : '',
             repeat: existing ? repeatParts(existing).repeat : 'none',
             everyText: existing ? String(repeatParts(existing).every) : '1',
+            // Ende und Anzahl sind freiwillig, leer heißt: unbegrenzt.
+            until: existing ? C.seriesUntil(existing) : '',
+            // Bei einer bestehenden Serie steht hier, was noch offen ist, nicht die ursprüngliche Planung.
+            countText: existing && C.seriesCount(existing) ? String(existing.series ? C.openCount(doc, existing) : C.seriesCount(existing)) : '',
             payMode: 'single',
             payer: me,
             paid: {},
@@ -3912,6 +3922,17 @@
             if (form.repeat !== 'none' && form.type !== 'items' && !every) {
                 return fail('Bitte gib als Intervall eine ganze Zahl von 1 bis ' + C.MAX_EVERY + ' ein.', moreFold);
             }
+            const open = readCount();
+            const repeats = form.repeat !== 'none' && form.type !== 'items' && !(existing && existing.parent);
+            if (repeats && open === null) {
+                return fail('Bitte gib ' + (isSeries ? 'bei „Noch offen“' : 'als Anzahl') + ' eine ganze Zahl von ' + minOpen() + ' bis ' + C.MAX_OPEN + ' ein oder lass das Feld leer.', moreFold);
+            }
+            // Gespeichert wird die Anzahl ab Beginn: schon erledigte Termine plus die offenen.
+            // So zählt sie von selbst herunter, wenn Buchungen eingetragen werden.
+            const count = open === '' ? 0 : alreadyBooked(every) + open;
+            if (repeats && form.until && form.until < form.date) {
+                return fail('Das Ende darf nicht vor dem ' + (existing && existing.series ? 'Beginn' : 'Datum') + ' liegen.', moreFold);
+            }
             const paid = readPayers(total);
             if (paid.error) return fail(paid.error, payFold);
             const read = readSplit();
@@ -3935,7 +3956,11 @@
             if (existing && existing.parent) record.parent = existing.parent;
             if (existing && existing.series) record.series = true;
             if (form.refund) record.refund = true;
-            if (record.repeat !== 'none') record.every = every;
+            if (record.repeat !== 'none') {
+                record.every = every;
+                if (form.until) record.until = form.until;
+                if (count) record.count = count;
+            }
             if (form.type === 'items') {
                 record.items = read.items;
                 record.claims = savedClaims(read.items);
@@ -3960,6 +3985,26 @@
             return Number.isInteger(n) && n >= 1 && n <= C.MAX_EVERY ? n : null;
         }
 
+        /** Schon erledigte Termine der Serie, gerechnet mit Beginn und Rhythmus aus dem Formular. */
+        function alreadyBooked(every) {
+            if (!isSeries) return 0;
+            return C.bookedCount(doc, existing, { date: form.date, repeat: form.repeat, every: every || 1 });
+        }
+
+        /** 0 offen geht nur, wenn schon etwas gebucht ist: Dann endet die Serie damit. */
+        function minOpen() {
+            return alreadyBooked(readEvery()) > 0 ? 0 : 1;
+        }
+
+        /** Offene Buchungen aus dem Eingabefeld: '' wenn leer (unbegrenzt), null wenn ungültig. */
+        function readCount() {
+            const text = form.countText.trim();
+            if (!text) return '';
+            const n = Number(text);
+            return Number.isInteger(n) && n >= minOpen() && n <= C.MAX_OPEN ? n : null;
+        }
+
+        const isSeries = !!(existing && existing.series);
         const everyUnit = h('span', { class: 'every-unit' });
         const everyInput = h('input', {
             id: 'expEvery', type: 'text', inputmode: 'numeric', value: form.everyText, autocomplete: 'off',
@@ -3973,8 +4018,38 @@
             h('label', { for: 'expEvery' }, 'Intervall'),
             h('div', { class: 'every-row' }, h('span', null, 'Alle'), everyInput, everyUnit));
 
+        const countUnit = h('span', { class: 'every-unit' });
+        const countInput = h('input', {
+            id: 'expCount', type: 'text', inputmode: 'numeric', value: form.countText, autocomplete: 'off',
+            placeholder: 'unbegrenzt',
+            oninput: function (e) {
+                form.countText = e.target.value;
+                drawEvery();
+                refresh();
+            }
+        });
+        const untilInput = h('input', {
+            id: 'expUntil', type: 'date', value: form.until,
+            onchange: function (e) { form.until = e.target.value; refresh(); }
+        });
+        const endField = h('div', null,
+            h('div', { class: 'field-row' },
+                h('div', { class: 'field' },
+                    h('label', { for: 'expUntil' }, 'Endet am'),
+                    untilInput),
+                h('div', { class: 'field' },
+                    h('label', { for: 'expCount' }, isSeries ? 'Noch offen' : 'Anzahl'),
+                    h('div', { class: 'every-row' }, countInput, countUnit))),
+            h('p', { class: 'small muted', style: 'margin:-6px 0 12px' },
+                'Beides freiwillig. Leer heißt: läuft, bis du die Serie beendest. ' + (isSeries
+                    ? '„Noch offen“ zählt nur Buchungen, die noch nicht eingetragen sind, und wird mit jeder Buchung weniger.'
+                    : 'Die erste Buchung am Datum zählt mit.')));
+
         function drawEvery() {
             everyField.hidden = form.repeat === 'none';
+            endField.hidden = form.repeat === 'none';
+            countInput.classList.toggle('bad', readCount() === null);
+            countUnit.textContent = Number(form.countText.trim()) === 1 ? 'Buchung' : 'Buchungen';
             const unit = REPEAT_UNITS[form.repeat];
             everyUnit.textContent = unit ? (readEvery() === 1 ? unit[2] : unit[1]) : '';
             everyInput.classList.toggle('bad', !!form.everyText.trim() && !readEvery());
@@ -3993,7 +4068,8 @@
                 }, [['none', 'Nicht wiederholen'], ['weekly', 'Wöchentlich'], ['monthly', 'Monatlich'], ['yearly', 'Jährlich']]
                     .filter(function (r) { return r[0] !== 'none' || !(existing && existing.series); })
                     .map(function (r) { return h('option', { value: r[0] }, r[1]); }))),
-            everyField);
+            everyField,
+            endField);
         drawEvery();
 
         const payFold = fold('Bezahlt von', payValue, payArea);
@@ -4192,7 +4268,7 @@
 
         const series = e.parent ? doc.expenses[e.parent] : null;
         const repeatInfo = !e.series ? null
-            : e.del ? repeatLabel(e) : repeatLabel(e) + ' · ' + nextBookingText(doc, e);
+            : e.del ? repeatLabel(e, doc) : repeatLabel(e, doc) + ' · ' + nextBookingText(doc, e);
 
         return h('div', null,
             backLink(doc),
