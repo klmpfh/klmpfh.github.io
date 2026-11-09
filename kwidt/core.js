@@ -1116,7 +1116,9 @@
                 t: m.t,
                 name: tidyText(m.name, 60),
                 currency: isCurrency(m.currency) ? m.currency : 'EUR',
-                simplify: m.simplify !== false
+                simplify: m.simplify !== false,
+                // Nur ein einzelnes Emoji, nichts anderes.
+                icon: firstEmoji(clip(m.icon, 32)) === clip(m.icon, 32) ? clip(m.icon, 32) : ''
             },
             members: cleanMap(raw.members, cleanMember),
             expenses: cleanMap(raw.expenses, cleanExpense),
@@ -1151,7 +1153,7 @@
      * nicht, gelöschte Einträge auch nicht, weil sie einem Gerät noch fehlen dürfen.
      */
     function dataFingerprint(doc) {
-        var lines = [JSON.stringify(['meta', doc.meta.name, doc.meta.currency, doc.meta.simplify])];
+        var lines = [JSON.stringify(['meta', doc.meta.name, doc.meta.currency, doc.meta.simplify, doc.meta.icon || ''])];
         Object.keys(doc.members).forEach(function (id) {
             var m = doc.members[id];
             lines.push(JSON.stringify(['member', id, m.name, m.left]));
@@ -1191,15 +1193,20 @@
         '(?:\\p{EMod}|\\uFE0F)?(?:[\\u{E0020}-\\u{E007E}]+\\u{E007F})?)';
     var RE_EMOJI = new RegExp(EMOJI_UNIT + '(?:\\u200D' + EMOJI_UNIT + ')*', 'u');
 
+    /** Das erste Emoji im Text, sonst ''. */
+    function firstEmoji(text) {
+        var m = String(text || '').normalize('NFC').match(RE_EMOJI);
+        return m ? m[0] : '';
+    }
+
     /**
-     * Das erste Emoji im Namen, sonst die Anfangsbuchstaben der ersten zwei Wörter
-     * ("Sommer in Lissabon" → SI) bzw. die ersten zwei Buchstaben eines einzelnen
-     * Worts ("Mallorca" → MA).
+     * Symbol einer Gruppe: das eigens gewählte Emoji (meta.icon), sonst die Anfangsbuchstaben
+     * der ersten zwei Wörter ("Sommer in Lissabon" → SI) bzw. die ersten zwei Buchstaben
+     * eines einzelnen Worts ("Mallorca" → MA). Emojis im Namen zählen dafür nicht.
      */
-    function groupSymbol(name) {
+    function groupSymbol(name, icon) {
+        if (icon) return { text: icon, emoji: true };
         var text = String(name || '').normalize('NFC');
-        var emoji = text.match(RE_EMOJI);
-        if (emoji) return { text: emoji[0], emoji: true };
         var words = text.match(/[\p{L}\p{M}\p{N}]+/gu) || [];
         var letters = words.length > 1
             ? words.slice(0, 2).map(function (w) { return Array.from(w)[0]; }).join('')
@@ -1868,6 +1875,7 @@
         sanitizeGroup: sanitizeGroup,
         snapshotForLink: snapshotForLink,
         groupSymbol: groupSymbol,
+        firstEmoji: firstEmoji,
         readXls: readXls,
         parseSplid: parseSplid,
         importSplid: importSplid,

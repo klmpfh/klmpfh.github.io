@@ -193,6 +193,8 @@
 
     .field-hint { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
     .name-row { display: flex; align-items: center; gap: 10px; }
+    .icon-chips .icon-chip { min-width: 40px; padding: 4px 8px; font-size: 18px; line-height: 1; }
+    .icon-own { margin-top: 8px; max-width: 180px; }
     .name-row input { flex: 1; }
 
     /* Rechnung */
@@ -580,14 +582,14 @@
 <div class="container">
     <main id="app"></main>
     <noscript>Kwidt braucht JavaScript.</noscript>
-    <div class="footer-info">v<span id="versionNumber">1.42</span></div>
+    <div class="footer-info">v<span id="versionNumber">1.43</span></div>
 </div>
 <div id="toast" role="status" hidden></div>
 
 <script src="../fileshare/vendor/peerjs.min.js"></script>
 <script src="../fileshare/vendor/qrcode.min.js"></script>
 <!-- ?v= immer zusammen mit der Versionsnummer oben ändern: Sonst läuft die neue Seite mit alten Skripten aus dem Browser-Cache. -->
-<script src="core.js?v=1.42"></script>
-<script src="app.js?v=1.42"></script>
+<script src="core.js?v=1.43"></script>
+<script src="app.js?v=1.43"></script>
 </body>
 </html>

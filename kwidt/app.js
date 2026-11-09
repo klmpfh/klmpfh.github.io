@@ -735,16 +735,52 @@
         return h('span', { class: amount > 0 ? 'pos' : 'neg' }, money(Math.abs(amount), cur));
     }
 
-    /** Name neben dem Symbol: Ist das Symbol ein Emoji aus dem Namen, steht es dort nicht noch einmal. */
-    function groupTitle(name) {
-        const symbol = C.groupSymbol(name);
-        if (!symbol.emoji) return name;
-        return name.replace(symbol.text, ' ').replace(/\s+/g, ' ').trim() || name;
+    const ICON_CHOICES = Array.from('🏠🏖✈🍕🍻🎉🚗⛺🎿🎸⚽🐶💼🎓🛒❤').map(function (c) {
+        // Manche sind ohne Zusatz Textzeichen; U+FE0F macht sie bunt.
+        return /[\u2600-\u27BF\u2700-\u27BF]|[\u{1F3D6}\u{2708}]/u.test(c) ? c + '\uFE0F' : c;
+    });
+
+    /**
+     * Auswahl des Gruppensymbols: Vorschläge, ein eigenes Emoji oder keins (dann die
+     * Anfangsbuchstaben). `onChange` bekommt das Emoji oder ''.
+     */
+    function iconPicker(current, onChange) {
+        let value = current || '';
+        const chips = h('div', { class: 'chips icon-chips', role: 'group', 'aria-label': 'Symbol' });
+        const own = h('input', {
+            type: 'text', maxlength: 16, placeholder: 'eigenes Emoji', 'aria-label': 'Eigenes Emoji', autocomplete: 'off',
+            value: value && ICON_CHOICES.indexOf(value) === -1 ? value : '',
+            oninput: function (e) {
+                const emoji = C.firstEmoji(e.target.value);
+                if (emoji) set(emoji);
+                e.target.classList.toggle('bad', !!e.target.value.trim() && !emoji);
+            }
+        });
+        function set(next) {
+            value = next;
+            draw();
+            onChange(value);
+        }
+        function draw() {
+            chips.textContent = '';
+            chips.appendChild(h('button', {
+                class: 'chip', type: 'button', 'aria-pressed': String(!value),
+                onclick: function () { own.value = ''; set(''); }
+            }, 'Keins'));
+            ICON_CHOICES.concat(value && ICON_CHOICES.indexOf(value) === -1 ? [value] : []).forEach(function (icon) {
+                chips.appendChild(h('button', {
+                    class: 'chip icon-chip', type: 'button', 'aria-pressed': String(value === icon), 'aria-label': 'Symbol ' + icon,
+                    onclick: function () { set(icon); }
+                }, icon));
+            });
+        }
+        draw();
+        return h('div', null, chips, h('div', { class: 'icon-own' }, own));
     }
 
-    /** Das Symbol ergibt sich aus dem Namen, siehe C.groupSymbol. */
-    function groupAvatar(name, large) {
-        const symbol = C.groupSymbol(name);
+    /** Gewähltes Emoji oder Anfangsbuchstaben des Namens, siehe C.groupSymbol. */
+    function groupAvatar(name, icon, large) {
+        const symbol = C.groupSymbol(name, icon);
         return h('span', {
             class: 'avatar' + (large ? ' large' : '') + (symbol.emoji ? ' has-emoji' : ''),
             'aria-hidden': 'true'
@@ -802,9 +838,9 @@
             mine.forEach(function (b) { totals[b.cur] = (totals[b.cur] || 0) + b.amount; });
             const memberCount = Object.keys(doc.members).filter(function (id) { return !doc.members[id].left; }).length;
             return h('a', { class: 'item', href: '#/g/' + doc.id },
-                groupAvatar(doc.meta.name),
+                groupAvatar(doc.meta.name, doc.meta.icon),
                 h('span', { class: 'body' },
-                    h('div', { class: 'title' }, doc.meta.name ? groupTitle(doc.meta.name) : 'Einladung'),
+                    h('div', { class: 'title' }, doc.meta.name || 'Einladung'),
                     h('div', { class: 'sub' }, doc.meta.t
                         ? [memberCount + (memberCount === 1 ? ' Person' : ' Personen') + ' · Datenstand ',
                             h('code', { class: 'state-code', title: 'Gleicher Code auf zwei Geräten heißt: gleicher Datenstand.' }, C.dataFingerprint(doc))]
@@ -2045,14 +2081,16 @@
         addFriendField();
         addFriendField();
 
-        const avatarSlot = h('span', null, groupAvatar(''));
+        const avatarSlot = h('span', null, groupAvatar('', ''));
+        function drawAvatar() {
+            avatarSlot.textContent = '';
+            avatarSlot.appendChild(groupAvatar(nameInput.value, form.icon));
+        }
         const nameInput = h('input', {
             id: 'groupName', type: 'text', maxlength: 60, placeholder: 'Sommer in Lissabon', autocomplete: 'off',
-            oninput: function (e) {
-                avatarSlot.textContent = '';
-                avatarSlot.appendChild(groupAvatar(e.target.value));
-            }
+            oninput: drawAvatar
         });
+        form.icon = '';
         const meInput = h('input', { id: 'myName', type: 'text', maxlength: 40, placeholder: 'Dein Name', autocomplete: 'name' });
 
         const currencyEl = currencySelect(form.currency, function (e) { form.currency = e.target.value; }, { id: 'groupCurrency' });
@@ -2202,7 +2240,7 @@
         function submitImport(name) {
             const gid = C.newGroupId();
             const doc = C.emptyGroup(gid);
-            doc.meta = { t: Date.now(), name: name, currency: form.currency, simplify: true };
+            doc.meta = { t: Date.now(), name: name, currency: form.currency, simplify: true, icon: form.icon };
             store.groups[gid] = doc;
             const ids = {};
             imported.members.forEach(function (member) {
@@ -2238,7 +2276,7 @@
             }
             const gid = C.newGroupId();
             const doc = C.emptyGroup(gid);
-            doc.meta = { t: Date.now(), name: name, currency: form.currency, simplify: true };
+            doc.meta = { t: Date.now(), name: name, currency: form.currency, simplify: true, icon: form.icon };
             store.groups[gid] = doc;
 
             const myId = C.newId();
@@ -2270,8 +2308,11 @@
                     h('div', { class: 'field-hint' }, 'CSV-Datei aus Kwidt oder Excel-Datei aus Splid (.xls). Sie wird nur in deinem Browser gelesen.')),
                 h('div', { class: 'field' },
                     h('label', { for: 'groupName' }, 'Name der Gruppe'),
-                    h('div', { class: 'name-row' }, avatarSlot, nameInput),
-                    h('div', { class: 'field-hint' }, 'Ein Emoji im Namen wird zum Symbol, sonst die Anfangsbuchstaben.')),
+                    h('div', { class: 'name-row' }, avatarSlot, nameInput)),
+                h('div', { class: 'field' },
+                    h('span', { class: 'field-label' }, 'Symbol'),
+                    iconPicker('', function (icon) { form.icon = icon; drawAvatar(); }),
+                    h('div', { class: 'field-hint' }, 'Ohne Symbol zeigt Kwidt die Anfangsbuchstaben des Namens.')),
                 h('div', { class: 'field' },
                     h('label', { for: 'groupCurrency' }, 'Währung'),
                     currencyEl),
@@ -2365,7 +2406,7 @@
         return h('div', null,
             h('a', { class: 'back', href: '#/gruppen' }, '‹ Gruppen'),
             h('header', { class: 'group-head' },
-                groupAvatar(doc.meta.name, true),
+                groupAvatar(doc.meta.name, doc.meta.icon, true),
                 h('h1', null, doc.meta.name)),
             h('section', { class: 'panel' },
                 h('h2', null, 'Wer bist du?'),
@@ -2416,8 +2457,8 @@
             // Kompakt: Symbol, Name und Stand in einer Zeile, darunter der Abgleich.
             h('header', { class: 'group-head' },
                 h('div', { class: 'group-title' },
-                    groupAvatar(doc.meta.name),
-                    h('h1', null, groupTitle(doc.meta.name)),
+                    groupAvatar(doc.meta.name, doc.meta.icon),
+                    h('h1', null, doc.meta.name),
                     h('div', { class: 'data-state', title: 'Gleicher Code auf zwei Geräten heißt: gleicher Datenstand.' },
                         h('span', null, 'Datenstand'), h('code', null, C.dataFingerprint(doc)))),
                 h('div', { class: 'group-status' },
@@ -3324,6 +3365,12 @@
                             e.target.value = doc.meta.name;
                         }
                     })),
+                h('div', { class: 'field' },
+                    h('span', { class: 'field-label' }, 'Symbol'),
+                    iconPicker(doc.meta.icon, function (icon) {
+                        if (icon !== (doc.meta.icon || '')) saveMeta(doc, { icon: icon }, true);
+                    }),
+                    h('div', { class: 'field-hint' }, 'Ohne Symbol zeigt Kwidt die Anfangsbuchstaben des Namens.')),
                 h('div', { class: 'field' },
                     h('label', { for: 'editCurrency' }, 'Standardwährung'),
                     currencySelect(doc.meta.currency, function (e) { saveMeta(doc, { currency: e.target.value }, true); }, { id: 'editCurrency' }))),
