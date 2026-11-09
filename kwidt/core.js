@@ -810,6 +810,25 @@
     }
 
     /**
+     * Anteile ohne Rundung auf Cent: Bei gleicher Aufteilung von 50 € auf drei Personen
+     * je 16,666… statt 16,67 / 16,67 / 16,66. Für Durchschnitte, damit der übrige Cent
+     * nicht hochgerechnet wird und eine Person scheinbar mehr trägt. Gerechnet wird in
+     * Tausendstel-Cent; was dort übrig bleibt, fällt nicht ins Gewicht.
+     */
+    function exactShares(e) {
+        var K = 1000;
+        var scaled = JSON.parse(JSON.stringify(e));
+        scaled.amount = e.amount * K;
+        if (e.split.type === 'exact' || e.split.type === 'adjust') {
+            Object.keys(scaled.split.values).forEach(function (id) { scaled.split.values[id] = e.split.values[id] * K; });
+        }
+        var owed = computeOwed(scaled) || {};
+        var out = {};
+        Object.keys(owed).forEach(function (id) { out[id] = owed[id] / K; });
+        return out;
+    }
+
+    /**
      * Laufende Serien einer Währung, auf einen Monat umgerechnet: Was fällt im Schnitt
      * jeden Monat an, und wer trägt davon wie viel? Rückzahlungen zählen negativ.
      * Liefert {total, items: [{series, monthly}], owed: {id: betrag}}, gerundet auf Cent.
@@ -819,7 +838,7 @@
         var owedRaw = {};
         var items = liveSeries(doc).filter(function (e) { return e.currency === cur; }).map(function (e) {
             var factor = perMonth(e) * expenseSign(e);
-            var owed = computeOwed(e) || {};
+            var owed = exactShares(e);
             Object.keys(owed).forEach(function (id) { addTo(owedRaw, id, owed[id] * factor); });
             total += e.amount * factor;
             return { series: e, monthly: Math.round(e.amount * factor) };
@@ -847,8 +866,12 @@
             }
             if (!dates.length) return;
             var sign = expenseSign(e);
-            var owed = computeOwed(e) || {};
-            Object.keys(owed).forEach(function (id) { addTo(out.owed, id, sign * owed[id] * dates.length); });
+            // Jede Buchung so rechnen, wie sie später angelegt wird (eigene ID je Termin):
+            // Wer den übrigen Cent bekommt, wechselt dann genau wie bei den echten Buchungen.
+            dates.forEach(function (date) {
+                var owed = computeOwed(Object.assign({}, e, { id: e.id + '~' + date })) || {};
+                Object.keys(owed).forEach(function (id) { addTo(out.owed, id, sign * owed[id]); });
+            });
             Object.keys(e.payers).forEach(function (id) { addTo(out.paid, id, sign * e.payers[id] * dates.length); });
             out.count += dates.length;
             out.total += sign * e.amount * dates.length;

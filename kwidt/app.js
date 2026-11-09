@@ -29,7 +29,7 @@
     const toastEl = document.getElementById('toast');
 
     let store = { groups: {}, me: {}, last: null, seen: {}, contacts: {}, offsets: {} };
-    const state = { formActive: false, pendingRender: false, unsaved: false, search: '', filter: emptyFilter(), filterOpen: false, statsCur: null, statsCategory: '', lastPath: null };
+    const state = { formActive: false, pendingRender: false, unsaved: false, search: '', filter: emptyFilter(), filterOpen: false, statsCur: null, statsCategory: '', statsOpen: {}, lastPath: null };
 
     function emptyFilter() {
         return { payer: '', member: '', category: '', min: '', max: '' };
@@ -651,6 +651,7 @@
         const pathNow = location.hash;
         if (pathNow !== state.lastPath) {
             state.lastPath = pathNow;
+            state.statsOpen = {};
             window.scrollTo(0, 0);
         }
 
@@ -734,6 +735,13 @@
         return h('span', { class: amount > 0 ? 'pos' : 'neg' }, money(Math.abs(amount), cur));
     }
 
+    /** Name neben dem Symbol: Ist das Symbol ein Emoji aus dem Namen, steht es dort nicht noch einmal. */
+    function groupTitle(name) {
+        const symbol = C.groupSymbol(name);
+        if (!symbol.emoji) return name;
+        return name.replace(symbol.text, ' ').replace(/\s+/g, ' ').trim() || name;
+    }
+
     /** Das Symbol ergibt sich aus dem Namen, siehe C.groupSymbol. */
     function groupAvatar(name, large) {
         const symbol = C.groupSymbol(name);
@@ -796,7 +804,7 @@
             return h('a', { class: 'item', href: '#/g/' + doc.id },
                 groupAvatar(doc.meta.name),
                 h('span', { class: 'body' },
-                    h('div', { class: 'title' }, doc.meta.name || 'Einladung'),
+                    h('div', { class: 'title' }, doc.meta.name ? groupTitle(doc.meta.name) : 'Einladung'),
                     h('div', { class: 'sub' }, doc.meta.t
                         ? [memberCount + (memberCount === 1 ? ' Person' : ' Personen') + ' · Datenstand ',
                             h('code', { class: 'state-code', title: 'Gleicher Code auf zwei Geräten heißt: gleicher Datenstand.' }, C.dataFingerprint(doc))]
@@ -2409,7 +2417,7 @@
             h('header', { class: 'group-head' },
                 h('div', { class: 'group-title' },
                     groupAvatar(doc.meta.name),
-                    h('h1', null, doc.meta.name),
+                    h('h1', null, groupTitle(doc.meta.name)),
                     h('div', { class: 'data-state', title: 'Gleicher Code auf zwei Geräten heißt: gleicher Datenstand.' },
                         h('span', null, 'Datenstand'), h('code', null, C.dataFingerprint(doc)))),
                 h('div', { class: 'group-status' },
@@ -2863,8 +2871,7 @@
         }
         draw();
 
-        return h('section', { class: 'panel' },
-            h('h2', null, 'Nach Monat'),
+        return statFold('month', 'Nach Monat', table.rows.length + (table.rows.length === 1 ? ' Monat' : ' Monate'), [
             h('div', { class: 'field' },
                 h('label', { for: 'statsCategory' }, 'Kategorie'),
                 h('select', {
@@ -2876,7 +2883,7 @@
                 },
                     h('option', { value: '' }, 'Alle Kategorien'),
                     table.categories.map(function (id) { return h('option', { value: id }, categoryText(doc, id)); }))),
-            rows);
+            rows]);
     }
 
     /** Personen mit Beträgen in einer Liste: aktive Mitglieder und alle, die in `maps` vorkommen. */
@@ -2893,8 +2900,7 @@
         const fixed = C.fixedCosts(doc, cur);
         if (!fixed.items.length) return null;
         const me = meId(doc.id);
-        return h('section', { class: 'panel' },
-            h('h2', null, 'Fixkosten'),
+        return statFold('fixed', 'Fixkosten', money(fixed.total, cur) + ' im Monat', [
             h('div', { class: 'stat-total' }, money(fixed.total, cur), h('span', { class: 'stat-unit' }, ' im Monat')),
             h('div', { class: 'small muted', style: 'margin-bottom:10px' }, 'Aus ' + fixed.items.length + (fixed.items.length === 1 ? ' Wiederholung' : ' Wiederholungen')
                 + ', im Schnitt pro Monat. Was seltener als monatlich anfällt, zählt anteilig.'
@@ -2910,7 +2916,7 @@
                 return h('div', { class: 'kv' },
                     h('span', null, memberName(doc, id) + (id === me ? ' (du)' : '')),
                     h('span', null, money(fixed.owed[id] || 0, cur)));
-            }));
+            })]);
     }
 
     /** Datum in n Monaten, als JJJJ-MM-TT. */
@@ -2927,10 +2933,16 @@
         const today = C.todayStr();
         if (!state.forecastDate || state.forecastDate <= today) state.forecastDate = monthsAhead(3);
         const result = h('div', null);
+        let summaryText = '';
 
         function draw() {
             result.textContent = '';
             const until = state.forecastDate;
+            summaryText = until && until > today ? 'bis ' + formatDate(until, true) : '';
+            if (result.parentNode) {
+                const value = result.closest('.panel').querySelector('.fold-value');
+                if (value) value.textContent = summaryText;
+            }
             if (!until || until <= today) {
                 result.appendChild(h('div', { class: 'small muted' }, 'Bitte ein Datum nach heute wählen.'));
                 return;
@@ -2972,8 +2984,7 @@
         }
         draw();
 
-        return h('section', { class: 'panel' },
-            h('h2', null, 'Vorausberechnung'),
+        const panel = statFold('forecast', 'Vorausberechnung', '', [
             h('div', { class: 'field' },
                 h('label', { for: 'forecastDate' }, 'Wiederholungen vorausrechnen bis'),
                 h('input', {
@@ -2983,7 +2994,19 @@
                         draw();
                     }
                 })),
-            result);
+            result]);
+        panel.valueEl.textContent = summaryText;
+        return panel;
+    }
+
+    /** Einklappbare Kachel der Statistik. Beim Öffnen der Statistik sind alle zu. */
+    function statFold(key, title, value, body) {
+        const valueEl = h('span', { class: 'fold-value' }, value || '');
+        const section = fold(title, valueEl, body, !!state.statsOpen[key]);
+        section.addEventListener('toggle', function () { state.statsOpen[key] = section.open; });
+        const panel = h('section', { class: 'panel panel-fold' }, section);
+        panel.valueEl = valueEl;
+        return panel;
     }
 
     function viewStatsTab(doc) {
@@ -3004,6 +3027,7 @@
         if (!stats.count) {
             return h('div', null,
                 h('section', { class: 'panel' }, picker, h('div', { class: 'empty' }, 'Noch nichts auszuwerten.')),
+                h('h3', { class: 'stat-group' }, 'Hochrechnung'),
                 viewFixedCosts(doc, cur),
                 viewForecast(doc, cur));
         }
@@ -3026,16 +3050,13 @@
                         h('div', { class: 'small muted' }, 'Ergebnis'),
                         h('div', { class: 'stat-total ' + (stats.total > 0 ? 'neg' : stats.total < 0 ? 'pos' : '') }, money(-stats.total, cur)),
                         h('div', { class: 'small muted' }, 'Einnahmen minus Ausgaben')))),
-            viewFixedCosts(doc, cur),
-            viewForecast(doc, cur),
-            h('section', { class: 'panel' },
-                h('h2', null, 'Nach Kategorie'),
+            // Erst, was war, dann, was kommt.
+            statFold('category', 'Nach Kategorie', stats.byCategory.length + (stats.byCategory.length === 1 ? ' Kategorie' : ' Kategorien'),
                 stats.byCategory.map(function (row) {
                     return barRow(categoryText(doc, row.id), row.amount, maxCategory, cur);
                 })),
             viewMonthPanel(doc, stats.byMonth, cur),
-            h('section', { class: 'panel' },
-                h('h2', null, 'Nach Person'),
+            statFold('person', 'Nach Person', stats.byMember.length + (stats.byMember.length === 1 ? ' Person' : ' Personen'),
                 h('div', { class: 'table-wrap' },
                     h('table', { class: 'stat' },
                         h('thead', null, h('tr', null,
@@ -3047,7 +3068,10 @@
                                 h('td', null, memberName(doc, m.id)),
                                 h('td', null, money(m.paid, cur)),
                                 h('td', null, money(m.share, cur)));
-                        }))))));
+                        }))))),
+            C.liveSeries(doc).some(function (e) { return e.currency === cur; }) ? h('h3', { class: 'stat-group' }, 'Hochrechnung') : null,
+            viewFixedCosts(doc, cur),
+            viewForecast(doc, cur));
     }
 
     /* Verlauf */
