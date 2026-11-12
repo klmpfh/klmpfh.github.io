@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Behält im Blick, was an wen verliehen ist – seit wann und bis wann es zurückkommen soll.">
+<title>Pumpkin</title>
+<link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/css/reset.css">
+<link rel="stylesheet" href="../assets/css/theme.css">
+<style>
+    :root {
+        --container-bg: var(--theme-surface);
+        --card-bg: var(--theme-surface-muted);
+        --text-color: var(--theme-text);
+        --text-muted: var(--theme-text-muted);
+        --primary: var(--theme-accent);
+        --primary-strong: var(--theme-accent-strong);
+        --primary-light: var(--theme-accent-soft);
+        --success: var(--theme-success);
+        --success-light: var(--theme-success-soft);
+        --warning: var(--theme-warning);
+        --warning-light: var(--theme-warning-soft);
+        --warning-text: var(--theme-warning-text);
+        --danger: var(--theme-danger);
+        --danger-light: var(--theme-danger-soft);
+        --border-color: var(--theme-border);
+        --input-bg: var(--theme-gray-100);
+    }
+
+    body {
+        padding: calc(var(--theme-nav-height) + 30px) 15px 60px;
+        display: flex;
+        justify-content: center;
+        min-height: 100vh;
+    }
+
+    .container {
+        width: 100%;
+        max-width: 760px;
+    }
+
+    header {
+        text-align: center;
+        margin-bottom: 24px;
+    }
+
+    header h1 {
+        font-size: 28px;
+        font-weight: 800;
+        letter-spacing: 0.5px;
+    }
+
+    header p {
+        color: var(--text-muted);
+        font-size: 13px;
+        margin-top: 6px;
+    }
+
+    .panel {
+        background: var(--container-bg);
+        border: 1px solid var(--border-color);
+        border-top: 3px solid var(--primary);
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 18px;
+        box-shadow: var(--theme-shadow-sm);
+    }
+
+    .panel-title {
+        display: block;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 12px;
+    }
+
+    /* ---------- Formular ---------- */
+
+    .form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+
+    .form-grid .wide {
+        grid-column: 1 / -1;
+    }
+
+    @media (max-width: 520px) {
+        .form-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .field label {
+        display: block;
+        font-size: 10.5px;
+        font-weight: 700;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-bottom: 5px;
+    }
+
+    .field label .opt {
+        font-weight: 500;
+        text-transform: none;
+        letter-spacing: 0;
+    }
+
+    .field input,
+    .search input {
+        width: 100%;
+        background: var(--input-bg);
+        border: 2px solid var(--border-color);
+        border-radius: 8px;
+        color: var(--text-color);
+        font-family: inherit;
+        font-size: 14px;
+        padding: 9px 10px;
+        outline: none;
+        transition: border-color 0.2s;
+        min-height: 41px;
+    }
+
+    .field input::placeholder,
+    .search input::placeholder {
+        color: var(--theme-gray-400);
+    }
+
+    .field input:focus,
+    .search input:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px var(--primary-light);
+    }
+
+    .field input.invalid {
+        border-color: var(--danger);
+    }
+
+    .quick-dates {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 6px;
+    }
+
+    .chip {
+        border: 1px solid var(--border-color);
+        background: transparent;
+        color: var(--text-muted);
+        border-radius: 999px;
+        padding: 3px 10px;
+        font-size: 11.5px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        transition: border-color 0.15s, color 0.15s;
+    }
+
+    .chip:hover {
+        border-color: var(--primary);
+        color: var(--primary-strong);
+    }
+
+    .form-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 16px;
+    }
+
+    .btn {
+        border: none;
+        border-radius: 8px;
+        padding: 11px 16px;
+        font-size: 13.5px;
+        font-weight: 700;
+        cursor: pointer;
+        font-family: inherit;
+        transition: filter 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+    }
+
+    .btn-primary {
+        flex: 1;
+        background: var(--primary);
+        color: #fff;
+    }
+
+    .btn-primary:hover {
+        filter: brightness(1.1);
+    }
+
+    .btn-ghost {
+        background: transparent;
+        border: 1px solid var(--border-color);
+        color: var(--text-muted);
+    }
+
+    .btn-ghost:hover {
+        border-color: var(--primary);
+        color: var(--primary-strong);
+    }
+
+    .form-error {
+        color: var(--danger);
+        font-size: 12.5px;
+        margin-top: 10px;
+    }
+
+    /* ---------- Übersicht ---------- */
+
+    .stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin-bottom: 18px;
+    }
+
+    .stat {
+        background: var(--container-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 12px 14px;
+        box-shadow: var(--theme-shadow-sm);
+    }
+
+    .stat-value {
+        font-size: 22px;
+        font-weight: 800;
+        color: var(--theme-text-strong);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .stat-label {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-top: 2px;
+    }
+
+    .stat.overdue .stat-value {
+        color: var(--danger);
+    }
+
+    .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 14px;
+    }
+
+    .tabs {
+        display: flex;
+        gap: 2px;
+        background: var(--input-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 9px;
+        padding: 3px;
+        flex-wrap: wrap;
+    }
+
+    .tab {
+        border: none;
+        background: transparent;
+        color: var(--text-muted);
+        font-family: inherit;
+        font-size: 12.5px;
+        font-weight: 600;
+        padding: 6px 11px;
+        border-radius: 7px;
+        cursor: pointer;
+    }
+
+    .tab[aria-pressed="true"] {
+        background: var(--container-bg);
+        color: var(--primary-strong);
+        box-shadow: var(--theme-shadow-sm);
+    }
+
+    .tab .count {
+        font-weight: 500;
+        opacity: 0.75;
+        margin-left: 3px;
+    }
+
+    .search {
+        flex: 1;
+        min-width: 160px;
+    }
+
+    .search input {
+        min-height: 38px;
+        padding: 7px 10px;
+        font-size: 13.5px;
+    }
+
+    .list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .item {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-left: 4px solid var(--primary);
+        border-radius: 10px;
+        padding: 12px 14px;
+    }
+
+    .item.is-overdue {
+        border-left-color: var(--danger);
+    }
+
+    .item.is-due {
+        border-left-color: var(--warning);
+    }
+
+    .item.is-returned {
+        border-left-color: var(--border-color);
+        opacity: 0.8;
+    }
+
+    .item-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .item-what {
+        font-size: 15.5px;
+        font-weight: 700;
+        color: var(--theme-text-strong);
+        overflow-wrap: anywhere;
+    }
+
+    .item.is-returned .item-what {
+        text-decoration: line-through;
+        text-decoration-color: var(--text-muted);
+    }
+
+    .item-who {
+        font-size: 13px;
+        color: var(--text-color);
+        margin-top: 2px;
+        overflow-wrap: anywhere;
+    }
+
+    .item-who b {
+        font-weight: 700;
+    }
+
+    .badge {
+        flex-shrink: 0;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 999px;
+        white-space: nowrap;
+        background: var(--primary-light);
+        color: var(--primary-strong);
+    }
+
+    .badge.overdue {
+        background: var(--danger-light);
+        color: var(--danger);
+    }
+
+    .badge.due {
+        background: var(--warning-light);
+        color: var(--warning-text);
+    }
+
+    .badge.returned {
+        background: var(--success-light);
+        color: var(--success);
+    }
+
+    .badge.open-ended {
+        background: var(--input-bg);
+        color: var(--text-muted);
+    }
+
+    .item-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 16px;
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 8px;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .item-note {
+        font-size: 12.5px;
+        color: var(--text-muted);
+        margin-top: 6px;
+        font-style: italic;
+        overflow-wrap: anywhere;
+    }
+
+    .item-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
+    }
+
+    .item-actions button {
+        border: 1px solid var(--border-color);
+        background: var(--container-bg);
+        color: var(--text-muted);
+        border-radius: 7px;
+        padding: 5px 10px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+
+    .item-actions button:hover {
+        border-color: var(--primary);
+        color: var(--primary-strong);
+    }
+
+    .item-actions button.act-return {
+        border-color: var(--success);
+        color: var(--success);
+    }
+
+    .item-actions button.act-return:hover {
+        background: var(--success-light);
+    }
+
+    .item-actions button.act-delete:hover {
+        border-color: var(--danger);
+        color: var(--danger);
+        background: var(--danger-light);
+    }
+
+    .empty-hint {
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 13.5px;
+        padding: 18px 0 8px;
+    }
+
+    .data-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: center;
+        margin-top: 18px;
+    }
+
+    .data-actions .btn {
+        font-size: 12.5px;
+        padding: 8px 12px;
+    }
+
+    footer {
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 12px;
+        margin-top: 22px;
+        line-height: 1.5;
+    }
+</style>
+</head>
+<body>
+<script src="../assets/js/nav.js"></script>
+
+<div class="container">
+    <header>
+        <h1>Pumpkin</h1>
+        <p>Was hast du wem gepumpt – seit wann, und bis wann soll es zurück sein?</p>
+    </header>
+
+    <form class="panel" id="form" novalidate>
+        <span class="panel-title" id="formTitle">Neu verliehen</span>
+        <div class="form-grid">
+            <div class="field wide">
+                <label for="fWhat">Was</label>
+                <input id="fWhat" type="text" placeholder="z. B. Bohrmaschine, „Der Name des Windes“, 20 €" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="fFrom">Von</label>
+                <input id="fFrom" type="text" list="people" placeholder="Wer verleiht?" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="fTo">An</label>
+                <input id="fTo" type="text" list="people" placeholder="Wer hat es?" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="fSince">Wann</label>
+                <input id="fSince" type="date">
+            </div>
+            <div class="field">
+                <label for="fUntil">Bis geplant <span class="opt">(optional)</span></label>
+                <input id="fUntil" type="date">
+                <div class="quick-dates" id="quickDates">
+                    <button type="button" class="chip" data-days="7">+1 Woche</button>
+                    <button type="button" class="chip" data-days="14">+2 Wochen</button>
+                    <button type="button" class="chip" data-months="1">+1 Monat</button>
+                    <button type="button" class="chip" data-clear>offen</button>
+                </div>
+            </div>
+            <div class="field wide">
+                <label for="fNote">Notiz <span class="opt">(optional)</span></label>
+                <input id="fNote" type="text" placeholder="z. B. Zustand, Zubehör, Pfand" autocomplete="off">
+            </div>
+        </div>
+        <div class="form-error" id="formError" hidden></div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary" id="submitBtn">+ Eintragen</button>
+            <button type="button" class="btn btn-ghost" id="cancelBtn" hidden>Abbrechen</button>
+        </div>
+    </form>
+
+    <datalist id="people"></datalist>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="panel">
+        <div class="toolbar">
+            <div class="tabs" id="tabs" role="group" aria-label="Filter"></div>
+            <div class="search">
+                <input id="search" type="search" placeholder="Suchen …" aria-label="Suchen">
+            </div>
+        </div>
+        <div class="list" id="list"></div>
+    </div>
+
+    <div class="data-actions">
+        <button type="button" class="btn btn-ghost" id="exportBtn">Backup exportieren</button>
+        <button type="button" class="btn btn-ghost" id="importBtn">Backup importieren</button>
+        <input type="file" id="importFile" accept="application/json,.json" hidden>
+    </div>
+
+    <footer>Die Einträge bleiben nur in diesem Browser gespeichert und werden nirgendwohin hochgeladen.<br>Für ein anderes Gerät: Backup exportieren und dort importieren.</footer>
+</div>
+
+<script src="../assets/js/escape-html.js"></script>
+<script>
+(function () {
+    'use strict';
+
+    const STORE_KEY = 'klmpfh-verliehen';
+    const LAST_FROM_KEY = 'klmpfh-verliehen-von';
+
+    const $ = (id) => document.getElementById(id);
+    const form = $('form');
+    const fWhat = $('fWhat'), fFrom = $('fFrom'), fTo = $('fTo');
+    const fSince = $('fSince'), fUntil = $('fUntil'), fNote = $('fNote');
+    const formTitle = $('formTitle'), formError = $('formError');
+    const submitBtn = $('submitBtn'), cancelBtn = $('cancelBtn');
+    const listEl = $('list'), tabsEl = $('tabs'), statsEl = $('stats');
+    const searchEl = $('search'), peopleEl = $('people');
+
+    let items = load();
+    let filter = 'open';
+    let editingId = null;
+
+    /* ---------- Speicher ---------- */
+
+    function load() {
+        try {
+            const raw = JSON.parse(localStorage.getItem(STORE_KEY) || '[]');
+            return Array.isArray(raw) ? raw.filter(isValidItem) : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function save() {
+        try {
+            localStorage.setItem(STORE_KEY, JSON.stringify(items));
+        } catch (e) {
+            alert('Speichern im Browser nicht möglich (privater Modus?). Bitte Backup exportieren.');
+        }
+    }
+
+    function isValidItem(it) {
+        return it && typeof it === 'object' && typeof it.id === 'string' &&
+            typeof it.what === 'string' && typeof it.to === 'string';
+    }
+
+    function newId() {
+        return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    }
+
+    /* ---------- Datum ---------- */
+
+    // Datumswerte werden als "YYYY-MM-DD" (lokales Datum) gespeichert, damit
+    // es keine Zeitzonen-Verschiebungen gibt.
+    function toIso(d) {
+        const p = (n) => String(n).padStart(2, '0');
+        return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+    }
+
+    function today() {
+        return toIso(new Date());
+    }
+
+    function parseIso(s) {
+        const [y, m, d] = s.split('-').map(Number);
+        return new Date(y, m - 1, d);
+    }
+
+    function daysBetween(a, b) {
+        const da = parseIso(a), db = parseIso(b);
+        return Math.round((Date.UTC(db.getFullYear(), db.getMonth(), db.getDate()) -
+            Date.UTC(da.getFullYear(), da.getMonth(), da.getDate())) / 86400000);
+    }
+
+    function fmt(s) {
+        if (!s) return '–';
+        const [y, m, d] = s.split('-');
+        return d + '.' + m + '.' + y;
+    }
+
+    function plural(n, one, many) {
+        return n + ' ' + (n === 1 ? one : many);
+    }
+
+    /* ---------- Status ---------- */
+
+    function statusOf(it) {
+        if (it.returned) return 'returned';
+        if (!it.until) return 'open';
+        const diff = daysBetween(today(), it.until);
+        if (diff < 0) return 'overdue';
+        if (diff <= 2) return 'due';
+        return 'open';
+    }
+
+    function badgeFor(it) {
+        const st = statusOf(it);
+        if (st === 'returned') return { cls: 'returned', text: 'zurück' };
+        if (!it.until) return { cls: 'open-ended', text: 'ohne Frist' };
+        const diff = daysBetween(today(), it.until);
+        if (diff < 0) return { cls: 'overdue', text: plural(-diff, 'Tag', 'Tage') + ' überfällig' };
+        if (diff === 0) return { cls: 'due', text: 'heute fällig' };
+        if (diff === 1) return { cls: 'due', text: 'morgen fällig' };
+        if (diff === 2) return { cls: 'due', text: 'in 2 Tagen' };
+        return { cls: '', text: 'noch ' + plural(diff, 'Tag', 'Tage') };
+    }
+
+    /* ---------- Formular ---------- */
+
+    function resetForm() {
+        editingId = null;
+        form.reset();
+        fFrom.value = getLastFrom();
+        fSince.value = today();
+        formTitle.textContent = 'Neu verliehen';
+        submitBtn.textContent = '+ Eintragen';
+        cancelBtn.hidden = true;
+        hideError();
+    }
+
+    function getLastFrom() {
+        try { return localStorage.getItem(LAST_FROM_KEY) || ''; } catch (e) { return ''; }
+    }
+
+    function setLastFrom(v) {
+        try { localStorage.setItem(LAST_FROM_KEY, v); } catch (e) { /* egal */ }
+    }
+
+    function showError(msg, fields) {
+        formError.textContent = msg;
+        formError.hidden = false;
+        fields.forEach((f) => f.classList.add('invalid'));
+        if (fields[0]) fields[0].focus();
+    }
+
+    function hideError() {
+        formError.hidden = true;
+        [fWhat, fTo, fSince, fUntil].forEach((f) => f.classList.remove('invalid'));
+    }
+
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        hideError();
+
+        const data = {
+            what: fWhat.value.trim(),
+            from: fFrom.value.trim(),
+            to: fTo.value.trim(),
+            since: fSince.value || today(),
+            until: fUntil.value || '',
+            note: fNote.value.trim()
+        };
+
+        const missing = [];
+        if (!data.what) missing.push(fWhat);
+        if (!data.to) missing.push(fTo);
+        if (missing.length) {
+            showError('Bitte mindestens „Was“ und „An“ ausfüllen.', missing);
+            return;
+        }
+        if (data.until && data.until < data.since) {
+            showError('„Bis geplant“ liegt vor dem Verleih-Datum.', [fUntil]);
+            return;
+        }
+
+        if (editingId) {
+            const it = items.find((x) => x.id === editingId);
+            if (it) Object.assign(it, data);
+        } else {
+            items.push(Object.assign({ id: newId(), returned: '' }, data));
+            if (filter === 'returned') filter = 'open';
+        }
+        if (data.from) setLastFrom(data.from);
+        save();
+        resetForm();
+        render();
+        fWhat.focus();
+    });
+
+    cancelBtn.addEventListener('click', resetForm);
+
+    $('quickDates').addEventListener('click', (e) => {
+        const btn = e.target.closest('.chip');
+        if (!btn) return;
+        if (btn.hasAttribute('data-clear')) {
+            fUntil.value = '';
+            return;
+        }
+        const base = parseIso(fSince.value || today());
+        if (btn.dataset.days) base.setDate(base.getDate() + Number(btn.dataset.days));
+        if (btn.dataset.months) base.setMonth(base.getMonth() + Number(btn.dataset.months));
+        fUntil.value = toIso(base);
+        fUntil.classList.remove('invalid');
+    });
+
+    function startEdit(it) {
+        editingId = it.id;
+        fWhat.value = it.what;
+        fFrom.value = it.from || '';
+        fTo.value = it.to;
+        fSince.value = it.since || '';
+        fUntil.value = it.until || '';
+        fNote.value = it.note || '';
+        formTitle.textContent = 'Eintrag bearbeiten';
+        submitBtn.textContent = 'Speichern';
+        cancelBtn.hidden = false;
+        hideError();
+        form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        fWhat.focus({ preventScroll: true });
+    }
+
+    /* ---------- Liste ---------- */
+
+    const FILTERS = [
+        { key: 'open', label: 'Verliehen' },
+        { key: 'overdue', label: 'Überfällig' },
+        { key: 'returned', label: 'Zurück' },
+        { key: 'all', label: 'Alle' }
+    ];
+
+    function matchesFilter(it, key) {
+        const st = statusOf(it);
+        if (key === 'open') return st !== 'returned';
+        if (key === 'overdue') return st === 'overdue';
+        if (key === 'returned') return st === 'returned';
+        return true;
+    }
+
+    function matchesSearch(it, q) {
+        if (!q) return true;
+        return [it.what, it.from, it.to, it.note].some((v) => (v || '').toLowerCase().includes(q));
+    }
+
+    // Offene zuerst, nach geplantem Rückgabedatum (ohne Frist ans Ende);
+    // Zurückgegebene danach, neueste Rückgabe zuerst.
+    function compare(a, b) {
+        if (!!a.returned !== !!b.returned) return a.returned ? 1 : -1;
+        if (a.returned) return b.returned.localeCompare(a.returned);
+        const ua = a.until || '9999-99-99', ub = b.until || '9999-99-99';
+        if (ua !== ub) return ua.localeCompare(ub);
+        return (a.since || '').localeCompare(b.since || '');
+    }
+
+    function render() {
+        const q = searchEl.value.trim().toLowerCase();
+
+        // Statistik
+        const open = items.filter((it) => !it.returned);
+        const overdue = open.filter((it) => statusOf(it) === 'overdue');
+        const people = new Set(open.map((it) => it.to.trim().toLowerCase()));
+        statsEl.innerHTML =
+            stat(open.length, 'verliehen', '') +
+            stat(overdue.length, 'überfällig', overdue.length ? 'overdue' : '') +
+            stat(people.size, people.size === 1 ? 'Person' : 'Personen', '');
+
+        // Tabs
+        tabsEl.innerHTML = FILTERS.map((f) => {
+            const n = items.filter((it) => matchesFilter(it, f.key)).length;
+            return '<button type="button" class="tab" data-key="' + f.key + '" aria-pressed="' + (f.key === filter) + '">' +
+                f.label + '<span class="count">' + n + '</span></button>';
+        }).join('');
+
+        // Namen für die Autovervollständigung
+        const names = new Set();
+        items.forEach((it) => { if (it.from) names.add(it.from); if (it.to) names.add(it.to); });
+        peopleEl.innerHTML = [...names].sort((a, b) => a.localeCompare(b, 'de'))
+            .map((n) => '<option value="' + escapeAttr(n) + '">').join('');
+
+        // Liste
+        const shown = items.filter((it) => matchesFilter(it, filter) && matchesSearch(it, q)).sort(compare);
+        if (!shown.length) {
+            let msg;
+            if (!items.length) msg = 'Noch nichts eingetragen. Oben das erste verliehene Ding erfassen.';
+            else if (q) msg = 'Keine Treffer für „' + escapeHtml(searchEl.value.trim()) + '“.';
+            else if (filter === 'overdue') msg = 'Nichts überfällig.';
+            else if (filter === 'open') msg = 'Gerade ist nichts verliehen.';
+            else msg = 'Keine Einträge.';
+            listEl.innerHTML = '<div class="empty-hint">' + msg + '</div>';
+            return;
+        }
+        listEl.innerHTML = shown.map(itemHtml).join('');
+    }
+
+    function stat(value, label, cls) {
+        return '<div class="stat ' + cls + '"><div class="stat-value">' + value + '</div><div class="stat-label">' + label + '</div></div>';
+    }
+
+    function escapeAttr(s) {
+        return escapeHtml(String(s)).replace(/"/g, '&quot;');
+    }
+
+    function itemHtml(it) {
+        const st = statusOf(it);
+        const badge = badgeFor(it);
+        const cls = st === 'overdue' ? 'is-overdue' : st === 'due' ? 'is-due' : st === 'returned' ? 'is-returned' : '';
+        const who = (it.from ? 'von <b>' + escapeHtml(it.from) + '</b> ' : '') + 'an <b>' + escapeHtml(it.to) + '</b>';
+
+        let meta = '<span>seit ' + fmt(it.since) + '</span>';
+        meta += '<span>bis ' + (it.until ? fmt(it.until) : 'offen') + '</span>';
+        if (it.returned) {
+            const late = it.until ? daysBetween(it.until, it.returned) : 0;
+            meta += '<span>zurück am ' + fmt(it.returned) + (late > 0 ? ' (' + plural(late, 'Tag', 'Tage') + ' zu spät)' : '') + '</span>';
+        } else if (it.since) {
+            const d = daysBetween(it.since, today());
+            if (d > 0) meta += '<span>' + plural(d, 'Tag', 'Tage') + ' weg</span>';
+        }
+
+        const actions = it.returned
+            ? '<button type="button" data-act="reopen">Wieder verliehen</button>'
+            : '<button type="button" class="act-return" data-act="return">Zurückbekommen</button>' +
+              '<button type="button" data-act="extend">+1 Woche</button>';
+
+        return '<div class="item ' + cls + '" data-id="' + escapeAttr(it.id) + '">' +
+            '<div class="item-head"><div>' +
+                '<div class="item-what">' + escapeHtml(it.what) + '</div>' +
+                '<div class="item-who">' + who + '</div>' +
+            '</div><span class="badge ' + badge.cls + '">' + badge.text + '</span></div>' +
+            '<div class="item-meta">' + meta + '</div>' +
+            (it.note ? '<div class="item-note">' + escapeHtml(it.note) + '</div>' : '') +
+            '<div class="item-actions">' + actions +
+                '<button type="button" data-act="edit">Bearbeiten</button>' +
+                '<button type="button" class="act-delete" data-act="delete">Löschen</button>' +
+            '</div></div>';
+    }
+
+    listEl.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-act]');
+        if (!btn) return;
+        const id = btn.closest('.item').dataset.id;
+        const it = items.find((x) => x.id === id);
+        if (!it) return;
+
+        switch (btn.dataset.act) {
+            case 'return':
+                it.returned = today();
+                break;
+            case 'reopen':
+                it.returned = '';
+                break;
+            case 'extend': {
+                const base = it.until && it.until > today() ? parseIso(it.until) : parseIso(today());
+                base.setDate(base.getDate() + 7);
+                it.until = toIso(base);
+                break;
+            }
+            case 'edit':
+                startEdit(it);
+                return;
+            case 'delete':
+                if (!confirm('„' + it.what + '“ (an ' + it.to + ') wirklich löschen?')) return;
+                items = items.filter((x) => x.id !== id);
+                if (editingId === id) resetForm();
+                break;
+        }
+        save();
+        render();
+    });
+
+    tabsEl.addEventListener('click', (e) => {
+        const btn = e.target.closest('.tab');
+        if (!btn) return;
+        filter = btn.dataset.key;
+        render();
+    });
+
+    searchEl.addEventListener('input', render);
+
+    /* ---------- Backup ---------- */
+
+    $('exportBtn').addEventListener('click', () => {
+        const blob = new Blob([JSON.stringify({ app: 'verliehen', version: 1, exported: new Date().toISOString(), items }, null, 2)],
+            { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'pumpkin-' + today() + '.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
+
+    $('importBtn').addEventListener('click', () => $('importFile').click());
+
+    $('importFile').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        e.target.value = '';
+        if (!file) return;
+        let incoming;
+        try {
+            const data = JSON.parse(await file.text());
+            incoming = (Array.isArray(data) ? data : data.items || []).filter(isValidItem);
+        } catch (err) {
+            alert('Die Datei konnte nicht gelesen werden.');
+            return;
+        }
+        if (!incoming.length) {
+            alert('In der Datei wurden keine Einträge gefunden.');
+            return;
+        }
+        // Zusammenführen: gleiche ID → importierte Version gewinnt, neue werden ergänzt.
+        const byId = new Map(items.map((it) => [it.id, it]));
+        let added = 0, updated = 0;
+        incoming.forEach((it) => {
+            const clean = {
+                id: it.id, what: it.what, from: it.from || '', to: it.to,
+                since: it.since || '', until: it.until || '', returned: it.returned || '', note: it.note || ''
+            };
+            if (byId.has(it.id)) updated++; else added++;
+            byId.set(it.id, clean);
+        });
+        items = [...byId.values()];
+        save();
+        render();
+        alert('Import fertig: ' + plural(added, 'neuer Eintrag', 'neue Einträge') + ', ' + plural(updated, 'aktualisiert', 'aktualisiert') + '.');
+    });
+
+    // Bei Tageswechsel (Tab lange offen) Status neu berechnen.
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+
+    resetForm();
+    render();
+})();
+</script>
+</body>
+</html>

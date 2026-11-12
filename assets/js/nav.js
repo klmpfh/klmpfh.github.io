@@ -78,6 +78,7 @@
         { key: 'knallbum',      href: 'knallbum/',      label: 'Knall Bumm',         letter: 'k' },
         { key: 'kwidt',         href: 'kwidt/',         label: 'Kwidt',              letter: 'k' },
         { key: 'laserfeelings', href: 'laserfeelings/', label: 'Laser & Feelings',   letter: 'l' },
+        { key: 'pumpkin',       href: 'pumpkin/',       label: 'Pumpkin',            letter: 'p' },
         { key: 'sport',         href: 'sport/',         label: 'Sport',              letter: 's' },
         { key: 'zauberkloppen', href: 'zauberkloppen/', label: 'Zaubern & Kloppen',  letter: 'z' }
     ];
