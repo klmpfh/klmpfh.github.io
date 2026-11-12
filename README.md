@@ -60,7 +60,7 @@ relativ, über die eigene `src`-Angabe.
 - `/gone/` – gone: Verleih-Liste in beide Richtungen
   (Schalter „Von mir“ / „An mich“): was, wann, an wen bzw. von wem, bis wann geplant.
   Status (offen/fällig/überfällig/zurück), Filter und Suche. Daten liegen nur im localStorage des Browsers,
-  Backup als JSON-Datei erstellen/einlesen (mit Hinweis, wenn das letzte Backup veraltet ist).
+  Backup als JSON-Datei herunterladen und wieder einlesen.
 - `/zauberkloppen/` – Szenario-Generator für Fantasy-Rollenspiele.
 
 ## Entwicklung

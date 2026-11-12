@@ -489,17 +489,6 @@
         line-height: 1.5;
     }
 
-    .backup-status {
-        margin-top: 10px;
-        font-size: 12.5px;
-        font-weight: 600;
-        color: var(--text-color);
-    }
-
-    .backup-status.stale {
-        color: var(--warning-text);
-    }
-
     .backup-actions {
         display: flex;
         flex-wrap: wrap;
@@ -588,10 +577,9 @@
 
     <div class="panel">
         <span class="panel-title">Backup</span>
-        <p class="backup-text">Die Einträge liegen nur in diesem Browser und werden nirgendwohin hochgeladen. Ein Backup speichert alles als Datei – zum Sichern oder um es auf einem anderen Gerät einzulesen. Beim Einlesen werden die Einträge mit den vorhandenen zusammengeführt, nichts wird gelöscht.</p>
-        <p class="backup-status" id="backupStatus"></p>
+        <p class="backup-text">„Backup herunterladen“ speichert alle Einträge als Datei auf deinem Gerät (meist im Ordner Downloads). Mit „Backup einlesen“ wählst du so eine Datei wieder aus – auch auf einem anderen Gerät. Die Einträge werden dabei mit den vorhandenen zusammengeführt, nichts wird gelöscht.</p>
         <div class="backup-actions">
-            <button type="button" class="btn btn-primary" id="exportBtn">Backup erstellen</button>
+            <button type="button" class="btn btn-primary" id="exportBtn">Backup herunterladen</button>
             <button type="button" class="btn btn-ghost" id="importBtn">Backup einlesen</button>
             <input type="file" id="importFile" accept="application/json,.json" hidden>
         </div>
@@ -606,7 +594,10 @@
     // Schlüssel bewusst unverändert vom ursprünglichen Seitennamen, damit
     // bereits gespeicherte Einträge nach dem Umbenennen erhalten bleiben.
     const STORE_KEY = 'klmpfh-verliehen';
-    const META_KEY = 'klmpfh-verliehen-meta';
+
+    // Aufräumen: eine frühere Version hat sich hier den Zeitpunkt des
+    // letzten Backups gemerkt – das wird nicht mehr im Browser gespeichert.
+    try { localStorage.removeItem('klmpfh-verliehen-meta'); } catch (e) { /* egal */ }
 
     const $ = (id) => document.getElementById(id);
     const form = $('form');
@@ -651,7 +642,6 @@
     function save() {
         try {
             localStorage.setItem(STORE_KEY, JSON.stringify(items));
-            setMeta({ changedAt: Date.now() });
         } catch (e) {
             alert('Speichern im Browser nicht möglich (privater Modus?). Bitte Backup exportieren.');
         }
@@ -673,6 +663,15 @@
     function toIso(d) {
         const p = (n) => String(n).padStart(2, '0');
         return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+    }
+
+    // Lokaler Zeitstempel bis auf die Millisekunde für Dateinamen, z. B.
+    // "2026-11-12_14-03-27-123" (ohne ":", weil Windows das in Dateinamen
+    // nicht erlaubt).
+    function fileStamp(d) {
+        const p = (n, len) => String(n).padStart(len || 2, '0');
+        return toIso(d) + '_' + p(d.getHours()) + '-' + p(d.getMinutes()) + '-' +
+            p(d.getSeconds()) + '-' + p(d.getMilliseconds(), 3);
     }
 
     function today() {
@@ -876,7 +875,6 @@
 
     function render() {
         const q = searchEl.value.trim().toLowerCase();
-        renderBackupStatus();
 
         // Statistik
         const open = items.filter((it) => !it.returned);
@@ -1018,47 +1016,23 @@
 
     /* ---------- Backup ---------- */
 
-    // Merkt sich, wann zuletzt ein Backup erstellt und wann zuletzt etwas
-    // geändert wurde, um auf ein veraltetes Backup hinweisen zu können.
-    function getMeta() {
-        try { return JSON.parse(localStorage.getItem(META_KEY) || '{}') || {}; } catch (e) { return {}; }
-    }
-
-    function setMeta(patch) {
-        try { localStorage.setItem(META_KEY, JSON.stringify(Object.assign(getMeta(), patch))); } catch (e) { /* egal */ }
-    }
-
-    function renderBackupStatus() {
-        const el = $('backupStatus');
-        const meta = getMeta();
-        el.classList.remove('stale');
-        if (!meta.backupAt) {
-            el.textContent = items.length ? 'Noch kein Backup erstellt.' : '';
-            el.classList.toggle('stale', items.length > 0);
-            return;
-        }
-        const day = toIso(new Date(meta.backupAt));
-        const ago = daysBetween(day, today());
-        let text = 'Letztes Backup: ' + fmt(day) + (ago === 0 ? ' (heute)' : ago === 1 ? ' (gestern)' : ' (vor ' + ago + ' Tagen)');
-        if (meta.changedAt && meta.changedAt > meta.backupAt) {
-            text += ' – seitdem gab es Änderungen.';
-            el.classList.add('stale');
-        }
-        el.textContent = text;
-    }
-
+    // Das Backup wird ausschließlich als Datei heruntergeladen, im Browser wird
+    // dazu nichts abgelegt. "application/octet-stream" sorgt dafür, dass
+    // Browser die Datei speichern, statt sie (wie bei JSON üblich) in einem
+    // Tab anzuzeigen.
     $('exportBtn').addEventListener('click', () => {
-        const blob = new Blob([JSON.stringify({ app: 'gone', version: 2, exported: new Date().toISOString(), items }, null, 2)],
-            { type: 'application/json' });
+        const now = new Date();
+        const json = JSON.stringify({ app: 'gone', version: 2, exported: now.toISOString(), items }, null, 2);
+        const blob = new Blob([json], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'gone-backup-' + today() + '.json';
+        a.href = url;
+        a.download = 'gone-backup-' + fileStamp(now) + '.json';
+        a.style.display = 'none';
         document.body.appendChild(a);
         a.click();
         a.remove();
-        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-        setMeta({ backupAt: Date.now() });
-        renderBackupStatus();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
     });
 
     $('importBtn').addEventListener('click', () => $('importFile').click());
