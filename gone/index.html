@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="Behält im Blick, was an wen verliehen ist – seit wann und bis wann es zurückkommen soll.">
-<title>Pumpkin</title>
+<meta name="description" content="Behält im Blick, was du verliehen oder dir geliehen hast – bei wem, seit wann und bis wann.">
+<title>gone</title>
 <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../assets/css/reset.css">
 <link rel="stylesheet" href="../assets/css/theme.css">
@@ -283,6 +283,36 @@
         box-shadow: var(--theme-shadow-sm);
     }
 
+    .dir-switch {
+        display: inline-flex;
+        flex-wrap: nowrap;
+        margin-bottom: 14px;
+    }
+
+    .dir-switch .tab {
+        padding: 7px 16px;
+        font-size: 13px;
+    }
+
+    .item-dir {
+        display: inline-block;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        padding: 2px 6px;
+        border-radius: 5px;
+        margin-right: 6px;
+        vertical-align: 1px;
+        border: 1px solid var(--border-color);
+        color: var(--text-muted);
+    }
+
+    .item-dir.in {
+        border-color: var(--theme-accent-border);
+        color: var(--primary-strong);
+    }
+
     .tab .count {
         font-weight: 500;
         opacity: 0.75;
@@ -453,17 +483,33 @@
         padding: 18px 0 8px;
     }
 
-    .data-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        justify-content: center;
-        margin-top: 18px;
+    .backup-text {
+        font-size: 13px;
+        color: var(--text-muted);
+        line-height: 1.5;
     }
 
-    .data-actions .btn {
+    .backup-status {
+        margin-top: 10px;
         font-size: 12.5px;
-        padding: 8px 12px;
+        font-weight: 600;
+        color: var(--text-color);
+    }
+
+    .backup-status.stale {
+        color: var(--warning-text);
+    }
+
+    .backup-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 14px;
+    }
+
+    .backup-actions .btn {
+        flex: 1;
+        min-width: 150px;
     }
 
     footer {
@@ -480,24 +526,24 @@
 
 <div class="container">
     <header>
-        <h1>Pumpkin</h1>
-        <p>Was hast du wem gepumpt – seit wann, und bis wann soll es zurück sein?</p>
+        <h1>gone</h1>
+        <p>Was ist weg – und bei wem? Und was liegt hier, das jemand anderem gehört?</p>
     </header>
 
     <form class="panel" id="form" novalidate>
-        <span class="panel-title" id="formTitle">Neu verliehen</span>
+        <span class="panel-title" id="formTitle">Neuer Eintrag</span>
+        <div class="tabs dir-switch" id="dirSwitch" role="group" aria-label="Richtung">
+            <button type="button" class="tab" data-dir="out" aria-pressed="true">Von mir</button>
+            <button type="button" class="tab" data-dir="in" aria-pressed="false">An mich</button>
+        </div>
         <div class="form-grid">
             <div class="field wide">
                 <label for="fWhat">Was</label>
                 <input id="fWhat" type="text" placeholder="z. B. Bohrmaschine, „Der Name des Windes“, 20 €" autocomplete="off">
             </div>
-            <div class="field">
-                <label for="fFrom">Von</label>
-                <input id="fFrom" type="text" list="people" placeholder="Wer verleiht?" autocomplete="off">
-            </div>
-            <div class="field">
-                <label for="fTo">An</label>
-                <input id="fTo" type="text" list="people" placeholder="Wer hat es?" autocomplete="off">
+            <div class="field wide">
+                <label for="fPerson" id="fPersonLabel">An wen</label>
+                <input id="fPerson" type="text" list="people" placeholder="Name" autocomplete="off">
             </div>
             <div class="field">
                 <label for="fSince">Wann</label>
@@ -531,7 +577,8 @@
 
     <div class="panel">
         <div class="toolbar">
-            <div class="tabs" id="tabs" role="group" aria-label="Filter"></div>
+            <div class="tabs" id="dirTabs" role="group" aria-label="Richtung filtern"></div>
+            <div class="tabs" id="tabs" role="group" aria-label="Status filtern"></div>
             <div class="search">
                 <input id="search" type="search" placeholder="Suchen …" aria-label="Suchen">
             </div>
@@ -539,13 +586,16 @@
         <div class="list" id="list"></div>
     </div>
 
-    <div class="data-actions">
-        <button type="button" class="btn btn-ghost" id="exportBtn">Backup exportieren</button>
-        <button type="button" class="btn btn-ghost" id="importBtn">Backup importieren</button>
-        <input type="file" id="importFile" accept="application/json,.json" hidden>
+    <div class="panel">
+        <span class="panel-title">Backup</span>
+        <p class="backup-text">Die Einträge liegen nur in diesem Browser und werden nirgendwohin hochgeladen. Ein Backup speichert alles als Datei – zum Sichern oder um es auf einem anderen Gerät einzulesen. Beim Einlesen werden die Einträge mit den vorhandenen zusammengeführt, nichts wird gelöscht.</p>
+        <p class="backup-status" id="backupStatus"></p>
+        <div class="backup-actions">
+            <button type="button" class="btn btn-primary" id="exportBtn">Backup erstellen</button>
+            <button type="button" class="btn btn-ghost" id="importBtn">Backup einlesen</button>
+            <input type="file" id="importFile" accept="application/json,.json" hidden>
+        </div>
     </div>
-
-    <footer>Die Einträge bleiben nur in diesem Browser gespeichert und werden nirgendwohin hochgeladen.<br>Für ein anderes Gerät: Backup exportieren und dort importieren.</footer>
 </div>
 
 <script src="../assets/js/escape-html.js"></script>
@@ -553,20 +603,26 @@
 (function () {
     'use strict';
 
+    // Schlüssel bewusst unverändert vom ursprünglichen Seitennamen, damit
+    // bereits gespeicherte Einträge nach dem Umbenennen erhalten bleiben.
     const STORE_KEY = 'klmpfh-verliehen';
-    const LAST_FROM_KEY = 'klmpfh-verliehen-von';
+    const META_KEY = 'klmpfh-verliehen-meta';
 
     const $ = (id) => document.getElementById(id);
     const form = $('form');
-    const fWhat = $('fWhat'), fFrom = $('fFrom'), fTo = $('fTo');
+    const fWhat = $('fWhat'), fPerson = $('fPerson'), fPersonLabel = $('fPersonLabel');
     const fSince = $('fSince'), fUntil = $('fUntil'), fNote = $('fNote');
     const formTitle = $('formTitle'), formError = $('formError');
     const submitBtn = $('submitBtn'), cancelBtn = $('cancelBtn');
-    const listEl = $('list'), tabsEl = $('tabs'), statsEl = $('stats');
+    const dirSwitch = $('dirSwitch');
+    const listEl = $('list'), tabsEl = $('tabs'), dirTabsEl = $('dirTabs'), statsEl = $('stats');
     const searchEl = $('search'), peopleEl = $('people');
 
+    // Richtung eines Eintrags: "out" = von mir verliehen, "in" = an mich verliehen.
     let items = load();
     let filter = 'open';
+    let dirFilter = 'all';
+    let formDir = 'out';
     let editingId = null;
 
     /* ---------- Speicher ---------- */
@@ -574,15 +630,28 @@
     function load() {
         try {
             const raw = JSON.parse(localStorage.getItem(STORE_KEY) || '[]');
-            return Array.isArray(raw) ? raw.filter(isValidItem) : [];
+            return Array.isArray(raw) ? raw.map(normalize).filter(isValidItem) : [];
         } catch (e) {
             return [];
         }
     }
 
+    // Bringt Einträge (auch aus älteren Backups mit getrennten Feldern
+    // "from"/"to") in die aktuelle Form { dir, person, ... }.
+    function normalize(it) {
+        if (!it || typeof it !== 'object') return it;
+        const dir = it.dir === 'in' ? 'in' : 'out';
+        const person = typeof it.person === 'string' ? it.person : (it.to || it.from || '');
+        return {
+            id: it.id, dir, person, what: it.what,
+            since: it.since || '', until: it.until || '', returned: it.returned || '', note: it.note || ''
+        };
+    }
+
     function save() {
         try {
             localStorage.setItem(STORE_KEY, JSON.stringify(items));
+            setMeta({ changedAt: Date.now() });
         } catch (e) {
             alert('Speichern im Browser nicht möglich (privater Modus?). Bitte Backup exportieren.');
         }
@@ -590,7 +659,7 @@
 
     function isValidItem(it) {
         return it && typeof it === 'object' && typeof it.id === 'string' &&
-            typeof it.what === 'string' && typeof it.to === 'string';
+            typeof it.what === 'string' && typeof it.person === 'string';
     }
 
     function newId() {
@@ -656,23 +725,28 @@
 
     /* ---------- Formular ---------- */
 
+    function setFormDir(dir) {
+        formDir = dir;
+        dirSwitch.querySelectorAll('.tab').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.dir === dir)));
+        fPersonLabel.textContent = dir === 'in' ? 'Von wem' : 'An wen';
+    }
+
+    dirSwitch.addEventListener('click', (e) => {
+        const btn = e.target.closest('.tab');
+        if (btn) setFormDir(btn.dataset.dir);
+    });
+
+    // Die gewählte Richtung bleibt nach dem Eintragen stehen, damit man
+    // mehrere geliehene Dinge hintereinander erfassen kann.
     function resetForm() {
         editingId = null;
         form.reset();
-        fFrom.value = getLastFrom();
+        setFormDir(formDir);
         fSince.value = today();
-        formTitle.textContent = 'Neu verliehen';
+        formTitle.textContent = 'Neuer Eintrag';
         submitBtn.textContent = '+ Eintragen';
         cancelBtn.hidden = true;
         hideError();
-    }
-
-    function getLastFrom() {
-        try { return localStorage.getItem(LAST_FROM_KEY) || ''; } catch (e) { return ''; }
-    }
-
-    function setLastFrom(v) {
-        try { localStorage.setItem(LAST_FROM_KEY, v); } catch (e) { /* egal */ }
     }
 
     function showError(msg, fields) {
@@ -684,7 +758,7 @@
 
     function hideError() {
         formError.hidden = true;
-        [fWhat, fTo, fSince, fUntil].forEach((f) => f.classList.remove('invalid'));
+        [fWhat, fPerson, fSince, fUntil].forEach((f) => f.classList.remove('invalid'));
     }
 
     form.addEventListener('submit', (e) => {
@@ -692,9 +766,9 @@
         hideError();
 
         const data = {
+            dir: formDir,
             what: fWhat.value.trim(),
-            from: fFrom.value.trim(),
-            to: fTo.value.trim(),
+            person: fPerson.value.trim(),
             since: fSince.value || today(),
             until: fUntil.value || '',
             note: fNote.value.trim()
@@ -702,9 +776,9 @@
 
         const missing = [];
         if (!data.what) missing.push(fWhat);
-        if (!data.to) missing.push(fTo);
+        if (!data.person) missing.push(fPerson);
         if (missing.length) {
-            showError('Bitte mindestens „Was“ und „An“ ausfüllen.', missing);
+            showError('Bitte „Was“ und „' + fPersonLabel.textContent + '“ ausfüllen.', missing);
             return;
         }
         if (data.until && data.until < data.since) {
@@ -718,8 +792,8 @@
         } else {
             items.push(Object.assign({ id: newId(), returned: '' }, data));
             if (filter === 'returned') filter = 'open';
+            if (dirFilter !== 'all' && dirFilter !== data.dir) dirFilter = 'all';
         }
-        if (data.from) setLastFrom(data.from);
         save();
         resetForm();
         render();
@@ -744,9 +818,9 @@
 
     function startEdit(it) {
         editingId = it.id;
+        setFormDir(it.dir);
         fWhat.value = it.what;
-        fFrom.value = it.from || '';
-        fTo.value = it.to;
+        fPerson.value = it.person;
         fSince.value = it.since || '';
         fUntil.value = it.until || '';
         fNote.value = it.note || '';
@@ -760,8 +834,14 @@
 
     /* ---------- Liste ---------- */
 
+    const DIR_FILTERS = [
+        { key: 'all', label: 'Alles' },
+        { key: 'out', label: 'Von mir' },
+        { key: 'in', label: 'An mich' }
+    ];
+
     const FILTERS = [
-        { key: 'open', label: 'Verliehen' },
+        { key: 'open', label: 'Offen' },
         { key: 'overdue', label: 'Überfällig' },
         { key: 'returned', label: 'Zurück' },
         { key: 'all', label: 'Alle' }
@@ -777,7 +857,11 @@
 
     function matchesSearch(it, q) {
         if (!q) return true;
-        return [it.what, it.from, it.to, it.note].some((v) => (v || '').toLowerCase().includes(q));
+        return [it.what, it.person, it.note].some((v) => (v || '').toLowerCase().includes(q));
+    }
+
+    function matchesDir(it, key) {
+        return key === 'all' || it.dir === key;
     }
 
     // Offene zuerst, nach geplantem Rückgabedatum (ohne Frist ans Ende);
@@ -792,37 +876,46 @@
 
     function render() {
         const q = searchEl.value.trim().toLowerCase();
+        renderBackupStatus();
 
         // Statistik
         const open = items.filter((it) => !it.returned);
+        const lentOut = open.filter((it) => it.dir === 'out').length;
+        const lentIn = open.filter((it) => it.dir === 'in').length;
         const overdue = open.filter((it) => statusOf(it) === 'overdue');
-        const people = new Set(open.map((it) => it.to.trim().toLowerCase()));
         statsEl.innerHTML =
-            stat(open.length, 'verliehen', '') +
-            stat(overdue.length, 'überfällig', overdue.length ? 'overdue' : '') +
-            stat(people.size, people.size === 1 ? 'Person' : 'Personen', '');
+            stat(lentOut, 'von mir verliehen', '') +
+            stat(lentIn, 'an mich verliehen', '') +
+            stat(overdue.length, 'überfällig', overdue.length ? 'overdue' : '');
 
-        // Tabs
+        // Richtungs-Filter
+        dirTabsEl.innerHTML = DIR_FILTERS.map((f) =>
+            '<button type="button" class="tab" data-dir="' + f.key + '" aria-pressed="' + (f.key === dirFilter) + '">' +
+            f.label + '</button>').join('');
+
+        // Status-Filter (Zähler berücksichtigen die gewählte Richtung)
         tabsEl.innerHTML = FILTERS.map((f) => {
-            const n = items.filter((it) => matchesFilter(it, f.key)).length;
+            const n = items.filter((it) => matchesDir(it, dirFilter) && matchesFilter(it, f.key)).length;
             return '<button type="button" class="tab" data-key="' + f.key + '" aria-pressed="' + (f.key === filter) + '">' +
                 f.label + '<span class="count">' + n + '</span></button>';
         }).join('');
 
         // Namen für die Autovervollständigung
         const names = new Set();
-        items.forEach((it) => { if (it.from) names.add(it.from); if (it.to) names.add(it.to); });
+        items.forEach((it) => { if (it.person) names.add(it.person); });
         peopleEl.innerHTML = [...names].sort((a, b) => a.localeCompare(b, 'de'))
             .map((n) => '<option value="' + escapeAttr(n) + '">').join('');
 
         // Liste
-        const shown = items.filter((it) => matchesFilter(it, filter) && matchesSearch(it, q)).sort(compare);
+        const shown = items.filter((it) => matchesDir(it, dirFilter) && matchesFilter(it, filter) && matchesSearch(it, q)).sort(compare);
         if (!shown.length) {
             let msg;
             if (!items.length) msg = 'Noch nichts eingetragen. Oben das erste verliehene Ding erfassen.';
             else if (q) msg = 'Keine Treffer für „' + escapeHtml(searchEl.value.trim()) + '“.';
             else if (filter === 'overdue') msg = 'Nichts überfällig.';
-            else if (filter === 'open') msg = 'Gerade ist nichts verliehen.';
+            else if (filter === 'open' && dirFilter === 'in') msg = 'Du hast dir gerade nichts geliehen.';
+            else if (filter === 'open' && dirFilter === 'out') msg = 'Du hast gerade nichts verliehen.';
+            else if (filter === 'open') msg = 'Gerade ist nichts verliehen oder geliehen.';
             else msg = 'Keine Einträge.';
             listEl.innerHTML = '<div class="empty-hint">' + msg + '</div>';
             return;
@@ -842,7 +935,9 @@
         const st = statusOf(it);
         const badge = badgeFor(it);
         const cls = st === 'overdue' ? 'is-overdue' : st === 'due' ? 'is-due' : st === 'returned' ? 'is-returned' : '';
-        const who = (it.from ? 'von <b>' + escapeHtml(it.from) + '</b> ' : '') + 'an <b>' + escapeHtml(it.to) + '</b>';
+        const isIn = it.dir === 'in';
+        const who = '<span class="item-dir ' + (isIn ? 'in' : 'out') + '">' + (isIn ? 'An mich' : 'Von mir') + '</span>' +
+            (isIn ? 'von' : 'an') + ' <b>' + escapeHtml(it.person) + '</b>';
 
         let meta = '<span>seit ' + fmt(it.since) + '</span>';
         meta += '<span>bis ' + (it.until ? fmt(it.until) : 'offen') + '</span>';
@@ -856,7 +951,7 @@
 
         const actions = it.returned
             ? '<button type="button" data-act="reopen">Wieder verliehen</button>'
-            : '<button type="button" class="act-return" data-act="return">Zurückbekommen</button>' +
+            : '<button type="button" class="act-return" data-act="return">' + (isIn ? 'Zurückgegeben' : 'Zurückbekommen') + '</button>' +
               '<button type="button" data-act="extend">+1 Woche</button>';
 
         return '<div class="item ' + cls + '" data-id="' + escapeAttr(it.id) + '">' +
@@ -896,7 +991,7 @@
                 startEdit(it);
                 return;
             case 'delete':
-                if (!confirm('„' + it.what + '“ (an ' + it.to + ') wirklich löschen?')) return;
+                if (!confirm('„' + it.what + '“ (' + (it.dir === 'in' ? 'von ' : 'an ') + it.person + ') wirklich löschen?')) return;
                 items = items.filter((x) => x.id !== id);
                 if (editingId === id) resetForm();
                 break;
@@ -912,20 +1007,58 @@
         render();
     });
 
+    dirTabsEl.addEventListener('click', (e) => {
+        const btn = e.target.closest('.tab');
+        if (!btn) return;
+        dirFilter = btn.dataset.dir;
+        render();
+    });
+
     searchEl.addEventListener('input', render);
 
     /* ---------- Backup ---------- */
 
+    // Merkt sich, wann zuletzt ein Backup erstellt und wann zuletzt etwas
+    // geändert wurde, um auf ein veraltetes Backup hinweisen zu können.
+    function getMeta() {
+        try { return JSON.parse(localStorage.getItem(META_KEY) || '{}') || {}; } catch (e) { return {}; }
+    }
+
+    function setMeta(patch) {
+        try { localStorage.setItem(META_KEY, JSON.stringify(Object.assign(getMeta(), patch))); } catch (e) { /* egal */ }
+    }
+
+    function renderBackupStatus() {
+        const el = $('backupStatus');
+        const meta = getMeta();
+        el.classList.remove('stale');
+        if (!meta.backupAt) {
+            el.textContent = items.length ? 'Noch kein Backup erstellt.' : '';
+            el.classList.toggle('stale', items.length > 0);
+            return;
+        }
+        const day = toIso(new Date(meta.backupAt));
+        const ago = daysBetween(day, today());
+        let text = 'Letztes Backup: ' + fmt(day) + (ago === 0 ? ' (heute)' : ago === 1 ? ' (gestern)' : ' (vor ' + ago + ' Tagen)');
+        if (meta.changedAt && meta.changedAt > meta.backupAt) {
+            text += ' – seitdem gab es Änderungen.';
+            el.classList.add('stale');
+        }
+        el.textContent = text;
+    }
+
     $('exportBtn').addEventListener('click', () => {
-        const blob = new Blob([JSON.stringify({ app: 'verliehen', version: 1, exported: new Date().toISOString(), items }, null, 2)],
+        const blob = new Blob([JSON.stringify({ app: 'gone', version: 2, exported: new Date().toISOString(), items }, null, 2)],
             { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'pumpkin-' + today() + '.json';
+        a.download = 'gone-backup-' + today() + '.json';
         document.body.appendChild(a);
         a.click();
         a.remove();
         setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        setMeta({ backupAt: Date.now() });
+        renderBackupStatus();
     });
 
     $('importBtn').addEventListener('click', () => $('importFile').click());
@@ -937,7 +1070,7 @@
         let incoming;
         try {
             const data = JSON.parse(await file.text());
-            incoming = (Array.isArray(data) ? data : data.items || []).filter(isValidItem);
+            incoming = (Array.isArray(data) ? data : data.items || []).map(normalize).filter(isValidItem);
         } catch (err) {
             alert('Die Datei konnte nicht gelesen werden.');
             return;
@@ -950,17 +1083,13 @@
         const byId = new Map(items.map((it) => [it.id, it]));
         let added = 0, updated = 0;
         incoming.forEach((it) => {
-            const clean = {
-                id: it.id, what: it.what, from: it.from || '', to: it.to,
-                since: it.since || '', until: it.until || '', returned: it.returned || '', note: it.note || ''
-            };
             if (byId.has(it.id)) updated++; else added++;
-            byId.set(it.id, clean);
+            byId.set(it.id, it);
         });
         items = [...byId.values()];
         save();
         render();
-        alert('Import fertig: ' + plural(added, 'neuer Eintrag', 'neue Einträge') + ', ' + plural(updated, 'aktualisiert', 'aktualisiert') + '.');
+        alert('Backup eingelesen: ' + plural(added, 'neuer Eintrag', 'neue Einträge') + ', ' + updated + ' aktualisiert.');
     });
 
     // Bei Tageswechsel (Tab lange offen) Status neu berechnen.

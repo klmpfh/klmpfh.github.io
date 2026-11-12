@@ -74,11 +74,11 @@
         { key: 'abz',           href: 'abz/',           label: 'Arbeitszeit-Tracker', letter: 'a' },
         { key: 'choose',        href: 'choose/',        label: 'Choose Wisely',      letter: 'c' },
         { key: 'fileshare',     href: 'fileshare/',     label: 'Fileshare',          letter: 'f' },
+        { key: 'gone',          href: 'gone/',          label: 'gone',               letter: 'g' },
         { key: 'ical',          href: 'ical/',          label: 'iCal Terminsuche',   letter: 'i' },
         { key: 'knallbum',      href: 'knallbum/',      label: 'Knall Bumm',         letter: 'k' },
         { key: 'kwidt',         href: 'kwidt/',         label: 'Kwidt',              letter: 'k' },
         { key: 'laserfeelings', href: 'laserfeelings/', label: 'Laser & Feelings',   letter: 'l' },
-        { key: 'pumpkin',       href: 'pumpkin/',       label: 'Pumpkin',            letter: 'p' },
         { key: 'sport',         href: 'sport/',         label: 'Sport',              letter: 's' },
         { key: 'zauberkloppen', href: 'zauberkloppen/', label: 'Zaubern & Kloppen',  letter: 'z' }
     ];
