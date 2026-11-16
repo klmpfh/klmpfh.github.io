@@ -60,8 +60,12 @@
             margin-bottom: 28px;
         }
 
+        /* Rahmen liegt auf dem ganzen <details>, damit er im ausgeklappten
+           Zustand auch die Einstellungen selbst umschließt. */
         .settings-panel {
             margin-bottom: 18px;
+            border: 1px solid var(--theme-border);
+            border-radius: var(--theme-radius);
         }
 
         .settings-panel > summary {
@@ -76,8 +80,7 @@
             letter-spacing: 0.4px;
             color: var(--theme-text-muted);
             background: var(--theme-surface-muted);
-            border: 1px solid var(--theme-border);
-            border-radius: var(--theme-radius);
+            border-radius: calc(var(--theme-radius) - 1px);
             padding: 10px 16px;
         }
 
@@ -126,15 +129,24 @@
         }
 
         .settings-panel > summary:hover {
-            border-color: var(--theme-accent);
             color: var(--theme-accent-strong);
         }
 
-        .settings-panel[open] > summary {
-            margin-bottom: 18px;
+        .settings-panel:has(> summary:hover) {
+            border-color: var(--theme-accent);
         }
 
-        .settings-panel > .advanced-settings:last-child {
+        .settings-panel[open] > summary {
+            border-bottom: 1px solid var(--theme-border);
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+
+        .settings-panel-body {
+            padding: 18px 16px 2px;
+        }
+
+        .settings-panel-body > .advanced-settings:last-child {
             margin-bottom: 0;
         }
 
@@ -1244,6 +1256,7 @@
                  übrigen Einstellungen gespeichert. -->
             <details class="settings-panel" id="settingsPanel" open>
             <summary><span class="settings-panel-title">Einstellungen</span><span class="settings-panel-summary" id="settingsSummary"></span></summary>
+            <div class="settings-panel-body">
             <fieldset class="muscle-fieldset">
                 <legend>Muskelgruppen</legend>
                 <!-- Zeile 1 schaltet Gruppen an/aus, Zeile 2 setzt Schwerpunkte
@@ -1314,6 +1327,7 @@
                     <label class="chip-checkbox"><input type="checkbox" id="toggleJump" checked> Springen/Hüpfen</label>
                 </fieldset>
                 <p class="hint">Deaktivieren, um laute Sprung-/Hüpf-Übungen auszuschließen – z. B. im Mehrfamilienhaus.</p>
+            </div>
             </div>
             </details>
 
