@@ -98,13 +98,14 @@ function buildNode(node, parent, colors, index, count) {
     amount.title = 'Stunden, z. B. 6, 1,5 oder 1:30';
     const per = el('select', 'node-per');
     per.setAttribute('aria-label', 'Einheit');
-    [['week', 'h / Woche'], ['day', 'h / Tag']].forEach(o => {
+    [['week', 'pro Woche'], ['day', 'pro Tag']].forEach(o => {
         const opt = el('option', null, o[1]);
         opt.value = o[0];
         per.appendChild(opt);
     });
     per.value = node.per;
-    amountWrap.append(amount, per);
+    // Erst die Einheit wählen, dann den Wert eintragen.
+    amountWrap.append(per, amount);
 
     const days = el('div', 'node-days');
     days.setAttribute('role', 'group');
@@ -131,6 +132,13 @@ function buildNode(node, parent, colors, index, count) {
     actions.append(up, down);
     if (isTop) {
         const add = iconButton('node-add', 'add', '+ Unter', 'Unterpunkt hinzufügen');
+        // Sind Unterpunkte aufgeklappt, sitzt der Knopf unter dem letzten
+        // Unterpunkt; hier oben bleibt nur sein Platz (Spalten bleiben bündig).
+        if (node.children.length && !node.collapsed) {
+            add.classList.add('is-placeholder');
+            add.tabIndex = -1;
+            add.setAttribute('aria-hidden', 'true');
+        }
         actions.appendChild(add);
     }
     actions.appendChild(iconButton('node-del', 'del', '✕', 'Löschen'));
@@ -142,6 +150,11 @@ function buildNode(node, parent, colors, index, count) {
     if (isTop && node.children.length && !node.collapsed) {
         const kids = el('div', 'node-children');
         node.children.forEach((c, i) => kids.appendChild(buildNode(c, node, colors, i, node.children.length)));
+        const addSub = el('button', 'btn-add-sub', '+ Unterpunkt');
+        addSub.type = 'button';
+        addSub.dataset.action = 'add';
+        addSub.setAttribute('aria-label', 'Unterpunkt zu „' + (node.name.trim() || 'Thema') + '“ hinzufügen');
+        kids.appendChild(addSub);
         wrap.appendChild(kids);
     }
     return wrap;
