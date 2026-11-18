@@ -575,17 +575,27 @@ input[type="time"]:focus,
 /* Je Arbeitszeit: Arbeitszeit, Zielzeit, Countdown, Rest / Überziehung, Fortschritt */
 .stats-targets { --stat-cols: 5; }
 
-@media (max-width: 640px) {
-    .stats-grid { --stat-cols: 2; }
-    /* Fünf Kacheln je Zeile: die Arbeitszeit-Kachel über die volle Breite, darunter zwei Paare */
-    .stats-targets .stat-card[data-stat="worktime"] { grid-column: 1 / -1; }
+/* Zeile je Arbeitszeit: eigenes Raster über die volle Breite, damit eine ausgeblendete Kachel
+   nur in ihrer Zeile Platz freigibt und die übrigen Kacheln dieser Zeile ihn auffüllen */
+.stat-row {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(var(--stat-cols), 1fr);
+    gap: inherit;
 }
 
-/* Zeilen-Wrapper je Arbeitszeit; die Kacheln bleiben direkte Grid-Elemente */
-.stat-row { display: contents; }
+/* Countdown gleich „Rest / Überziehung“: Kachel entfällt, die Zeile hat eine Spalte weniger */
+.stat-card.redundant { display: none; }
+.stat-row.without-countdown { --stat-cols: 4; }
 
-/* Countdown gleich „Rest / Überziehung“: ausblenden, Platz im Raster aber behalten (Spalten bleiben bündig) */
-.stat-card.redundant { visibility: hidden; }
+@media (max-width: 640px) {
+    .stats-grid,
+    .stat-row.without-countdown { --stat-cols: 2; }
+    /* Fünf Kacheln je Zeile: die Arbeitszeit-Kachel über die volle Breite, darunter zwei Paare */
+    .stats-targets .stat-card[data-stat="worktime"] { grid-column: 1 / -1; }
+    /* Ohne Countdown bleiben drei Kacheln unter der Arbeitszeit: Fortschritt über die volle Breite */
+    .stat-row.without-countdown .stat-card[data-stat="percent"] { grid-column: 1 / -1; }
+}
 
 /* Kachel, die nicht in den Seitentitel übernommen werden kann: flach, ohne Akzentkante */
 .stat-card {

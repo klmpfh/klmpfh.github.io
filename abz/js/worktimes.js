@@ -185,6 +185,7 @@ function renderTargetStats(targets, relevantTarget) {
             selectableStats.forEach(stat => setValue(stat, '–', 'muted'));
         }
         card('countdown').classList.toggle('redundant', countdownRedundant);
+        rowEl.classList.toggle('without-countdown', countdownRedundant);
         rowEl.querySelector('.stat-progress-fill').style.width = hasValues ? `${Math.min(100, t.progressUncapped)}%` : '0%';
 
         selectableStats.forEach(stat => card(stat).classList.toggle('selected', isRelevant && titleStat === stat));
