@@ -260,8 +260,24 @@
         .work-time-relevant-btn.active { color: var(--primary-text); }
         .work-time-delete-btn:hover { color: var(--danger); }
 
-        /* Bei nur einer Arbeitszeit gibt es nichts zu markieren oder zu löschen */
-        .work-time-row:only-child .work-time-btn { display: none; }
+        /* Reihenfolge ändern: ▲/▼ übereinander, mittig zum Eingabefeld */
+        .work-time-move {
+            display: flex;
+            flex-direction: column;
+            align-self: flex-end;
+            margin-bottom: 7px;
+        }
+        .work-time-move .work-time-btn {
+            font-size: 11px;
+            padding: 3px 4px;
+        }
+        /* Unsichtbar statt ausgeblendet, damit ☆/× in allen Zeilen auf gleicher Höhe bleiben */
+        .work-time-row:first-child .work-time-up-btn,
+        .work-time-row:last-child .work-time-down-btn { visibility: hidden; }
+
+        /* Bei nur einer Arbeitszeit gibt es nichts zu sortieren, zu markieren oder zu löschen */
+        .work-time-row:only-child .work-time-btn,
+        .work-time-row:only-child .work-time-move { display: none; }
 
         .work-time-actions {
             display: flex;
@@ -565,8 +581,13 @@
             margin-bottom: 16px;
         }
 
+        /* Je Arbeitszeit: Arbeitszeit, Zielzeit, Countdown, Rest / Überziehung, Fortschritt */
+        .stats-targets { --stat-cols: 5; }
+
         @media (max-width: 640px) {
             .stats-grid { --stat-cols: 2; }
+            /* Fünf Kacheln je Zeile: die Arbeitszeit-Kachel über die volle Breite, darunter zwei Paare */
+            .stats-targets .stat-card[data-stat="worktime"] { grid-column: 1 / -1; }
         }
 
         /* Zeilen-Wrapper je Arbeitszeit; die Kacheln bleiben direkte Grid-Elemente */
@@ -656,6 +677,14 @@
             margin-top: 6px;
             font-size: 11px;
             color: var(--text-muted);
+        }
+
+        /* Wochenarbeitszeit in der Arbeitszeit-Kachel: genau so hoch wie der Fortschrittsbalken
+           (8px Abstand + 6px Balken), damit die Kachelzeile nicht höher wird */
+        .stat-hint-compact {
+            margin-top: 3px;
+            line-height: 1;
+            white-space: nowrap;
         }
 
         .stat-progress-fill {
@@ -815,10 +844,10 @@
         </div>
     </div>
 
-    <!-- Je Arbeitszeit eine Zeile: Arbeitszeit, Zielzeit, Rest / Überziehung, Fortschritt (siehe renderTargetStats) -->
-    <div class="stats-grid" id="targetStats"></div>
+    <!-- Je Arbeitszeit eine Zeile: Arbeitszeit, Zielzeit, Countdown, Rest / Überziehung, Fortschritt (siehe renderTargetStats) -->
+    <div class="stats-grid stats-targets" id="targetStats"></div>
 
-    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden. Letzte Aktualisierung: <span id="lastUpdate">–</span> · v<span id="versionNumber">6.18</span></div>
+    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden. Letzte Aktualisierung: <span id="lastUpdate">–</span> · v<span id="versionNumber">6.19</span></div>
 </div>
 
 <script>
@@ -836,7 +865,8 @@
     const titleStatLabels = {
         percent: 'Fortschritt',
         target:  'Zielzeit',
-        net:     'Netto-Arbeitszeit',
+        countdown: 'Countdown bis Ziel',
+        net:    'Netto-Arbeitszeit',
         pause:   'Pausen gesamt',
         pauseElapsed: 'Verstrichene Pausenzeit',
         nextStart: 'Frühester Start morgen',
@@ -972,6 +1002,8 @@
         const suffix = ctx.multipleTargets ? ` (${t.label})` : '';
         if (titleStat === 'target') {
             document.title = `${formatMinutesToTime(t.targetEndMin)} – ${label}${suffix}`;
+        } else if (titleStat === 'countdown') {
+            document.title = `${formatDifference(t.countdown)} – ${label}${suffix}`;
         } else if (titleStat === 'diff') {
             document.title = `${formatDifference(t.remaining)} – ${label}${suffix}`;
         } else {
@@ -1058,6 +1090,10 @@
             + `<label for="weeklyTime${uid}">Wochenarbeitszeit</label>`
             + `<input type="text" id="weeklyTime${uid}" class="duration-input" placeholder="H:MM" maxlength="6" aria-label="Wochenarbeitszeit">`
             + `</div>`
+            + `<div class="work-time-move">`
+            + `<button type="button" class="work-time-btn work-time-up-btn" title="Nach oben verschieben" aria-label="Nach oben verschieben">▲</button>`
+            + `<button type="button" class="work-time-btn work-time-down-btn" title="Nach unten verschieben" aria-label="Nach unten verschieben">▼</button>`
+            + `</div>`
             + `<button type="button" class="work-time-btn work-time-relevant-btn" title="Als relevant markieren (Werte im Seitentitel)">☆</button>`
             + `<button type="button" class="work-time-btn work-time-delete-btn" title="Arbeitszeit entfernen">×</button>`;
         dom.workTimeList.appendChild(el);
@@ -1066,7 +1102,9 @@
             el,
             dailyInput:  el.querySelector(`#dailyTime${uid}`),
             weeklyInput: el.querySelector(`#weeklyTime${uid}`),
-            relevantBtn: el.querySelector('.work-time-relevant-btn')
+            relevantBtn: el.querySelector('.work-time-relevant-btn'),
+            upBtn:       el.querySelector('.work-time-up-btn'),
+            downBtn:     el.querySelector('.work-time-down-btn')
         };
         row.dailyInput.value  = daily;
         row.weeklyInput.value = weekly;
@@ -1085,6 +1123,8 @@
             updateTracker();
         });
 
+        row.upBtn.addEventListener('click',   () => moveWorkTimeRow(workTimeRows.indexOf(row), -1));
+        row.downBtn.addEventListener('click', () => moveWorkTimeRow(workTimeRows.indexOf(row), 1));
         row.relevantBtn.addEventListener('click', () => selectRelevantWorkTime(workTimeRows.indexOf(row)));
         el.querySelector('.work-time-delete-btn').addEventListener('click', () => deleteWorkTimeRow(workTimeRows.indexOf(row)));
 
@@ -1105,6 +1145,31 @@
         row.el.remove();
         if (relevantIndex === index)    relevantIndex = 0;
         else if (relevantIndex > index) relevantIndex--;
+        updateWorkTimeRelevantButtons();
+        updateTracker();
+    }
+
+    /**
+     * Verschiebt eine Zeile um delta Positionen (−1 = nach oben, +1 = nach unten). Die Reihenfolge
+     * bestimmt auch die Reihenfolge der Kachel-Zeilen und der Werte in der URL; die Markierung
+     * „relevant“ bleibt an ihrer Zeile.
+     */
+    function moveWorkTimeRow(index, delta) {
+        const newIndex = index + delta;
+        if (index < 0 || newIndex < 0 || newIndex >= workTimeRows.length) return;
+
+        const relevantRow = workTimeRows[relevantIndex];
+        const [row] = workTimeRows.splice(index, 1);
+        workTimeRows.splice(newIndex, 0, row);
+        dom.workTimeList.insertBefore(row.el, workTimeRows[newIndex + 1]?.el ?? null);
+        if (relevantRow) relevantIndex = workTimeRows.indexOf(relevantRow);
+
+        // Fokus beim geklickten Pfeil lassen; ist er am Rand jetzt unsichtbar, auf den anderen wechseln
+        const atEdge = delta < 0 ? newIndex === 0 : newIndex === workTimeRows.length - 1;
+        const clicked = delta < 0 ? row.upBtn : row.downBtn;
+        const other   = delta < 0 ? row.downBtn : row.upBtn;
+        (atEdge ? other : clicked).focus();
+
         updateWorkTimeRelevantButtons();
         updateTracker();
     }
@@ -1139,8 +1204,9 @@
         // Arbeitszeit-Kachel kann nicht in den Titel; relevant markieren über ☆ oder die übrigen Kacheln der Zeile
         return `<div class="stat-row">`
             + `<div class="stat-card" data-stat="worktime">`
-            + `<div class="stat-label">Arbeitszeit</div><div class="stat-value">–</div></div>`
+            + `<div class="stat-label">Arbeitszeit</div><div class="stat-value">–</div><div class="stat-hint stat-hint-compact"></div></div>`
             + card('target', 'Zielzeit')
+            + card('countdown', 'Countdown bis Ziel')
             + card('diff', 'Rest / Überziehung')
             + card('percent', 'Fortschritt', '<div class="stat-progress-bar"><div class="stat-progress-fill"></div></div>')
             + `</div>`;
@@ -1170,17 +1236,20 @@
             workTimeCard.classList.toggle('relevant', isRelevant && !!t);
             workTimeCard.querySelector('.stat-label').textContent = isRelevant && targets.length > 1 ? '★ Arbeitszeit' : 'Arbeitszeit';
             setValue('worktime', t ? t.label : '–', t ? '' : 'muted');
+            workTimeCard.querySelector('.stat-hint').textContent = t ? `${formatDuration(t.min * 5)} h / Woche` : '';
 
+            const selectableStats = ['target', 'countdown', 'diff', 'percent'];
             if (hasValues) {
-                setValue('target',  formatMinutesToTime(t.targetEndMin), '');
-                setValue('diff',    formatDifference(t.remaining), t.remaining >= 0 ? 'pos' : 'neg');
-                setValue('percent', `${t.progressUncapped.toFixed(1)} %`, '');
+                setValue('target',    formatMinutesToTime(t.targetEndMin), '');
+                setValue('countdown', formatDifference(t.countdown), t.countdown >= 0 ? 'pos' : 'neg');
+                setValue('diff',      formatDifference(t.remaining), t.remaining >= 0 ? 'pos' : 'neg');
+                setValue('percent',   `${t.progressUncapped.toFixed(1)} %`, '');
             } else {
-                ['target', 'diff', 'percent'].forEach(stat => setValue(stat, '–', 'muted'));
+                selectableStats.forEach(stat => setValue(stat, '–', 'muted'));
             }
             rowEl.querySelector('.stat-progress-fill').style.width = hasValues ? `${Math.min(100, t.progressUncapped)}%` : '0%';
 
-            ['target', 'diff', 'percent'].forEach(stat => card(stat).classList.toggle('selected', isRelevant && titleStat === stat));
+            selectableStats.forEach(stat => card(stat).classList.toggle('selected', isRelevant && titleStat === stat));
         });
     }
 
@@ -1724,10 +1793,11 @@
         // Pausenliste inkl. eines gerade im Formular eingegebenen Entwurfs (Live-Vorschau)
         const effectivePauses = getEffectivePauses(currentMinOfDay);
 
+        // Uhr-Minuten seit Arbeitsbeginn (nach Mitternacht fortlaufend; bis 2h vor Start negativ)
+        let clockSinceStartMin = currentMinOfDay - startMin;
+        if (clockSinceStartMin < -120) clockSinceStartMin += 1440;
         // Vergangene Zeit seit Arbeitsbeginn (Uhr-Minuten)
-        let elapsedMin = currentMinOfDay - startMin;
-        if (elapsedMin < -120) elapsedMin += 1440;
-        if (elapsedMin < 0)    elapsedMin = 0;
+        const elapsedMin = Math.max(0, clockSinceStartMin);
 
         // Vergangene Pausenminuten
         let elapsedPauseMin = 0;
@@ -1793,12 +1863,19 @@
 
         // Zielwerte je Arbeitszeit (Netto-Ziel = Tagesarbeitszeit); ohne Startzeit keine Zielwerte.
         // Pausen gelten für alle Arbeitszeiten gleich – Pausen nach einer Zielzeit verschieben diese nicht.
-        const targets = getWorkTargets().map(t => hasStart ? {
-            ...t,
-            targetEndMin:     computeClockTimeForNetMinutes(startMin, t.min, pauseIntervals),
-            remaining:        netWorkMin - t.min,
-            progressUncapped: Math.max(0, (netWorkMin / t.min) * 100)
-        } : t);
+        // Countdown: Uhr-Abstand zur Zielzeit – läuft anders als „Rest“ (Netto) auch während Pausen weiter;
+        // gleiche Vorzeichen-Logik wie „Rest“ (negativ = noch bis Ziel, positiv = Ziel überschritten).
+        const targets = getWorkTargets().map(t => {
+            if (!hasStart) return t;
+            const targetEndMin = computeClockTimeForNetMinutes(startMin, t.min, pauseIntervals);
+            return {
+                ...t,
+                targetEndMin,
+                countdown:        startMin + clockSinceStartMin - targetEndMin,
+                remaining:        netWorkMin - t.min,
+                progressUncapped: Math.max(0, (netWorkMin / t.min) * 100)
+            };
+        });
         // Relevante Zeile leer/ungültig → erste gültige Arbeitszeit
         const relevantTarget  = targets.find(t => t.index === relevantIndex) ?? targets[0] ?? null;
         const resolvedTargets = targets.filter(t => t.targetEndMin !== undefined);
