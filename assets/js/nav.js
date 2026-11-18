@@ -80,7 +80,8 @@
         { key: 'kwidt',         href: 'kwidt/',         label: 'Kwidt',              letter: 'k' },
         { key: 'laserfeelings', href: 'laserfeelings/', label: 'Laser & Feelings',   letter: 'l' },
         { key: 'sport',         href: 'sport/',         label: 'Sport',              letter: 's' },
-        { key: 'zauberkloppen', href: 'zauberkloppen/', label: 'Zaubern & Kloppen',  letter: 'z' }
+        { key: 'zauberkloppen', href: 'zauberkloppen/', label: 'Zaubern & Kloppen',  letter: 'z' },
+        { key: 'zeitfresser',   href: 'zeitfresser/',   label: 'Zeitfresser',        letter: 'z' }
     ];
 
     // Aktuelle Seite an der Ordnerstruktur erkennen (funktioniert für

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Macht sichtbar, wohin die Zeit einer Woche geht – Themen und Unterpunkte, als Szenarien im Browser gespeichert.">
+    <title>Zeitfresser</title>
+    <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="../assets/css/reset.css">
+    <link rel="stylesheet" href="../assets/css/theme.css">
+    <link rel="stylesheet" href="style.css?v=1.0">
+    <!-- ?v= immer zusammen mit den Versionsnummern unten ändern: Sonst läuft die neue Seite mit alten Dateien aus dem Browser-Cache. -->
+    <!-- Klassische Skripte (keine ES-Module), damit die Seite auch per file:// läuft; Reihenfolge ist wichtig, main.js zuletzt. -->
+    <script src="js/state.js?v=1.0" defer></script>
+    <script src="js/colors.js?v=1.0" defer></script>
+    <script src="js/charts.js?v=1.0" defer></script>
+    <script src="js/editor.js?v=1.0" defer></script>
+    <script src="js/main.js?v=1.0" defer></script>
+</head>
+<body>
+<script src="../assets/js/nav.js"></script>
+
+<div class="container">
+    <header>
+        <h1>Zeitfresser</h1>
+        <p>Wohin geht deine Woche?</p>
+    </header>
+
+    <!-- Einklappbare Boxen (data-panel): nur im einspaltigen Layout, siehe initCollapsibles() in main.js -->
+    <section class="panel collapsible scenario-panel" data-panel="scenario">
+        <h2 class="panel-title panel-head-collapse">
+            <button type="button" class="panel-toggle" aria-controls="scenarioBody">
+                <span class="panel-toggle-label">Szenario</span>
+                <span class="panel-summary" id="sumScenario"></span>
+                <span class="panel-chevron" aria-hidden="true">▾</span>
+            </button>
+        </h2>
+        <div class="panel-body scenario-bar" id="scenarioBody">
+            <div class="field">
+                <label for="scenarioSelect">Szenario</label>
+                <select id="scenarioSelect"></select>
+            </div>
+            <div class="field field-grow">
+                <label for="scenarioName">Name</label>
+                <input type="text" id="scenarioName" autocomplete="off">
+            </div>
+            <div class="field field-small">
+                <label for="hoursPerDay">Stunden pro Tag</label>
+                <input type="text" id="hoursPerDay" inputmode="decimal" autocomplete="off"
+                       title="Bezugsgröße: 24 h = die ganze Woche (168 h). Z. B. 16 h, um Schlaf auszuklammern.">
+            </div>
+            <div class="scenario-actions">
+                <button type="button" class="btn btn-primary" id="btnNew">+ Neu</button>
+                <button type="button" class="btn btn-ghost" id="btnDup">Duplizieren</button>
+                <button type="button" class="btn btn-ghost btn-danger" id="btnDel">Löschen</button>
+            </div>
+        </div>
+    </section>
+
+    <div class="layout">
+        <section class="panel collapsible editor-panel" data-panel="editor">
+            <h2 class="panel-title">
+                <button type="button" class="panel-toggle" aria-controls="editorBody">
+                    <span class="panel-toggle-label">Themen</span>
+                    <span class="panel-summary" id="sumEditor"></span>
+                    <span class="panel-chevron" aria-hidden="true">▾</span>
+                </button>
+            </h2>
+            <div class="panel-body" id="editorBody">
+                <p class="panel-hint">Wert pro Woche oder pro Tag, gültig an den gewählten Wochentagen.</p>
+                <div id="tree" class="tree"></div>
+                <button type="button" class="btn btn-add" id="btnAddTop">+ Thema</button>
+            </div>
+        </section>
+
+        <aside class="chart-panel">
+            <section class="panel collapsible" data-panel="week">
+                <h2 class="panel-title">
+                    <button type="button" class="panel-toggle" aria-controls="weekBody">
+                        <span class="panel-toggle-label">Woche</span>
+                        <span class="panel-summary" id="sumWeek"></span>
+                        <span class="panel-chevron" aria-hidden="true">▾</span>
+                    </button>
+                </h2>
+                <div class="panel-body" id="weekBody">
+                    <div class="sunburst-wrap">
+                        <svg id="sunburst" viewBox="0 0 320 320" role="img"></svg>
+                    </div>
+                    <div id="legend" class="legend"></div>
+                </div>
+            </section>
+            <section class="panel collapsible" data-panel="days">
+                <h2 class="panel-title">
+                    <button type="button" class="panel-toggle" aria-controls="daysBody">
+                        <span class="panel-toggle-label">Tage</span>
+                        <span class="panel-summary" id="sumDays"></span>
+                        <span class="panel-chevron" aria-hidden="true">▾</span>
+                    </button>
+                </h2>
+                <div class="panel-body" id="daysBody">
+                    <div id="days" class="days"></div>
+                </div>
+            </section>
+        </aside>
+    </div>
+</div>
+
+<div id="tooltip" class="tooltip" hidden></div>
+</body>
+</html>

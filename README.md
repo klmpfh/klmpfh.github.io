@@ -62,6 +62,10 @@ relativ, über die eigene `src`-Angabe.
   Status (offen/fällig/überfällig/zurück), Filter und Suche. Daten liegen nur im localStorage des Browsers,
   Backup als JSON-Datei herunterladen und wieder einlesen.
 - `/zauberkloppen/` – Szenario-Generator für Fantasy-Rollenspiele.
+- `/zeitfresser/` – Zeitfresser: Wochenanalyse, wohin die Zeit geht. Themen mit Wert pro Woche oder pro Tag
+  an gewählten Wochentagen, darunter eine Ebene Unterpunkte; nicht zugeordnete Zeit wird schraffiert gezeigt,
+  Überschreitungen pulsieren rot. Verschieben per Drag & Drop oder ↑/↓, 12 Themenfarben zur Auswahl.
+  Kreisdiagramm (innen Themen, außen Unterpunkte) und Balken je Wochentag. Mehrere Szenarien, gespeichert im localStorage.
 
 ## Entwicklung
 

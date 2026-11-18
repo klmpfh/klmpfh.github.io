@@ -1,0 +1,1036 @@
+/* Zeitfresser – seitenspezifische Styles (Basis: assets/css/reset.css, theme.css) */
+
+:root {
+    --container-bg: var(--theme-surface);
+    --text-color: var(--theme-text);
+    --text-muted: var(--theme-text-muted);
+    --primary: var(--theme-accent);
+    --primary-strong: var(--theme-accent-strong);
+    --primary-light: var(--theme-accent-soft);
+    --border-color: var(--theme-border);
+    --input-bg: var(--theme-gray-100);
+    --danger: var(--theme-danger);
+    --danger-light: var(--theme-danger-soft);
+    --success: var(--theme-success);
+
+    /* 12 wählbare Farben der Themen. 1–8 in dieser Reihenfolge auf
+       Farbfehlsichtigkeit geprüft (Standard für neue Themen), 9–12 als
+       Ergänzung. Dunkle Werte unten separat abgestuft. */
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
+    --series-3: #1baf7a;
+    --series-4: #eda100;
+    --series-5: #e87ba4;
+    --series-6: #008300;
+    --series-7: #6250d6;
+    --series-8: #e34948;
+    --series-9: #0e9fbf;
+    --series-10: #9a6324;
+    --series-11: #7cad1a;
+    --series-12: #64748b;
+
+    /* Schraffur für "frei / nicht verplant" */
+    --zf-free-line: #c3c2b7;
+    --zf-free-bg: rgba(137, 135, 129, 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --series-1: #3987e5;
+        --series-2: #d95926;
+        --series-3: #199e70;
+        --series-4: #c98500;
+        --series-5: #d55181;
+        --series-6: #0ca30c;
+        --series-7: #9085e9;
+        --series-8: #e66767;
+        --series-9: #1fb3d1;
+        --series-10: #b57a3a;
+        --series-11: #8cbf2a;
+        --series-12: #8a96a8;
+        --zf-free-line: #4a4a46;
+        --zf-free-bg: rgba(137, 135, 129, 0.08);
+    }
+}
+
+:root[data-theme="dark"] {
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #0ca30c;
+    --series-7: #9085e9;
+    --series-8: #e66767;
+    --series-9: #1fb3d1;
+    --series-10: #b57a3a;
+    --series-11: #8cbf2a;
+    --series-12: #8a96a8;
+    --zf-free-line: #4a4a46;
+    --zf-free-bg: rgba(137, 135, 129, 0.08);
+}
+
+button, input, select {
+    font-family: inherit;
+}
+
+body {
+    background: var(--theme-bg);
+    color: var(--text-color);
+    font-family: var(--theme-font-sans);
+    padding: calc(var(--theme-nav-height) + 30px) 15px 60px;
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+}
+
+.container {
+    width: 100%;
+    max-width: 1180px;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+header h1 {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+}
+
+header p {
+    color: var(--text-muted);
+    font-size: 13px;
+    margin-top: 6px;
+}
+
+.panel {
+    background: var(--container-bg);
+    border: 1px solid var(--border-color);
+    border-top: 3px solid var(--primary);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 18px;
+    box-shadow: var(--theme-shadow-sm);
+}
+
+.panel-title {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+}
+
+.panel-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: -4px 0 12px;
+}
+
+/* ── Einklappbare Boxen (nur im einspaltigen Layout aktiv, siehe main.js) ── */
+
+.panel-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 0;
+    background: none;
+    border: none;
+    font: inherit;
+    color: inherit;
+    text-transform: inherit;
+    letter-spacing: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.panel-toggle:disabled {
+    cursor: default;
+}
+
+.panel-toggle:not(:disabled):hover {
+    color: var(--primary-strong);
+}
+
+.panel-summary {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.panel-summary .sum-warn {
+    color: var(--danger);
+    animation: zf-pulse 0.9s ease-in-out infinite alternate;
+}
+
+.panel-chevron {
+    flex: 0 0 auto;
+    font-size: 13px;
+    transition: transform 0.2s;
+}
+
+.panel-toggle:disabled .panel-summary,
+.panel-toggle:disabled .panel-chevron {
+    display: none;
+}
+
+.collapsible.is-collapsed > .panel-body {
+    display: none;
+}
+
+.collapsible.is-collapsed > .panel-title {
+    margin-bottom: 0;
+}
+
+.collapsible.is-collapsed .panel-chevron {
+    transform: rotate(-90deg);
+}
+
+/* Breites Layout: Szenario-Box ohne eigene Überschrift (Felder sind beschriftet) */
+@media (min-width: 1041px) {
+    .scenario-panel > .panel-title {
+        display: none;
+    }
+}
+
+/* ── Formularfelder ── */
+
+.field label {
+    display: block;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 5px;
+}
+
+.field input,
+.field select,
+.node-name,
+.node-value,
+.node-per {
+    width: 100%;
+    background: var(--input-bg);
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-color);
+    font-size: 14px;
+    padding: 8px 10px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    min-height: 40px;
+}
+
+.field input:focus,
+.field select:focus,
+.node-name:focus,
+.node-value:focus,
+.node-per:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+input.invalid {
+    border-color: var(--danger);
+    background: var(--danger-light);
+}
+
+input::placeholder {
+    color: var(--theme-gray-400);
+}
+
+/* ── Buttons ── */
+
+.btn {
+    border: 2px solid transparent;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    min-height: 40px;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.btn-primary {
+    background: var(--primary);
+    color: #fff;
+}
+
+.btn-primary:hover {
+    background: var(--primary-strong);
+}
+
+.btn-ghost {
+    background: transparent;
+    border-color: var(--border-color);
+    color: var(--text-muted);
+}
+
+.btn-ghost:hover {
+    border-color: var(--primary);
+    color: var(--primary-strong);
+}
+
+.btn-danger:hover {
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.btn-add {
+    margin-top: 12px;
+    width: 100%;
+    background: transparent;
+    border: 2px dashed var(--border-color);
+    color: var(--text-muted);
+}
+
+.btn-add:hover {
+    border-color: var(--primary);
+    color: var(--primary-strong);
+    background: var(--primary-light);
+}
+
+button:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+/* ── Szenario-Leiste ── */
+
+.scenario-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px;
+}
+
+.scenario-bar .field {
+    flex: 1 1 200px;
+    min-width: 0;
+}
+
+.scenario-bar .field-grow {
+    flex: 2 1 220px;
+}
+
+.scenario-bar .field-small {
+    flex: 0 0 120px;
+}
+
+.scenario-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* ── Layout: Eingabe links, Diagramme rechts ── */
+
+.layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 400px;
+    gap: 0 18px;
+    align-items: start;
+}
+
+.chart-panel {
+    position: sticky;
+    top: calc(var(--theme-nav-height) + 16px);
+}
+
+@media (max-width: 1040px) {
+    .layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .chart-panel {
+        position: static;
+        order: -1;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 0 18px;
+        align-items: start;
+    }
+}
+
+/* ── Baum ── */
+
+.tree-empty {
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: 12px 0;
+}
+
+.editor-panel {
+    container: editor / inline-size;
+}
+
+.node-top + .node-top {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-color);
+}
+
+.node-row {
+    display: grid;
+    grid-template-columns: 14px 18px 18px minmax(110px, 1fr) 196px auto auto;
+    align-items: center;
+    gap: 8px;
+    padding: 4px;
+    border-radius: 10px;
+}
+
+.node-row.flash {
+    animation: flash 1.2s ease-out;
+}
+
+@keyframes flash {
+    0%, 30% { background: var(--primary-light); }
+    100% { background: transparent; }
+}
+
+.node-handle {
+    width: 14px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 15px;
+    line-height: 1;
+    cursor: grab;
+    user-select: none;
+    opacity: 0.6;
+}
+
+.node-handle:hover {
+    opacity: 1;
+    color: var(--primary-strong);
+}
+
+.node-handle:active {
+    cursor: grabbing;
+}
+
+.node-toggle {
+    width: 18px;
+    height: 28px;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
+    border-radius: 6px;
+}
+
+.node-toggle:hover {
+    color: var(--primary-strong);
+}
+
+.node-toggle.is-empty {
+    visibility: hidden;
+}
+
+.node-swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    border: none;
+    background: var(--node-color);
+    cursor: pointer;
+}
+
+.node-swatch:disabled {
+    cursor: default;
+    width: 12px;
+    height: 12px;
+    margin-left: 3px;
+    border-radius: 4px;
+}
+
+.node-top > .node-row .node-name {
+    font-weight: 700;
+}
+
+.node-amount {
+    display: flex;
+    gap: 6px;
+}
+
+.node-value {
+    flex: 0 0 68px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.node-per {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 8px 6px;
+    cursor: pointer;
+}
+
+.node-days {
+    display: flex;
+    gap: 3px;
+}
+
+.day-chip {
+    width: 28px;
+    height: 32px;
+    border: 2px solid var(--border-color);
+    background: transparent;
+    color: var(--text-muted);
+    border-radius: 7px;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.day-chip:hover {
+    border-color: var(--primary);
+}
+
+.day-chip[aria-pressed="true"] {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+}
+
+.day-chip:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    border-style: dashed;
+}
+
+.node-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.node-add,
+.node-del,
+.node-move {
+    border: 2px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 8px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.node-add:hover {
+    border-color: var(--primary);
+    color: var(--primary-strong);
+}
+
+.node-del:hover {
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.node-move {
+    padding: 6px 7px;
+    font-size: 13px;
+}
+
+.node-move:hover:not(:disabled) {
+    border-color: var(--primary);
+    color: var(--primary-strong);
+}
+
+.node-move:disabled {
+    opacity: 0.25;
+    cursor: default;
+}
+
+/* Drag & Drop */
+.node {
+    position: relative;
+}
+
+.node.is-dragging {
+    opacity: 0.4;
+}
+
+.node.drop-before::before,
+.node.drop-after::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--primary);
+    z-index: 2;
+}
+
+.node.drop-before::before {
+    top: -2px;
+}
+
+.node.drop-after::after {
+    bottom: -2px;
+}
+
+.node-row.drop-into {
+    background: var(--primary-light);
+    box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+/* Farbauswahl */
+.color-picker {
+    position: absolute;
+    z-index: 10001;
+    display: grid;
+    grid-template-columns: repeat(6, 26px);
+    gap: 6px;
+    padding: 10px;
+    background: var(--container-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: var(--theme-shadow);
+}
+
+.color-option {
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    box-shadow: inset 0 0 0 2px var(--container-bg);
+}
+
+.color-option:hover {
+    transform: scale(1.1);
+}
+
+.color-option[aria-pressed="true"] {
+    border-color: var(--theme-text-strong);
+}
+
+.node-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 14px;
+    padding: 0 4px 4px 70px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.info-warn {
+    color: var(--danger);
+    font-weight: 600;
+}
+
+.info-hint {
+    color: var(--theme-warning-text);
+    font-weight: 600;
+}
+
+.info-ok {
+    color: var(--success);
+}
+
+.info-rest {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.info-hatch {
+    width: 14px;
+    height: 10px;
+    border-radius: 3px;
+    background: repeating-linear-gradient(135deg, var(--node-color) 0 2px, transparent 2px 5px);
+}
+
+.node-children {
+    margin-left: 14px;
+    padding-left: 12px;
+    border-left: 3px solid var(--node-color);
+}
+
+/* Schmalerer Eingabebereich: Wochentage in eine zweite Zeile */
+@container editor (max-width: 1000px) {
+    .node-row {
+        grid-template-columns: 14px 18px 18px minmax(0, 1fr) 196px auto;
+        grid-template-areas:
+            "handle toggle swatch name amount actions"
+            ". . . days days days";
+        row-gap: 6px;
+    }
+
+    .node-handle { grid-area: handle; }
+    .node-toggle { grid-area: toggle; }
+    .node-swatch { grid-area: swatch; }
+    .node-name { grid-area: name; }
+    .node-amount { grid-area: amount; }
+    .node-days { grid-area: days; }
+    .node-actions { grid-area: actions; }
+}
+
+/* Sehr schmal (Handy): Name / Wert / Wochentage untereinander */
+@container editor (max-width: 520px) {
+    .node-row {
+        grid-template-columns: 14px 18px 18px minmax(0, 1fr);
+        grid-template-areas:
+            "handle toggle swatch name"
+            ". . . amount"
+            ". . . days"
+            ". . . actions";
+    }
+
+    .node-children {
+        margin-left: 6px;
+        padding-left: 6px;
+    }
+
+    .day-chip {
+        flex: 1 1 0;
+        width: auto;
+        min-width: 0;
+    }
+}
+
+/* ── Kreisdiagramm ── */
+
+.sunburst-wrap {
+    max-width: 340px;
+    margin: 0 auto;
+}
+
+#sunburst {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+#sunburst .seg {
+    stroke: var(--container-bg);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+
+#sunburst .sunburst-segs:hover .seg {
+    opacity: 0.55;
+}
+
+#sunburst .sunburst-segs .seg:hover {
+    opacity: 1;
+}
+
+.hatch-free-bg {
+    fill: var(--zf-free-bg);
+}
+
+.hatch-free-line {
+    fill: var(--zf-free-line);
+}
+
+.sb-center-value {
+    font-size: 22px;
+    font-weight: 700;
+    fill: var(--theme-text-strong);
+}
+
+.sb-center-label {
+    font-size: 12px;
+    fill: var(--text-muted);
+}
+
+.sb-center-warn {
+    font-size: 11px;
+    font-weight: 700;
+    fill: var(--danger);
+}
+
+/* ── Legende ── */
+
+.legend {
+    margin-top: 14px;
+}
+
+.legend-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.legend-list li {
+    display: grid;
+    grid-template-columns: 12px minmax(0, 1fr) auto 44px;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    padding: 4px 6px;
+    border-radius: 6px;
+}
+
+.legend-list li[data-id] {
+    cursor: pointer;
+}
+
+.legend-list li[data-id]:hover {
+    background: var(--theme-surface-muted);
+}
+
+.legend-swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    flex: 0 0 auto;
+}
+
+.swatch-free {
+    background: repeating-linear-gradient(135deg, var(--zf-free-line) 0 2px, var(--zf-free-bg) 2px 5px);
+}
+
+.swatch-rest {
+    background: repeating-linear-gradient(135deg, var(--text-muted) 0 2px, transparent 2px 5px);
+}
+
+.legend-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.legend-value,
+.legend-pct {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.legend-pct {
+    color: var(--text-muted);
+}
+
+.legend-key {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 0 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.legend-warn {
+    margin-top: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--danger-light);
+    color: var(--danger);
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+/* ── Balken je Tag ── */
+
+.days {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.day-row {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) 76px;
+    align-items: center;
+    gap: 8px;
+}
+
+.day-row-week {
+    margin-bottom: 8px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.day-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+
+.day-bar {
+    display: flex;
+    gap: 2px;
+    height: 26px;
+}
+
+.day-row-week .day-bar {
+    height: 28px;
+}
+
+.day-seg {
+    flex-basis: 0;
+    flex-shrink: 1;
+    min-width: 0;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    padding-left: 6px;
+    cursor: pointer;
+    overflow: visible;
+}
+
+.day-bar:hover .day-seg {
+    opacity: 0.55;
+}
+
+.day-bar .day-seg:hover {
+    opacity: 1;
+}
+
+.seg-free {
+    background: repeating-linear-gradient(135deg, var(--zf-free-line) 0 2px, var(--zf-free-bg) 2px 7px);
+    cursor: default;
+}
+
+.seg-text {
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.day-sum {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.day-sum.is-over {
+    color: var(--danger);
+    font-weight: 700;
+}
+
+/* ── Tooltip ── */
+
+.tooltip {
+    position: fixed;
+    z-index: 10000;
+    max-width: 280px;
+    padding: 8px 10px;
+    background: var(--container-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: var(--theme-shadow);
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-color);
+    pointer-events: none;
+}
+
+.tooltip[hidden] {
+    display: none;
+}
+
+.tooltip-title {
+    font-weight: 700;
+    color: var(--theme-text-strong);
+}
+
+.tooltip-warn {
+    margin-top: 4px;
+    color: var(--danger);
+    font-weight: 600;
+}
+
+/* ── Überschreitung: rote Markierungen pulsieren dauerhaft ── */
+
+@keyframes zf-pulse {
+    from { opacity: 1; }
+    to { opacity: 0.2; }
+}
+
+@keyframes zf-pulse-svg {
+    from { fill-opacity: 1; stroke-opacity: 1; }
+    to { fill-opacity: 0.15; stroke-opacity: 0.15; }
+}
+
+@keyframes zf-pulse-outline {
+    from { outline-color: var(--danger); }
+    to { outline-color: transparent; }
+}
+
+@keyframes zf-pulse-border {
+    from { border-color: var(--danger); box-shadow: 0 0 0 3px var(--danger-light); }
+    to { border-color: var(--border-color); box-shadow: 0 0 0 3px transparent; }
+}
+
+@keyframes zf-pulse-underline {
+    from { box-shadow: inset 0 -4px 0 var(--danger); }
+    to { box-shadow: inset 0 -4px 0 transparent; }
+}
+
+@keyframes zf-pulse-bg {
+    from { background: var(--danger-light); }
+    to { background: transparent; }
+}
+
+.info-warn,
+.sb-center-warn,
+.day-sum.is-over {
+    animation: zf-pulse 0.9s ease-in-out infinite alternate;
+}
+
+#sunburst .seg-over {
+    fill: var(--danger);
+    cursor: default;
+    animation: zf-pulse-svg 0.9s ease-in-out infinite alternate;
+}
+
+#sunburst .sunburst-segs:hover .seg-over {
+    opacity: 1;
+}
+
+.sb-over-ring {
+    fill: none;
+    stroke: var(--danger);
+    stroke-width: 4;
+    animation: zf-pulse-svg 0.9s ease-in-out infinite alternate;
+}
+
+.day-bar.is-over {
+    outline: 2px solid var(--danger);
+    outline-offset: 2px;
+    border-radius: 5px;
+    animation: zf-pulse-outline 0.9s ease-in-out infinite alternate;
+}
+
+.day-seg.seg-scaled {
+    animation: zf-pulse-underline 0.9s ease-in-out infinite alternate;
+}
+
+.legend-warn {
+    animation: zf-pulse-bg 0.9s ease-in-out infinite alternate;
+}
+
+.node-value.is-over:not(:focus) {
+    border-color: var(--danger);
+    animation: zf-pulse-border 0.9s ease-in-out infinite alternate;
+}
