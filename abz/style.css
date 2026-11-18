@@ -1,0 +1,695 @@
+/* Arbeitszeit-Tracker – seitenspezifische Styles (Basis: assets/css/reset.css, theme.css) */
+
+:root {
+    --bg-color: var(--theme-bg);
+    --container-bg: var(--theme-surface);
+    --text-color: var(--theme-text);
+    --text-muted: var(--theme-text-muted);
+    --primary: var(--theme-accent);
+    --primary-light: var(--theme-accent-soft);
+    /* Akzent als Schriftfarbe ohne eigenen Hintergrund: im dunklen Design hell (--primary ist für weiße Schrift auf Akzent-Hintergrund bewusst dunkel) */
+    --primary-text: var(--theme-accent-strong);
+    --success: var(--theme-success);
+    --success-light: var(--theme-success-soft);
+    --danger: var(--theme-danger);
+    --warning: var(--theme-warning);
+    --warning-light: var(--theme-warning-soft);
+    --border-color: var(--theme-border);
+    --highlight-bg: var(--theme-surface-muted);
+}
+
+button, input {
+    font-family: inherit;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    padding: calc(var(--theme-nav-height) + 30px) 15px 30px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+}
+
+.container {
+    width: 100%;
+    max-width: 1000px;
+    background: var(--container-bg);
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    padding: 30px;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid var(--border-color);
+    padding-bottom: 20px;
+    margin-bottom: 20px;
+}
+
+h1 {
+    font-size: 24px;
+    font-weight: 700;
+}
+
+/* ── Eingabefelder ── */
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+input[type="time"],
+.duration-input {
+    padding: 10px 14px;
+    font-size: 20px;
+    font-weight: 600;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-color);
+    background-color: var(--container-bg);
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+input[type="time"] { width: 130px; }
+.duration-input   { width: 110px; }
+
+input[type="time"]:focus,
+.duration-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.duration-input.invalid,
+.timeline-range input.invalid {
+    border-color: var(--danger);
+}
+
+/* Nebeneinstellungen (Zeitstrahl-Ausschnitt, Höchstarbeitszeit/Ruhezeit): kleinere Felder als die Haupteingaben */
+.compact-inputs input[type="time"],
+.compact-inputs .duration-input {
+    width: auto;
+    padding: 5px 10px;
+    font-size: 15px;
+    font-weight: 500;
+}
+.compact-inputs .duration-input { width: 80px; }
+
+/* ── Einklappbare Einstellungen (Zeiten, Pausen) ── */
+.settings-panel {
+    background: var(--highlight-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.settings-panel > summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    border-radius: 8px;
+}
+.settings-panel > summary::-webkit-details-marker { display: none; }
+
+/* Pfeil: zeigt nach rechts (zu) bzw. nach unten (offen) */
+.settings-panel > summary::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    margin: 0 2px;
+    border-right: 2px solid var(--text-muted);
+    border-bottom: 2px solid var(--text-muted);
+    transform: rotate(-45deg);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+}
+.settings-panel[open] > summary::before { transform: rotate(45deg); }
+.settings-panel > summary:hover::before { border-color: var(--primary); }
+.settings-panel > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+
+.settings-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Kurzfassung der Einstellungen, nur im eingeklappten Zustand */
+.settings-summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    font-weight: 500;
+}
+.settings-panel[open] .settings-summary { display: none; }
+.settings-summary-warning { color: var(--warning); font-weight: 600; }
+
+/* Arbeitszeit-Eingaben */
+.work-inputs {
+    display: flex;
+    align-items: stretch;
+    gap: 18px;
+    padding: 4px 16px 16px;
+    flex-wrap: wrap;
+}
+
+.input-block {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    justify-content: flex-start;
+}
+
+.input-block-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.work-inputs-divider {
+    width: 1px;
+    background: var(--border-color);
+    align-self: stretch;
+    margin: 2px 0;
+}
+
+/* Erzwingt den Umbruch in die zweite Eingabezeile, als waagerechte Trennlinie */
+.work-inputs-break {
+    flex-basis: 100%;
+    height: 1px;
+    background: var(--border-color);
+}
+
+.linked-fields {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.link-indicator {
+    font-size: 20px;
+    color: var(--text-muted);
+    padding-bottom: 8px;
+    line-height: 1;
+    user-select: none;
+}
+
+.work-inputs-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* Mehrere Arbeitszeiten (Tag ⇄ Woche je Zeile) */
+.work-time-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Spaltenbeschriftung nur in der ersten Zeile sichtbar (Inputs haben zusätzlich aria-label).
+   Unsichtbar statt ausgeblendet, damit die Spalten – und damit ☆/× – in allen Zeilen gleich breit sind;
+   Höhe 0 und negativer Rand heben Beschriftung und Flex-Gap in der Höhe auf. */
+.work-time-row + .work-time-row label {
+    visibility: hidden;
+    height: 0;
+    margin-bottom: -5px;
+}
+
+.work-time-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 20px;
+    line-height: 1;
+    padding: 0 2px 10px;
+    cursor: pointer;
+}
+.work-time-btn:hover { color: var(--primary-text); }
+.work-time-relevant-btn.active { color: var(--primary-text); }
+.work-time-delete-btn:hover { color: var(--danger); }
+
+/* Reihenfolge ändern: ▲/▼ übereinander, mittig zum Eingabefeld */
+.work-time-move {
+    display: flex;
+    flex-direction: column;
+    align-self: flex-end;
+    margin-bottom: 7px;
+}
+.work-time-move .work-time-btn {
+    font-size: 11px;
+    padding: 3px 4px;
+}
+/* Unsichtbar statt ausgeblendet, damit ☆/× in allen Zeilen auf gleicher Höhe bleiben */
+.work-time-row:first-child .work-time-up-btn,
+.work-time-row:last-child .work-time-down-btn { visibility: hidden; }
+
+/* Bei nur einer Arbeitszeit gibt es nichts zu sortieren, zu markieren oder zu löschen */
+.work-time-row:only-child .work-time-btn,
+.work-time-row:only-child .work-time-move { display: none; }
+
+.work-time-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* ── Pausen-Bereich ── */
+.pause-section {
+    padding: 4px 16px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.pause-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* ── Modus-Toggle (manuell / automatische Pflichtpausen) ── */
+.mode-toggle {
+    position: relative;
+    display: inline-block;
+    width: 38px;
+    height: 21px;
+    flex-shrink: 0;
+}
+
+.mode-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.mode-toggle-slider {
+    position: absolute;
+    inset: 0;
+    cursor: pointer;
+    background-color: var(--border-color);
+    transition: 0.2s;
+    border-radius: 21px;
+}
+
+.mode-toggle-slider::before {
+    position: absolute;
+    content: "";
+    height: 15px;
+    width: 15px;
+    left: 3px;
+    bottom: 3px;
+    background-color: #fff;
+    transition: 0.2s;
+    border-radius: 50%;
+}
+
+.mode-toggle input:checked + .mode-toggle-slider { background-color: var(--primary); }
+.mode-toggle input:checked + .mode-toggle-slider::before { transform: translateX(17px); }
+.mode-toggle input:focus-visible + .mode-toggle-slider { box-shadow: 0 0 0 3px var(--primary-light); }
+
+.mode-toggle-label {
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--text-muted);
+    transition: color 0.2s;
+}
+
+.mode-toggle-label.active {
+    color: var(--primary-text);
+}
+
+.auto-pause-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.btn-pause-start,
+.btn-pause-stop,
+.btn-add-pause,
+.btn-confirm,
+.btn-cancel {
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-pause-start:disabled,
+.btn-add-pause:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.btn-pause-start,
+.btn-pause-stop,
+.btn-add-pause {
+    padding: 7px 14px;
+}
+
+.btn-pause-start,
+.btn-pause-stop {
+    border: none;
+    color: #fff;
+    transition: opacity 0.2s;
+}
+.btn-pause-start:hover,
+.btn-pause-stop:hover { opacity: 0.85; }
+
+.btn-pause-start { background-color: var(--warning); }
+.btn-pause-stop  { background-color: var(--success); }
+
+.btn-add-pause {
+    background-color: var(--container-bg);
+    color: var(--primary-text);
+    border: 1px solid var(--primary-text);
+    transition: all 0.2s;
+}
+.btn-add-pause:hover { background-color: var(--primary); color: #fff; }
+
+.running-pause-info {
+    font-size: 13px;
+    color: var(--success);
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.running-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--success);
+    border-radius: 50%;
+    flex-shrink: 0;
+    animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.25; }
+}
+
+.add-pause-form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 10px 12px;
+    background: var(--container-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+}
+
+.add-pause-form .form-label {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.add-pause-form input[type="time"] {
+    width: auto;
+    padding: 5px 10px;
+    font-size: 15px;
+    font-weight: 500;
+}
+
+.btn-confirm,
+.btn-cancel {
+    padding: 6px 14px;
+}
+
+.btn-confirm {
+    background-color: var(--success);
+    color: #fff;
+    border: none;
+}
+
+.btn-cancel {
+    background-color: var(--container-bg);
+    color: var(--text-muted);
+    border: 1px solid var(--border-color);
+    font-weight: 500;
+}
+
+.pause-items-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pause-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.pause-done    { background: var(--border-color); color: var(--text-muted); }
+.pause-running { background: var(--success-light); color: var(--success); }
+.pause-future  { background: var(--primary-light); color: var(--primary-text); }
+
+.pause-edit-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1;
+    padding: 0 2px;
+    cursor: pointer;
+}
+.pause-edit-btn:hover { color: var(--primary-text); }
+
+.pause-delete-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 2px;
+    cursor: pointer;
+}
+.pause-delete-btn:hover { color: var(--danger); }
+
+/* ── Warnungen ── */
+.warning-banner {
+    background: var(--warning-light);
+    border: 1px solid var(--warning);
+    border-left: 4px solid var(--warning);
+    border-radius: 6px;
+    padding: 9px 14px;
+    font-size: 13px;
+    color: var(--theme-warning-text);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.btn-add-missing-pause {
+    background-color: var(--warning);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.2s;
+}
+.btn-add-missing-pause:hover { opacity: 0.85; }
+
+/* Kleiner Hinweis unter dem Zeitstrahl, wenn Start/Ziel/Jetzt außerhalb des Ausschnitts liegen */
+.timeline-range-warning {
+    margin-top: 8px;
+    padding: 5px 10px;
+    font-size: 12px;
+}
+
+/* ── Timeline ── */
+.timeline-container {
+    position: relative;
+    margin-bottom: 24px;
+    background: var(--container-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px;
+    overflow: visible;
+}
+
+.timeline-svg {
+    width: 100%;
+    height: 120px;
+    display: block;
+    overflow: visible;
+}
+
+/* ── Stat-Cards ── */
+.stats-grid {
+    --stat-cols: 4;
+    display: grid;
+    grid-template-columns: repeat(var(--stat-cols), 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+    container-type: inline-size; /* für die Schriftgröße der Werte (cqi) */
+}
+
+/* Gemeinsame Werte (unabhängig von der Arbeitszeit) über den Zeilen je Arbeitszeit */
+.stats-shared {
+    --stat-cols: 4;
+    margin-bottom: 16px;
+}
+
+/* Je Arbeitszeit: Arbeitszeit, Zielzeit, Countdown, Rest / Überziehung, Fortschritt */
+.stats-targets { --stat-cols: 5; }
+
+@media (max-width: 640px) {
+    .stats-grid { --stat-cols: 2; }
+    /* Fünf Kacheln je Zeile: die Arbeitszeit-Kachel über die volle Breite, darunter zwei Paare */
+    .stats-targets .stat-card[data-stat="worktime"] { grid-column: 1 / -1; }
+}
+
+/* Zeilen-Wrapper je Arbeitszeit; die Kacheln bleiben direkte Grid-Elemente */
+.stat-row { display: contents; }
+
+/* Kachel, die nicht in den Seitentitel übernommen werden kann: flach, ohne Akzentkante */
+.stat-card {
+    background: var(--container-bg);
+    border: 2px solid var(--border-color);
+    border-top: 3px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s, transform 0.15s;
+    /* Subgrid: Label-, Wert- und Balkenzeile über alle Kacheln einer Reihe gleich hoch,
+       auch wenn ein Label umbricht */
+    display: grid;
+    grid-row: span 3;
+    grid-template-rows: subgrid;
+    row-gap: 0;
+}
+
+/* Kachel, deren Wert per Klick im Seitentitel angezeigt wird:
+   getönt, Akzentkante oben, Schatten und Hover-Effekt */
+.stat-card.selectable {
+    background: var(--highlight-bg);
+    border-top-color: var(--primary);
+    box-shadow: var(--theme-shadow-sm);
+    cursor: pointer;
+}
+
+.stat-card.selectable:hover {
+    box-shadow: var(--theme-shadow);
+    transform: translateY(-1px);
+}
+
+.stat-card.selectable:not(.selected):hover {
+    border-color: var(--theme-accent-border);
+    border-top-color: var(--primary);
+}
+
+.stat-card.selected {
+    border-color: var(--primary);
+    background: var(--primary-light);
+}
+
+/* Arbeitszeit-Kachel der relevanten Zeile */
+.stat-card.relevant {
+    border-color: var(--primary);
+}
+
+.stat-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+    align-self: center;
+}
+
+.stat-value {
+    /* Nie umbrechen: Schrift schrumpft so weit, dass 7 Monospace-Zeichen („10:23 h“, „204.8 %“)
+       in eine Kachel passen. Kachel-Innenbreite = Spaltenbreite − 2×16px Padding − 2×2px Rand. */
+    font-size: min(28px, calc(((100cqi - (var(--stat-cols) - 1) * 16px) / var(--stat-cols) - 36px) / 4.4));
+    white-space: nowrap;
+    font-weight: 700;
+    font-family: monospace;
+    color: var(--text-color);
+    line-height: 1.1;
+}
+
+.stat-value.pos { color: var(--danger); }
+.stat-value.neg { color: var(--text-muted); }
+.stat-value.muted { color: var(--text-muted); }
+
+.stat-progress-bar {
+    margin-top: 8px;
+    background: var(--border-color);
+    border-radius: 20px;
+    height: 6px;
+    overflow: hidden;
+}
+
+/* Kurze Begründung unter dem Wert (z. B. welche Regel greift) */
+.stat-hint {
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+/* Wochenarbeitszeit in der Arbeitszeit-Kachel: genau so hoch wie der Fortschrittsbalken
+   (8px Abstand + 6px Balken), damit die Kachelzeile nicht höher wird */
+.stat-hint-compact {
+    margin-top: 3px;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.stat-progress-fill {
+    background: var(--success);
+    height: 100%;
+    width: 0%;
+    transition: width 0.3s ease;
+    border-radius: 20px;
+}
+
+.footer-info {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: right;
+}
+
+.label-bg { fill: var(--container-bg); opacity: 0.85; }
