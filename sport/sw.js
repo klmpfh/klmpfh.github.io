@@ -3,13 +3,21 @@
 /* =============================================================================
  * Service Worker - Offline-Unterstützung für /sport/
  * -----------------------------------------------------------------------------
- * WICHTIG: CACHE_VERSION bei jeder inhaltlichen Änderung an index.html oder
- * den unten gelisteten Assets erhöhen. Nur so laden wiederkehrende Nutzer die
- * neue Fassung statt dauerhaft die alte gecachte Version zu sehen - install()
- * legt unter dem neuen Namen einen frischen Cache an, activate() räumt danach
- * alle älteren Versionen weg.
+ * WICHTIG: Bei jeder inhaltlichen Änderung an index.html, style.css, js/*.js
+ * oder den unten gelisteten Assets ASSET_VERSION erhöhen - und dieselbe Zahl
+ * in index.html bei allen "?v=..."-Verweisen (style.css + js/*.js) eintragen.
+ *
+ * Warum beides: CSS/JS kommen unten "cache-first" aus dem Cache, die Seite
+ * selbst aber "network-first". Ohne neue ?v=-Nummer bekäme eine frisch
+ * geladene index.html sonst noch einmal die alten JS-Dateien aus dem Cache
+ * (neue Seite + altes Skript = kaputt). Mit neuer Nummer sind es neue URLs,
+ * die nicht im Cache liegen und daher frisch aus dem Netz geholt werden.
+ * install() legt unter dem neuen Namen einen frischen Cache an, activate()
+ * räumt danach alle älteren Versionen weg.
  * ========================================================================== */
-var CACHE_VERSION = 'sport-v23';
+var ASSET_VERSION = '25';
+var CACHE_VERSION = 'sport-v' + ASSET_VERSION;
+var V = '?v=' + ASSET_VERSION;
 
 // Alle Pfade relativ zu diesem Skript (liegt in /sport/), damit sie sowohl auf
 // GitHub Pages als auch bei einem lokalen Server unter jedem Basis-Pfad
@@ -18,6 +26,16 @@ var APP_SHELL = [
     './',
     './index.html',
     './manifest.json',
+    './style.css' + V,
+    './js/exercises.js' + V,
+    './js/state.js' + V,
+    './js/helpers.js' + V,
+    './js/storage.js' + V,
+    './js/workout.js' + V,
+    './js/library.js' + V,
+    './js/audio.js' + V,
+    './js/sport-mode.js' + V,
+    './js/main.js' + V,
     '../assets/css/reset.css',
     '../assets/css/theme.css',
     '../assets/js/nav.js',

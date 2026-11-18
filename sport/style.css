@@ -1,0 +1,1243 @@
+/* Sport – Trainingsgenerator: Seiten-Styles (ergänzt ../assets/css/reset.css + theme.css). */
+
+body {
+    min-height: 100vh;
+    padding: calc(var(--theme-nav-height) + 24px) 20px 60px;
+}
+
+header {
+    text-align: center;
+    max-width: 760px;
+    margin: 0 auto 28px;
+}
+
+header h1 {
+    font-size: 1.8rem;
+    letter-spacing: 0.5px;
+}
+
+header .subtitle {
+    margin-top: 6px;
+    color: var(--theme-text-muted);
+    font-size: 0.9rem;
+}
+
+.container {
+    max-width: 760px;
+    width: 100%;
+    margin: 0 auto;
+}
+
+/* --- Steuerung --- */
+.controls {
+    background: var(--theme-surface);
+    border: 1px solid var(--theme-border);
+    border-top: 3px solid var(--theme-accent);
+    border-radius: var(--theme-radius-lg);
+    padding: 22px 24px;
+    box-shadow: var(--theme-shadow);
+    margin-bottom: 28px;
+}
+
+/* Rahmen liegt auf dem ganzen <details>, damit er im ausgeklappten
+   Zustand auch die Einstellungen selbst umschließt. */
+.settings-panel {
+    margin-bottom: 18px;
+    border: 1px solid var(--theme-border);
+    border-radius: var(--theme-radius);
+}
+
+.settings-panel > summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--theme-text-muted);
+    background: var(--theme-surface-muted);
+    border-radius: calc(var(--theme-radius) - 1px);
+    padding: 10px 16px;
+}
+
+.settings-panel > summary::-webkit-details-marker {
+    display: none;
+}
+
+.settings-panel-title {
+    flex: 0 0 auto;
+}
+
+/* Einzeilige Zusammenfassung der Eingaben, nur im eingeklappten
+   Zustand sichtbar; zu lange Zeilen werden mit "…" abgeschnitten. */
+.settings-panel-summary {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 600;
+    color: var(--theme-text);
+}
+
+.settings-panel-summary svg {
+    width: 14px;
+    height: 14px;
+    vertical-align: -2px;
+}
+
+.settings-panel[open] .settings-panel-summary {
+    visibility: hidden;
+}
+
+.settings-panel > summary::after {
+    content: "▾";
+    flex: 0 0 auto;
+    margin-left: auto;
+    font-size: 1rem;
+    transition: transform 0.15s;
+}
+
+.settings-panel:not([open]) > summary::after {
+    transform: rotate(-90deg);
+}
+
+.settings-panel > summary:hover {
+    color: var(--theme-accent-strong);
+}
+
+.settings-panel:has(> summary:hover) {
+    border-color: var(--theme-accent);
+}
+
+.settings-panel[open] > summary {
+    border-bottom: 1px solid var(--theme-border);
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.settings-panel-body {
+    padding: 18px 16px 2px;
+}
+
+.settings-panel-body > .advanced-settings:last-child {
+    margin-bottom: 0;
+}
+
+.muscle-fieldset {
+    border: 1px solid var(--theme-border);
+    border-radius: var(--theme-radius);
+    padding: 14px 16px 6px;
+    margin: 0 0 18px;
+}
+
+.muscle-fieldset legend {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--theme-text-muted);
+    padding: 0 6px;
+}
+
+/* Zwei Zeilen: oben Gruppen an/aus, darunter Schwerpunkte. */
+.group-row-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--theme-text-muted);
+    text-align: center;
+    margin: 0 0 6px;
+}
+
+.group-chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.group-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--theme-border);
+    background: var(--theme-surface-muted);
+    color: var(--theme-text);
+    transition: border-color 0.15s, background-color 0.15s, color 0.15s;
+}
+
+.group-chip-state {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.group-chip[aria-pressed="false"] {
+    color: var(--theme-text-muted);
+    border-style: dashed;
+    background: none;
+}
+
+.group-chip[aria-pressed="false"] .group-chip-state {
+    display: none;
+}
+
+.toggle-chip[aria-pressed="true"] {
+    border-color: var(--theme-accent);
+}
+
+.focus-chip[aria-pressed="true"] {
+    border-color: var(--theme-accent);
+    background: var(--theme-accent);
+    color: #fff;
+}
+
+/* Schwerpunkt nur für eingeschaltete Gruppen möglich. */
+.focus-chip:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.controls .group-chips-hint {
+    text-align: center;
+    margin-bottom: 12px;
+}
+
+.control-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.control-row label,
+.control-row .control-label {
+    flex: 0 0 148px;
+    font-weight: 600;
+    font-size: 0.88rem;
+}
+
+.control-row input[type="range"] {
+    flex: 0 1 220px;
+    accent-color: var(--theme-accent);
+}
+
+/* Gleich breit wie die Regler, damit die Zeilen untereinander passen. */
+.intensity-steps {
+    flex: 0 1 220px;
+    display: flex;
+    gap: 8px;
+}
+
+.intensity-steps .reroll-btn {
+    flex: 1 1 0;
+}
+
+.control-sublabel {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--theme-accent-strong);
+    white-space: nowrap;
+}
+
+.control-value {
+    flex: 0 0 64px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    color: var(--theme-accent-strong);
+    font-size: 0.85rem;
+}
+
+/* Umschließt Label/Regler/Wert der Lautstärke-Zeile, damit der
+   Stumm-Button (der bei keiner anderen Zeile existiert) nicht in die
+   Zentrierung mit eingerechnet wird - so starten Intensität und
+   Lautstärke auf derselben Höhe. */
+.control-row-core {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    position: relative;
+    /* 148px Label + 14px Gap + 220px Regler + 14px Gap + 64px Wert -
+       fest statt automatisch berechnet, weil Browser die Breite eines
+       verschachtelten Flex-Containers sonst anhand der intrinsischen
+       Breite von <input type="range"> (~129px) statt dessen
+       flex-basis (220px) schätzen und die Zeile dadurch zu schmal
+       ausfällt. */
+    width: 460px;
+}
+
+#muteBtn {
+    position: absolute;
+    left: 100%;
+    top: 50%;
+    margin-left: 14px;
+    transform: translateY(-50%);
+}
+
+/* Rechts neben der 460px-Zeile braucht der Button weitere 48px, bei
+   zentrierter Zeile also 556px Inhaltsbreite (Viewport abzüglich
+   ca. 90px Seiten- und Kachelabstand). Darunter ragte er über die
+   Kachel hinaus - dann als normales Element in die Zeile nehmen. */
+@media (max-width: 680px) {
+    .control-row-core {
+        width: 100%;
+        max-width: 508px;
+    }
+
+    #muteBtn {
+        position: static;
+        margin-left: 0;
+        transform: none;
+    }
+}
+
+.checkbox-row {
+    gap: 22px;
+    margin-bottom: 8px;
+}
+
+.checkbox-row .checkbox-label {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.checkbox-row input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--theme-accent);
+}
+
+.controls .hint {
+    font-size: 0.75rem;
+    color: var(--theme-text-muted);
+    margin-bottom: 16px;
+}
+
+.controls .intensity-hint {
+    margin-top: -6px;
+    text-align: center;
+    font-weight: 600;
+    color: var(--theme-accent-strong);
+}
+
+.advanced-settings {
+    margin-bottom: 18px;
+}
+
+.advanced-settings-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--theme-accent-strong);
+    padding: 6px 0;
+}
+
+.chip-group {
+    border: none;
+    padding: 10px 0 0;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+}
+
+.chip-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--theme-surface-muted);
+    border: 1px solid var(--theme-border);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.chip-checkbox input {
+    accent-color: var(--theme-accent);
+}
+
+.duration-highlight {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: var(--theme-accent-soft);
+    border: 2px solid var(--theme-accent);
+    border-radius: var(--theme-radius);
+    padding: 14px;
+    margin-bottom: 18px;
+}
+
+.duration-main {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 8px;
+}
+
+.duration-number {
+    font-size: 2.1rem;
+    font-weight: 800;
+    color: var(--theme-accent-strong);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.duration-label {
+    font-size: 0.8rem;
+    color: var(--theme-text-muted);
+    font-weight: 600;
+}
+
+.duration-meta {
+    font-size: 0.82rem;
+    color: var(--theme-text-muted);
+    text-align: center;
+    line-height: 1.4;
+}
+
+.duration-meta strong {
+    color: var(--theme-text-strong);
+}
+
+.controls-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.btn {
+    display: block;
+    width: 100%;
+    background-color: var(--theme-accent);
+    color: #fff;
+    font-size: 1rem;
+    font-weight: bold;
+    border: none;
+    padding: 14px 0;
+    border-radius: var(--theme-radius-sm);
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: background-color 0.15s;
+}
+
+.btn:hover {
+    background-color: var(--theme-accent-strong);
+}
+
+.btn:active {
+    background-color: var(--theme-red-700);
+}
+
+.btn-outline {
+    background: none;
+    color: var(--theme-accent-strong);
+    border: 2px solid var(--theme-accent);
+}
+
+.btn-outline:hover {
+    background: var(--theme-accent-soft);
+}
+
+/* --- Icon-Buttons (Mute, Schließen) --- */
+.icon-btn {
+    flex: 0 0 auto;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid var(--theme-border);
+    background: var(--theme-surface-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--theme-text-muted);
+    padding: 0;
+}
+
+.icon-btn:hover {
+    border-color: var(--theme-accent);
+    color: var(--theme-accent);
+}
+
+.icon-btn.danger-hover:hover {
+    border-color: var(--theme-danger);
+    color: var(--theme-danger);
+}
+
+.icon-btn[aria-pressed="true"] {
+    color: var(--theme-danger);
+    border-color: var(--theme-danger);
+}
+
+/* --- Ausgabe --- */
+.output[hidden] {
+    display: none;
+}
+
+.phase {
+    margin-bottom: 26px;
+}
+
+.phase[hidden] {
+    display: none;
+}
+
+.phase h2 {
+    font-size: 1.05rem;
+    color: var(--theme-text-strong);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.phase-time {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: var(--theme-text-muted);
+}
+
+.equipment-summary {
+    font-size: 0.85rem;
+    color: var(--theme-text-muted);
+    background: var(--theme-surface-muted);
+    border: 1px solid var(--theme-border);
+    border-radius: var(--theme-radius);
+    padding: 10px 16px;
+    margin-bottom: 22px;
+}
+
+.equipment-summary strong {
+    color: var(--theme-text-strong);
+}
+
+.warmup ul {
+    list-style: none;
+    background: var(--theme-surface-muted);
+    border: 1px solid var(--theme-border);
+    border-radius: var(--theme-radius);
+    padding: 12px 16px;
+}
+
+.warmup li {
+    font-size: 0.88rem;
+    padding: 8px 0;
+}
+
+.warmup li + li {
+    border-top: 1px solid var(--theme-border);
+}
+
+.warmup-item-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.warmup-item-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    flex: 0 0 auto;
+}
+
+.warmup-desc {
+    font-size: 0.78rem;
+    color: var(--theme-text-muted);
+    margin-top: 2px;
+}
+
+.cooldown p {
+    font-size: 0.88rem;
+    line-height: 1.6;
+    background: var(--theme-surface-muted);
+    border: 1px solid var(--theme-border);
+    border-radius: var(--theme-radius);
+    padding: 14px 16px;
+}
+
+/* --- Übungskarten --- */
+.exercise-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.exercise-card {
+    background: var(--theme-surface);
+    border: 1px solid var(--theme-border);
+    border-left: 5px solid var(--cat-color, var(--theme-accent));
+    border-radius: var(--theme-radius);
+    padding: 16px 18px;
+    box-shadow: var(--theme-shadow-sm);
+}
+
+/* Supersatz: beide Karten lückenlos als ein Block, nur durch eine
+   gestrichelte Linie getrennt. */
+.exercise-card.superset-first {
+    border-bottom: none;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.exercise-card.superset-second {
+    margin-top: -14px; /* hebt den gap der .exercise-list auf */
+    border-top: 1px dashed var(--theme-border);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
+.exercise-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.exercise-name {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--theme-text-strong);
+}
+
+.badge-category {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 999px;
+    color: #fff;
+    background: var(--cat-color, var(--theme-accent));
+    white-space: nowrap;
+}
+
+.exercise-card-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 10px 0;
+}
+
+.stat-chip {
+    background: var(--theme-surface-muted);
+    border: 1px solid var(--theme-border);
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--theme-text-strong);
+    white-space: nowrap;
+}
+
+.stat-chip-equipment {
+    color: var(--theme-warning);
+    border-color: var(--theme-warning);
+    background: var(--theme-warning-soft);
+}
+
+/* Langer Text ("Supersatz mit … – im Wechsel …") darf umbrechen. */
+.stat-chip-superset {
+    border-color: var(--theme-accent);
+    white-space: normal;
+}
+
+.exercise-card-body {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 6px 16px;
+    align-items: start;
+    margin-top: 12px;
+}
+
+.exercise-desc {
+    font-size: 0.87rem;
+    line-height: 1.5;
+    margin: 0;
+}
+
+.exercise-muscles {
+    font-size: 0.78rem;
+    color: var(--theme-text-muted);
+    margin: 0;
+}
+
+@media (max-width: 560px) {
+    .exercise-card-body {
+        grid-template-columns: 1fr;
+    }
+}
+
+.reroll-btn {
+    background: none;
+    border: 1px solid var(--theme-border);
+    border-radius: var(--theme-radius-sm);
+    padding: 7px 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--theme-text-muted);
+    transition: border-color 0.15s, color 0.15s;
+}
+
+.reroll-btn:hover {
+    border-color: var(--cat-color, var(--theme-accent));
+    color: var(--cat-color, var(--theme-accent));
+}
+
+.reroll-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+    border-color: var(--theme-border);
+    color: var(--theme-text-muted);
+}
+
+.exercise-card-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+
+.lock-btn:hover {
+    border-color: var(--theme-danger);
+    color: var(--theme-danger);
+}
+
+@media (max-width: 480px) {
+    .control-row {
+        flex-wrap: wrap;
+    }
+
+    .control-row label,
+    .control-row .control-label {
+        flex: 1 0 100%;
+    }
+
+    .control-row input[type="range"],
+    .intensity-steps {
+        flex: 1 1 auto;
+    }
+
+    .control-row-core {
+        flex-wrap: wrap;
+    }
+}
+
+/* --- Sport-Modus (Vollbild-Übungstimer) --- */
+.sport-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: var(--theme-surface);
+    display: flex;
+    flex-direction: column;
+}
+
+.sport-overlay[hidden] {
+    display: none;
+}
+
+.sport-topbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    row-gap: 14px;
+    padding: 16px 18px;
+    flex: 0 0 auto;
+}
+
+/* Fortschrittsleiste in eigener, voller Zeile unter Zähler/Uhr/Buttons,
+   damit auch bei vielen Sätzen genug Platz für die Marker bleibt. */
+.sport-progress-track {
+    order: 1;
+    flex: 1 0 100%;
+    position: relative;
+    height: 8px;
+    background: var(--theme-border);
+    border-radius: 999px;
+}
+
+.sport-progress-fill {
+    height: 100%;
+    background: var(--theme-accent);
+    border-radius: 999px;
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+/* Kleine Kerbe: Übergang zwischen Satz und Pause innerhalb einer Übung. */
+.sport-progress-marker {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--theme-surface);
+}
+
+/* Großer Strich: Übergang zur nächsten Übung. */
+.sport-progress-marker.is-exercise {
+    top: -4px;
+    bottom: -4px;
+    width: 2px;
+    margin-left: -1px;
+    border-radius: 1px;
+    background: var(--theme-text-muted);
+}
+
+#sportMuteBtn {
+    margin-left: auto;
+}
+
+.sport-step-counter {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--theme-text-muted);
+    white-space: nowrap;
+}
+
+.sport-elapsed-timer {
+    font-size: 0.75rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--theme-accent-strong);
+    white-space: nowrap;
+}
+
+.sport-elapsed-timer[hidden] {
+    display: none;
+}
+
+.sport-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 20px 24px 40px;
+    overflow-y: auto;
+}
+
+/* Vertikal zentrieren per Auto-Margins statt justify-content: center -
+   sonst wird bei langen Seiten (z. B. Pause mit "Als Nächstes") der
+   obere Teil abgeschnitten und ist nicht mehr erreichbar. */
+.sport-body > :first-child {
+    margin-top: auto;
+}
+
+.sport-body > :last-child {
+    margin-bottom: auto;
+}
+
+.sport-kicker {
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+}
+
+.sport-exercise-name {
+    font-size: clamp(1.5rem, 5vw, 2.2rem);
+    font-weight: 800;
+    color: var(--theme-text-strong);
+    max-width: 600px;
+}
+
+.sport-set-info {
+    margin-top: 10px;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--theme-accent-strong);
+}
+
+.sport-sub-info {
+    font-size: 0.8rem;
+    color: var(--theme-text-muted);
+    margin-top: 2px;
+}
+
+.sport-timer {
+    font-variant-numeric: tabular-nums;
+    font-size: clamp(3.5rem, 18vw, 6rem);
+    font-weight: 800;
+    color: var(--theme-accent-strong);
+    margin: 22px 0;
+    line-height: 1;
+}
+
+.sport-timer.is-urgent {
+    color: var(--theme-danger);
+}
+
+.sport-reps-target {
+    font-size: clamp(2rem, 9vw, 3rem);
+    font-weight: 800;
+    color: var(--theme-accent-strong);
+    margin: 22px 0;
+}
+
+.sport-desc {
+    font-size: 0.95rem;
+    line-height: 1.6;
+    max-width: 480px;
+    margin-bottom: 10px;
+}
+
+.sport-muscles {
+    font-size: 0.8rem;
+    color: var(--theme-text-muted);
+    margin-bottom: 18px;
+}
+
+.sport-muscles-list {
+    font-size: 0.85rem;
+    color: var(--theme-text-muted);
+    text-align: left;
+    max-width: 320px;
+    margin: 0 auto 18px;
+    padding-left: 20px;
+}
+
+.sport-muscles-list li {
+    margin-bottom: 3px;
+}
+
+.sport-hint {
+    font-size: 0.75rem;
+    color: var(--theme-text-muted);
+    margin-top: 14px;
+}
+
+/* Anleitung (Beschreibung, Muskeln, Gerät) unter den Buttons. */
+.sport-details {
+    max-width: 480px;
+    margin-top: 24px;
+}
+
+.sport-details > :last-child {
+    margin-bottom: 0;
+}
+
+.sport-adjust,
+.sport-next {
+    width: 100%;
+    max-width: 480px;
+    margin-top: 26px;
+    padding-top: 18px;
+    border-top: 1px solid var(--theme-border);
+}
+
+.sport-section-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--theme-text-muted);
+    margin-bottom: 10px;
+}
+
+.sport-next-name {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--theme-text-strong);
+}
+
+.sport-next .sport-set-info {
+    margin-top: 4px;
+}
+
+.sport-next .sport-details {
+    margin-top: 14px;
+}
+
+.sport-adjust-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-align: left;
+    margin-bottom: 8px;
+}
+
+.sport-adjust-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--theme-text-strong);
+}
+
+.sport-adjust-name span {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: var(--theme-text-muted);
+}
+
+.sport-adjust .sport-hint {
+    margin-top: 6px;
+}
+
+.sport-controls {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 6px;
+}
+
+.sport-btn {
+    border: none;
+    border-radius: var(--theme-radius-sm);
+    padding: 16px 28px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.sport-btn-primary {
+    background: var(--theme-accent);
+    color: #fff;
+}
+
+.sport-btn-primary:hover {
+    background: var(--theme-accent-strong);
+}
+
+.sport-btn-secondary {
+    background: none;
+    border: 1px solid var(--theme-border);
+    color: var(--theme-text-muted);
+}
+
+.sport-btn-secondary:hover {
+    border-color: var(--theme-accent);
+    color: var(--theme-accent);
+}
+
+@media (max-width: 480px) {
+    .sport-btn {
+        padding: 14px 20px;
+        font-size: 0.9rem;
+    }
+}
+
+/* --- Rückfrage-Dialog (z. B. Sport-Modus vorzeitig beenden) --- */
+.confirm-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10001;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.confirm-overlay[hidden] {
+    display: none;
+}
+
+.confirm-box {
+    background: var(--theme-surface);
+    border-radius: var(--theme-radius-lg);
+    box-shadow: var(--theme-shadow);
+    padding: 26px;
+    max-width: 320px;
+    width: 100%;
+    text-align: center;
+}
+
+.confirm-text {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--theme-text-strong);
+    margin-bottom: 18px;
+}
+
+.confirm-detail {
+    font-size: 0.85rem;
+    color: var(--theme-text-muted);
+    margin: -8px 0 18px;
+}
+
+/* --- Verwaltung gesperrter Übungen --- */
+.blocked-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: var(--theme-surface);
+    display: flex;
+    flex-direction: column;
+}
+
+.blocked-overlay[hidden] {
+    display: none;
+}
+
+.blocked-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--theme-border);
+    flex: 0 0 auto;
+}
+
+.blocked-title {
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.blocked-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    max-width: 760px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.blocked-empty {
+    font-size: 0.9rem;
+    color: var(--theme-text-muted);
+    text-align: center;
+    padding: 40px 0;
+}
+
+.blocked-entry {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--theme-border);
+}
+
+.blocked-entry:last-child {
+    border-bottom: none;
+}
+
+.blocked-entry-name {
+    font-weight: 700;
+    font-size: 0.92rem;
+}
+
+/* --- Übersicht aller Übungen mit gemerkten Stufen --- */
+.library-hint {
+    font-size: 0.82rem;
+    color: var(--theme-text-muted);
+    line-height: 1.5;
+    margin-bottom: 14px;
+}
+
+.library-filters {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.library-search {
+    width: 100%;
+    box-sizing: border-box;
+    font: inherit;
+    font-size: 0.9rem;
+    padding: 10px 14px;
+    color: var(--theme-text);
+    background: var(--theme-surface-muted);
+    border: 1px solid var(--theme-border);
+    border-radius: var(--theme-radius-sm);
+}
+
+.library-search:focus {
+    outline: none;
+    border-color: var(--theme-accent);
+}
+
+.library-filters .group-chips {
+    justify-content: flex-start;
+    margin-bottom: 0;
+}
+
+.library-filter-chip[aria-pressed="true"] {
+    border-color: var(--theme-accent);
+    background: var(--theme-accent);
+    color: #fff;
+}
+
+.library-group {
+    margin-bottom: 24px;
+}
+
+.library-group-title {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--theme-text-strong);
+    padding-bottom: 6px;
+    border-bottom: 2px solid var(--cat-color);
+}
+
+.library-group-count {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--theme-text-muted);
+}
+
+.library-entry-info {
+    flex: 1 1 260px;
+    min-width: 0;
+}
+
+.library-entry-meta {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--theme-text-muted);
+    margin-top: 2px;
+}
+
+.library-entry-meta strong {
+    color: var(--theme-accent-strong);
+}
+
+.library-entry-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
