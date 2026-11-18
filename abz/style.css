@@ -584,6 +584,9 @@ input[type="time"]:focus,
 /* Zeilen-Wrapper je Arbeitszeit; die Kacheln bleiben direkte Grid-Elemente */
 .stat-row { display: contents; }
 
+/* Countdown gleich „Rest / Überziehung“: ausblenden, Platz im Raster aber behalten (Spalten bleiben bündig) */
+.stat-card.redundant { visibility: hidden; }
+
 /* Kachel, die nicht in den Seitentitel übernommen werden kann: flach, ohne Akzentkante */
 .stat-card {
     background: var(--container-bg);

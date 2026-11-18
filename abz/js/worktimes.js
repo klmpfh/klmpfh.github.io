@@ -171,14 +171,20 @@ function renderTargetStats(targets, relevantTarget) {
         workTimeCard.querySelector('.stat-hint').textContent = t ? `${formatDuration(t.min * 5)} h / Woche` : '';
 
         const selectableStats = ['target', 'countdown', 'diff', 'percent'];
+        // Countdown nur zeigen, wenn er sich (angezeigt) von „Rest / Überziehung“ unterscheidet, z. B. nach Pausen
+        let countdownRedundant = false;
         if (hasValues) {
+            const countdownText = formatDifference(t.countdown);
+            const diffText      = formatDifference(t.remaining);
+            countdownRedundant  = countdownText === diffText;
             setValue('target',    formatMinutesToTime(t.targetEndMin), '');
-            setValue('countdown', formatDifference(t.countdown), t.countdown >= 0 ? 'pos' : 'neg');
-            setValue('diff',      formatDifference(t.remaining), t.remaining >= 0 ? 'pos' : 'neg');
+            setValue('countdown', countdownText, t.countdown >= 0 ? 'pos' : 'neg');
+            setValue('diff',      diffText, t.remaining >= 0 ? 'pos' : 'neg');
             setValue('percent',   `${t.progressUncapped.toFixed(1)} %`, '');
         } else {
             selectableStats.forEach(stat => setValue(stat, '–', 'muted'));
         }
+        card('countdown').classList.toggle('redundant', countdownRedundant);
         rowEl.querySelector('.stat-progress-fill').style.width = hasValues ? `${Math.min(100, t.progressUncapped)}%` : '0%';
 
         selectableStats.forEach(stat => card(stat).classList.toggle('selected', isRelevant && titleStat === stat));
