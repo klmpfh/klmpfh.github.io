@@ -15,7 +15,7 @@
  * install() legt unter dem neuen Namen einen frischen Cache an, activate()
  * räumt danach alle älteren Versionen weg.
  * ========================================================================== */
-var ASSET_VERSION = '25';
+var ASSET_VERSION = '26';
 var CACHE_VERSION = 'sport-v' + ASSET_VERSION;
 var V = '?v=' + ASSET_VERSION;
 

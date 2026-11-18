@@ -5,7 +5,8 @@
 
 /* =====================================================================
  * Signaltöne: letzte 5 Sekunden eines Timers piepen mit steigender
- * Tonhöhe/Lautstärke, bei 0 ein Doppelpiep. Lautsprecher-Symbol
+ * Tonhöhe/Lautstärke, bei 0 eine Piep-Folge. Übungen mit Seiten-/
+ * Richtungswechsel zur Halbzeit bekommen dort einen Doppelpiep. Lautsprecher-Symbol
  * schaltet stumm, Lautstärkeregler löst beim Loslassen einen Testton
  * aus. Nutzt die Web Audio API, keine externen Audiodateien.
  * ===================================================================== */
@@ -58,6 +59,12 @@ function playCompletionBeep() {
     setTimeout(function () { playTone(800, 80, 1); }, 200);
     setTimeout(function () { playTone(800, 80, 1); }, 300);
     setTimeout(function () { playTone(800, 80, 1); }, 400);
+}
+
+// Halbzeit-Signal für Übungen mit "Zur Halbzeit ... wechseln.".
+function playHalftimeBeep() {
+    playTone(1000, 150, 1);
+    setTimeout(function () { playTone(1000, 150, 1); }, 220);
 }
 
 function playTestBeep() {

@@ -14,7 +14,7 @@
  * erledigt" oder "Überspringen"), bereits als Start-Signal zählt.
  * Schritte ohne feste Zeit (Wiederholungen) haben keinen Timer.
  * ===================================================================== */
-var sportState = null;   // { steps, index, remaining, running, deadline, intervalId, lastBeepSecond, elapsedStart, elapsedIntervalId, elapsedTotalSec }
+var sportState = null;   // { steps, index, remaining, running, deadline, intervalId, lastBeepSecond, halftimeBeeped, elapsedStart, elapsedIntervalId, elapsedTotalSec }
 var wakeLockSentinel = null;
 var COOLDOWN_DURATION_SEC = 300; // Cool-down-Timer auf der Abschlussseite: ca. 5 Minuten Dehnzeit
 
@@ -290,6 +290,7 @@ function renderSportStep(keepTimer) {
     if (step.kind === "warmup") {
         sportState.remaining = step.duration;
         sportState.lastBeepSecond = null;
+        sportState.halftimeBeeped = false;
         html = sportTimedStepHtml({
             kicker: "Aufwärmen",
             name: step.exercise.name,
@@ -303,6 +304,7 @@ function renderSportStep(keepTimer) {
         if (!keepTimer) {
             sportState.remaining = step.duration;
             sportState.lastBeepSecond = null;
+            sportState.halftimeBeeped = false;
         }
         html = sportTimedStepHtml({
             kicker: metaT.label,
@@ -341,6 +343,7 @@ function renderSportStep(keepTimer) {
         if (!keepTimer) {
             sportState.remaining = step.duration;
             sportState.lastBeepSecond = null;
+            sportState.halftimeBeeped = false;
         }
         // Erst Timer + Buttons, dann die Bewertung der gerade
         // beendeten Übung(en), zuletzt die Anleitung der nächsten
@@ -356,6 +359,7 @@ function renderSportStep(keepTimer) {
         if (step.cooldownEnabled) {
             sportState.remaining = COOLDOWN_DURATION_SEC;
             sportState.lastBeepSecond = null;
+            sportState.halftimeBeeped = false;
         }
         html = sportDoneHtml(step.cooldownEnabled);
     }
@@ -414,12 +418,28 @@ function updateTimerButtonLabel() {
     if (btn) btn.textContent = sportState.running ? "Anhalten" : "Weiter";
 }
 
+// Übungen, deren Beschreibung einen Seiten-/Richtungswechsel zur
+// Halbzeit vorgibt ("Zur Halbzeit Seite wechseln.", "Zur Halbzeit die
+// Richtung wechseln." oder "Zur Hälfte der Zeit ..."), bekommen dort
+// einen Doppelpiep.
+function hasHalftimeSwitch(step) {
+    return !!(step && step.exercise && (step.kind === "work-time" || step.kind === "warmup") &&
+        /zur (halbzeit|hälfte der zeit)/i.test(step.exercise.description || ""));
+}
+
 function sportTick() {
     var msLeft = sportState.deadline - Date.now();
     var secLeft = Math.max(0, Math.ceil(msLeft / 1000));
     if (secLeft !== sportState.remaining) {
         sportState.remaining = secLeft;
         updateTimerDisplay();
+    }
+    var step = sportState.steps[sportState.index];
+    if (!sportState.halftimeBeeped && hasHalftimeSwitch(step) &&
+            msLeft <= step.duration * 500 && secLeft > 5) {
+        sportState.halftimeBeeped = true;
+        playHalftimeBeep();
+        vibrate([200, 100, 200]);
     }
     if (secLeft >= 1 && secLeft <= 5 && secLeft !== sportState.lastBeepSecond) {
         sportState.lastBeepSecond = secLeft;
@@ -549,7 +569,7 @@ function enterSportMode() {
     if (!currentWorkout) return;
     ensureAudioContext();
     var steps = buildSportSteps(currentWorkout);
-    sportState = { steps: steps, progress: buildProgressLayout(steps), index: 0, remaining: 0, running: false, timerStarted: false, deadline: 0, intervalId: null, lastBeepSecond: null, elapsedStart: null, elapsedIntervalId: null, elapsedTotalSec: 0 };
+    sportState = { steps: steps, progress: buildProgressLayout(steps), index: 0, remaining: 0, running: false, timerStarted: false, deadline: 0, intervalId: null, lastBeepSecond: null, halftimeBeeped: false, elapsedStart: null, elapsedIntervalId: null, elapsedTotalSec: 0 };
     renderProgressMarkers(sportState.progress.markers);
     sportElapsedTimerEl.hidden = true;
     sportElapsedTimerEl.textContent = "0:00";
