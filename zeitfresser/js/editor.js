@@ -9,6 +9,10 @@
  * Drop am Griff (⠿). Themen lassen sich nur zwischen Themen einsortieren;
  * Unterpunkte zwischen Unterpunkte – auch in ein anderes Thema (dann auf
  * die Zeile des Themas ziehen oder zwischen dessen Unterpunkte).
+ *
+ * Hat ein Thema Unterpunkte, ist sein Wert nicht editierbar, sondern die
+ * Summe der Unterpunkte. Der erste Unterpunkt übernimmt beim Anlegen Wert,
+ * Einheit und Tage des Themas, damit sich an der Summe nichts ändert.
  */
 'use strict';
 
@@ -96,6 +100,12 @@ function buildNode(node, parent, colors, index, count) {
     amount.placeholder = '0';
     amount.setAttribute('aria-label', 'Stunden');
     amount.title = 'Stunden, z. B. 6, 1,5 oder 1:30';
+    if (node.children.length) {
+        amount.readOnly = true;
+        amount.classList.add('is-sum');
+        amount.title = 'Summe der Unterpunkte – wird automatisch berechnet';
+        amount.setAttribute('aria-label', 'Stunden (Summe der Unterpunkte)');
+    }
     const per = el('select', 'node-per');
     per.setAttribute('aria-label', 'Einheit');
     [['day', 'pro Tag'], ['week', 'pro Woche']].forEach(o => {
@@ -172,7 +182,10 @@ function updateInfos() {
         info.textContent = '';
         const n = dayCount(node);
         const w = weeklyHours(node);
-        let over = false;
+        // Themenwert folgt den Unterpunkten auch während des Tippens dort.
+        if (node.children.length && valueInput && document.activeElement !== valueInput) {
+            valueInput.value = node.amount ? fmtNumber(node.amount) : '';
+        }
 
         if (!n) {
             info.appendChild(el('span', 'info-hint', '⚠ Keine Wochentage gewählt – zählt nicht mit.'));
@@ -186,28 +199,10 @@ function updateInfos() {
             info.appendChild(el('span', 'info-main', parts.join(' · ')));
 
             if (node.children.length) {
-                const cs = sumWeekly(node.children);
-                const label = node.name.trim() || 'dieses Thema';
-                // Pro-Tag-Werte beziehen sich auf die beim Thema gewählten Tage.
-                if (cs - w > EPS) {
-                    over = true;
-                    info.appendChild(el('span', 'info-warn zf-pulse',
-                        '⚠ Unterpunkte: ' + perDay(cs / n) + ' (' + perWeek(cs) + ') – ' +
-                        perDay((cs - w) / n) + ' mehr als „' + label + '“'));
-                } else if (w - cs > EPS) {
-                    const span = el('span', 'info-rest');
-                    span.appendChild(el('span', 'info-hatch'));
-                    span.appendChild(document.createTextNode(
-                        'Unterpunkte: ' + fmtNumber(cs / n) + ' von ' + perDay(w / n) + ' (' +
-                        fmtNumber(cs) + ' von ' + perWeek(w) + ') – ' +
-                        perDay((w - cs) / n) + ' nicht zugeordnet'));
-                    info.appendChild(span);
-                } else {
-                    info.appendChild(el('span', 'info-ok', '✓ Unterpunkte decken alles ab'));
-                }
+                info.appendChild(el('span', 'info-sum', '∑ Summe aus ' + node.children.length +
+                    ' Unterpunkt' + (node.children.length === 1 ? '' : 'en')));
             }
         }
-        if (valueInput) valueInput.classList.toggle('is-over', over);
     });
 }
 
@@ -257,6 +252,9 @@ function moveNode(id, targetList, targetIndex, newParent) {
     const src = findNode(sc.nodes, id);
     if (!src) return;
     src.list.splice(src.index, 1);
+    // Die Zeit wandert mit dem Unterpunkt: Verliert ein Thema so seinen
+    // letzten Unterpunkt, steht es danach bei 0 (statt die Zeit doppelt zu zählen).
+    if (src.parent && src.parent !== newParent && !src.parent.children.length) src.parent.amount = 0;
     if (src.list === targetList && src.index < targetIndex) targetIndex--;
     targetList.splice(targetIndex, 0, src.node);
     if (newParent) {
@@ -434,19 +432,38 @@ function initEditor(onChange) {
             }
             case 'add': {
                 if (hit.parent) return; // höchstens zwei Ebenen
-                const child = createNode({ days: node.days });
+                // Erster Unterpunkt übernimmt die Zeit des Themas, weitere starten bei 0.
+                const child = node.children.length
+                    ? createNode({ days: node.days })
+                    : createNode({ days: node.days, amount: node.amount, per: node.per });
                 node.children.push(child);
                 node.collapsed = false;
                 onChange('hard', { focus: child.id, selector: '.node-name' });
                 break;
             }
             case 'del': {
-                const label = node.name.trim() ? '„' + node.name.trim() + '“' : 'diesen Punkt';
-                const extra = node.children.length ? ' samt ' + node.children.length + ' Unterpunkt' + (node.children.length > 1 ? 'en' : '') : '';
-                if ((node.name.trim() || node.amount || node.children.length) &&
-                    !confirm(label + extra + ' löschen?')) return;
-                hit.list.splice(hit.index, 1);
-                onChange('hard');
+                const doDelete = () => {
+                    const again = findNode(activeScenario().nodes, node.id);
+                    if (!again) return;
+                    again.list.splice(again.index, 1);
+                    // Fokus nicht ins Leere fallen lassen: Nachbar oder Elternpunkt
+                    const next = again.list[Math.min(again.index, again.list.length - 1)] || again.parent;
+                    onChange('hard', next ? { focus: next.id, selector: '.node-name' } : null);
+                };
+                // Leere Punkte ohne Rückfrage löschen
+                if (!(node.name.trim() || node.amount || node.children.length)) { doDelete(); break; }
+                const label = node.name.trim() ? '„' + node.name.trim() + '“' : 'Diesen Punkt';
+                const kids = node.children.length;
+                let message = hit.parent ? 'Der Unterpunkt wird entfernt.' : 'Das Thema wird entfernt.';
+                if (kids) message = 'Das Thema wird samt ' + kids + ' Unterpunkt' + (kids > 1 ? 'en' : '') + ' entfernt.';
+                else if (hit.parent && hit.list.length === 1) message += ' Seine Zeit bleibt beim Thema „' + (hit.parent.name.trim() || 'Ohne Namen') + '“.';
+                confirmFlyover({
+                    title: label + ' löschen?',
+                    message: message,
+                    confirmLabel: 'Löschen',
+                    danger: true,
+                    anchor: btn
+                }).then(ok => { if (ok) doDelete(); });
                 break;
             }
         }

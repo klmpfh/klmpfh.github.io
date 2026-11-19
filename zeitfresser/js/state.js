@@ -11,6 +11,12 @@
  * Alles bezieht sich auf eine Woche. "amount" ist entweder der Wochenwert
  * (per = 'week') oder der Wert pro gewähltem Wochentag (per = 'day'). Die
  * Bezugsgröße der Woche ist 7 × hoursPerDay.
+ *
+ * Hat ein Thema Unterpunkte, ist seine Zeit immer die Summe der Unterpunkte
+ * (weeklyHours). syncParents() schreibt diese Summe zusätzlich in "amount"
+ * zurück – so behält ein Thema seine Zeit, wenn sein letzter Unterpunkt
+ * gelöscht wird (Gegenstück zum Anlegen des ersten Unterpunkts, der die Zeit
+ * des Themas übernimmt, siehe editor.js).
  */
 'use strict';
 
@@ -57,7 +63,8 @@ function createExampleScenario() {
                 createNode({ name: 'Projekt A', amount: 16, per: 'week', days: workDays() }),
                 createNode({ name: 'Projekt B', amount: 8, per: 'week', days: [true, true, false, false, false, false, false] }),
                 createNode({ name: 'Meetings', amount: 1.5, per: 'day', days: workDays() }),
-                createNode({ name: 'E-Mails', amount: 4, per: 'week', days: workDays() })
+                createNode({ name: 'E-Mails', amount: 4, per: 'week', days: workDays() }),
+                createNode({ name: 'Sonstiges', amount: 2.5, per: 'week', days: workDays() })
             ]
         }),
         createNode({ name: 'Pendeln', amount: 1, per: 'day', days: workDays(), colorSlot: 2 }),
@@ -66,7 +73,8 @@ function createExampleScenario() {
             name: 'Haushalt', amount: 8, per: 'week', colorSlot: 4,
             children: [
                 createNode({ name: 'Kochen', amount: 0.5, per: 'day' }),
-                createNode({ name: 'Putzen', amount: 2, per: 'week', days: [false, false, false, false, false, true, false] })
+                createNode({ name: 'Putzen', amount: 2, per: 'week', days: [false, false, false, false, false, true, false] }),
+                createNode({ name: 'Einkaufen', amount: 2.5, per: 'week', days: [false, false, false, false, true, true, false] })
             ]
         })
     ];
@@ -135,6 +143,7 @@ function loadStore() {
     if (!scenarios.some(s => s.id === activeId)) activeId = scenarios[0].id;
 
     store = { version: 1, activeId: activeId, scenarios: scenarios };
+    store.scenarios.forEach(syncParents);
 }
 
 function saveStore() {
@@ -190,6 +199,7 @@ function dayCount(node) {
 }
 
 function weeklyHours(node) {
+    if (node.children.length) return sumWeekly(node.children);
     const n = dayCount(node);
     if (!n) return 0;
     return node.per === 'day' ? node.amount * n : node.amount;
@@ -199,8 +209,61 @@ function sumWeekly(nodes) {
     return nodes.reduce((s, n) => s + weeklyHours(n), 0);
 }
 
+/** Themen mit Unterpunkten: "amount" = Summe der Unterpunkte in der Einheit des Themas. */
+function syncParents(sc) {
+    sc.nodes.forEach(n => {
+        if (!n.children.length) return;
+        const sum = sumWeekly(n.children);
+        const d = dayCount(n);
+        n.amount = n.per === 'day' && d ? sum / d : sum;
+    });
+}
+
 function weekRef(sc) {
     return sc.hoursPerDay * 7;
+}
+
+/* ── Export / Import (JSON) ── */
+
+const EXPORT_APP = 'zeitfresser';
+
+function scenarioToExport(sc) {
+    return {
+        app: EXPORT_APP,
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        scenario: { name: sc.name, hoursPerDay: sc.hoursPerDay, nodes: sc.nodes }
+    };
+}
+
+/** Liest eine Export-Datei. Akzeptiert ein einzelnes Szenario (eigenes
+ *  Exportformat oder nacktes Szenario-Objekt) sowie den kompletten Speicher
+ *  ({ scenarios: [...] }). Liefert eine Liste bereinigter Szenarien mit neuen
+ *  IDs oder wirft einen Error mit verständlicher Meldung. */
+function scenariosFromImport(text) {
+    let data;
+    try { data = JSON.parse(text); } catch (e) { throw new Error('Die Datei ist kein gültiges JSON.'); }
+    let raw;
+    if (data && data.scenario) raw = [data.scenario];
+    else if (data && Array.isArray(data.scenarios)) raw = data.scenarios;
+    else if (data && Array.isArray(data.nodes)) raw = [data];
+    else throw new Error('In der Datei wurde kein Zeitfresser-Szenario gefunden.');
+    const out = raw.map(sanitizeScenario).filter(Boolean);
+    if (!out.length) throw new Error('In der Datei wurde kein Zeitfresser-Szenario gefunden.');
+    out.forEach(sc => {
+        sc.id = uid();
+        sc.nodes = cloneNodesWithNewIds(sc.nodes);
+        syncParents(sc);
+    });
+    return out;
+}
+
+/** Dateiname aus dem Szenario-Namen ("Meine Woche" → "zeitfresser-meine-woche"). */
+function fileBaseName(sc) {
+    const slug = (sc.name || '').toLowerCase()
+        .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+    return 'zeitfresser' + (slug ? '-' + slug : '');
 }
 
 /* ── Ein-/Ausgabe von Stunden ── */

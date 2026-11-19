@@ -31,9 +31,10 @@ function renderAll() {
 }
 
 /* ── Einklappbare Boxen ──
- * Nur im einspaltigen Layout (gleiche Grenze wie in style.css) lassen sich
- * die Boxen per Klick auf die Überschrift einklappen. Der Zustand ist eine
- * reine Ansichts-Vorliebe dieses Browsers und liegt getrennt von den Daten. */
+ * Die Diagramm-Boxen (data-always) lassen sich immer per Klick auf die
+ * Überschrift einklappen, Szenario und Themen nur im einspaltigen Layout
+ * (gleiche Grenze wie in style.css). Der Zustand ist eine reine
+ * Ansichts-Vorliebe dieses Browsers und liegt getrennt von den Daten. */
 
 const COLLAPSE_KEY = 'klmpfh-zeitfresser-collapsed';
 const ONE_COLUMN_MQ = '(max-width: 1040px)';
@@ -47,16 +48,17 @@ function initCollapsibles() {
     function apply() {
         panels.forEach(panel => {
             const btn = panel.querySelector('.panel-toggle');
-            const collapsed = mq.matches && !!state[panel.dataset.panel];
+            const can = mq.matches || panel.hasAttribute('data-always');
+            const collapsed = can && !!state[panel.dataset.panel];
             panel.classList.toggle('is-collapsed', collapsed);
-            btn.disabled = !mq.matches;
+            btn.disabled = !can;
             btn.setAttribute('aria-expanded', String(!collapsed));
         });
     }
 
     panels.forEach(panel => {
         panel.querySelector('.panel-toggle').addEventListener('click', () => {
-            if (!mq.matches) return;
+            if (!mq.matches && !panel.hasAttribute('data-always')) return;
             const key = panel.dataset.panel;
             state[key] = !state[key];
             try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(state)); } catch (e) { /* egal */ }
@@ -90,21 +92,15 @@ function updatePanelSummaries() {
         (sc.hoursPerDay !== 24 ? ' · ' + fmtShort(sc.hoursPerDay) + ' h/Tag' : ''));
 
     const subs = sc.nodes.reduce((s, n) => s + n.children.length, 0);
-    const subOver = sc.nodes.some(n => n.children.length && sumWeekly(n.children) - weeklyHours(n) > EPS);
     set('sumEditor', sc.nodes.length + (sc.nodes.length === 1 ? ' Thema' : ' Themen') +
-        (subs ? ' · ' + subs + ' Unterpunkt' + (subs === 1 ? '' : 'e') : ''),
-        subOver ? '⚠ Unterpunkte zu groß' : '');
+        (subs ? ' · ' + subs + ' Unterpunkt' + (subs === 1 ? '' : 'e') : ''));
 
     set('sumWeek', fmtShort(total) + ' / ' + fmtShort(ref) + ' h',
         total - ref > EPS ? '⚠ ' + fmtShort(total - ref) + ' h zu viel' : '');
 
-    const colors = computeColors(sc);
-    let overDays = 0;
-    for (let d = 0; d < 7; d++) {
-        const dayTotal = collectSegments(sc.nodes, d, 1, colors, '', null, []).reduce((s, x) => s + x.hours, 0);
-        if (dayTotal - sc.hoursPerDay > EPS) overDays++;
-    }
-    set('sumDays', overDays ? '' : 'alle Tage im Rahmen',
+    const rows = computeDayRows(sc, computeColors(sc));
+    const overDays = rows.filter(r => r.day != null && r.over).length;
+    set('sumDays', overDays ? '' : fmtShort(Math.max(0, rows[0].free)) + ' h frei pro Woche',
         overDays ? '⚠ an ' + overDays + (overDays === 1 ? ' Tag' : ' Tagen') + ' zu viel' : '');
 }
 
@@ -114,6 +110,7 @@ function updatePanelSummaries() {
  * 'hard' = Struktur geändert (Baum neu aufbauen, optional Fokus setzen).
  */
 function onChange(kind, opts) {
+    syncParents(activeScenario());
     saveStore();
     if (kind === 'hard') {
         renderEditor();
@@ -184,10 +181,20 @@ function initScenarioBar() {
         renderAll();
     });
 
-    document.getElementById('btnDel').addEventListener('click', () => {
+    document.getElementById('btnDel').addEventListener('click', async e => {
         const sc = activeScenario();
-        if (!confirm('Szenario „' + (sc.name.trim() || 'Ohne Namen') + '“ löschen?')) return;
+        const ok = await confirmFlyover({
+            title: 'Szenario „' + (sc.name.trim() || 'Ohne Namen') + '“ löschen?',
+            message: store.scenarios.length > 1
+                ? 'Alle Themen dieses Szenarios werden entfernt. Tipp: Vorher mit „Export“ sichern.'
+                : 'Es ist das letzte Szenario – danach bleibt ein leeres Szenario übrig.',
+            confirmLabel: 'Löschen',
+            danger: true,
+            anchor: e.currentTarget
+        });
+        if (!ok) return;
         const idx = store.scenarios.indexOf(sc);
+        if (idx < 0) return;
         store.scenarios.splice(idx, 1);
         if (!store.scenarios.length) store.scenarios.push(createScenario('Neues Szenario'));
         store.activeId = store.scenarios[Math.max(0, idx - 1)].id;
@@ -195,12 +202,57 @@ function initScenarioBar() {
         renderAll();
     });
 
+    initImportExport();
+
     document.getElementById('btnAddTop').addEventListener('click', () => {
         const sc = activeScenario();
         const node = createNode({ colorSlot: nextFreeSlot(sc.nodes) });
         sc.nodes.push(node);
         onChange('hard', { focus: node.id, selector: '.node-name' });
     });
+}
+
+/* ── Export / Import (JSON) und Bild ── */
+
+function initImportExport() {
+    document.getElementById('btnExport').addEventListener('click', () => {
+        const sc = activeScenario();
+        const json = JSON.stringify(scenarioToExport(sc), null, 2);
+        downloadBlob(new Blob([json], { type: 'application/json' }), fileBaseName(sc) + '.json');
+    });
+
+    const file = document.getElementById('importFile');
+    const btnImport = document.getElementById('btnImport');
+    btnImport.addEventListener('click', () => file.click());
+    file.addEventListener('change', async () => {
+        const f = file.files && file.files[0];
+        file.value = '';   // gleiche Datei erneut wählbar
+        if (!f) return;
+        let imported;
+        try {
+            imported = scenariosFromImport(await f.text());
+        } catch (err) {
+            alertFlyover({ title: 'Import nicht möglich', message: err.message, anchor: btnImport });
+            return;
+        }
+        // Als neue Szenarien anlegen – nichts Bestehendes wird überschrieben.
+        imported.forEach(sc => {
+            sc.name = uniqueScenarioName(sc.name.trim() || 'Importiert');
+            store.scenarios.push(sc);
+        });
+        store.activeId = imported[0].id;
+        saveStore();
+        renderAll();
+        alertFlyover({
+            title: 'Import fertig',
+            message: imported.length === 1
+                ? 'Szenario „' + imported[0].name + '“ wurde hinzugefügt und ist jetzt ausgewählt.'
+                : imported.length + ' Szenarien wurden hinzugefügt.',
+            anchor: btnImport
+        });
+    });
+
+    document.getElementById('btnShare').addEventListener('click', e => openShareImage(e.currentTarget));
 }
 
 /* Diagrammfarben hängen vom Hell/Dunkel-Design ab → bei Wechsel neu zeichnen. */

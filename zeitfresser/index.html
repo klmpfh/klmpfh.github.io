@@ -8,14 +8,16 @@
     <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="../assets/css/reset.css">
     <link rel="stylesheet" href="../assets/css/theme.css">
-    <link rel="stylesheet" href="style.css?v=1.2">
+    <link rel="stylesheet" href="style.css?v=1.3">
     <!-- ?v= immer zusammen mit den Versionsnummern unten ändern: Sonst läuft die neue Seite mit alten Dateien aus dem Browser-Cache. -->
     <!-- Klassische Skripte (keine ES-Module), damit die Seite auch per file:// läuft; Reihenfolge ist wichtig, main.js zuletzt. -->
-    <script src="js/state.js?v=1.2" defer></script>
-    <script src="js/colors.js?v=1.2" defer></script>
-    <script src="js/charts.js?v=1.2" defer></script>
-    <script src="js/editor.js?v=1.2" defer></script>
-    <script src="js/main.js?v=1.2" defer></script>
+    <script src="js/state.js?v=1.3" defer></script>
+    <script src="js/colors.js?v=1.3" defer></script>
+    <script src="js/dialog.js?v=1.3" defer></script>
+    <script src="js/charts.js?v=1.3" defer></script>
+    <script src="js/share.js?v=1.3" defer></script>
+    <script src="js/editor.js?v=1.3" defer></script>
+    <script src="js/main.js?v=1.3" defer></script>
 </head>
 <body>
 <script src="../assets/js/nav.js"></script>
@@ -26,7 +28,7 @@
         <p>Wohin geht deine Woche?</p>
     </header>
 
-    <!-- Einklappbare Boxen (data-panel): nur im einspaltigen Layout, siehe initCollapsibles() in main.js -->
+    <!-- Einklappbare Boxen (data-panel): mit data-always immer, sonst nur im einspaltigen Layout, siehe initCollapsibles() in main.js -->
     <section class="panel collapsible scenario-panel" data-panel="scenario">
         <h2 class="panel-title panel-head-collapse">
             <button type="button" class="panel-toggle" aria-controls="scenarioBody">
@@ -54,27 +56,30 @@
                 <button type="button" class="btn btn-ghost" id="btnDup">Duplizieren</button>
                 <button type="button" class="btn btn-ghost btn-danger" id="btnDel">Löschen</button>
             </div>
+            <div class="scenario-actions scenario-io">
+                <button type="button" class="btn btn-ghost" id="btnExport" title="Dieses Szenario als JSON-Datei speichern">Export</button>
+                <button type="button" class="btn btn-ghost" id="btnImport" title="Szenario aus JSON-Datei hinzufügen">Import</button>
+                <input type="file" id="importFile" accept=".json,application/json" hidden>
+                <button type="button" class="btn btn-ghost" id="btnShare" title="Diagramme als Bild kopieren, teilen oder speichern">Als Bild</button>
+            </div>
         </div>
     </section>
 
     <div class="layout">
-        <section class="panel collapsible editor-panel" data-panel="editor">
-            <h2 class="panel-title">
-                <button type="button" class="panel-toggle" aria-controls="editorBody">
-                    <span class="panel-toggle-label">Themen</span>
-                    <span class="panel-summary" id="sumEditor"></span>
-                    <span class="panel-chevron" aria-hidden="true">▾</span>
-                </button>
-            </h2>
-            <div class="panel-body" id="editorBody">
-                <p class="panel-hint">Wert pro Tag oder pro Woche, gültig an den gewählten Wochentagen.</p>
-                <div id="tree" class="tree"></div>
-                <button type="button" class="btn btn-add" id="btnAddTop">+ Thema</button>
-            </div>
-        </section>
-
         <aside class="chart-panel">
-            <section class="panel collapsible" data-panel="week">
+            <section class="panel collapsible" data-panel="days" data-always>
+                <h2 class="panel-title">
+                    <button type="button" class="panel-toggle" aria-controls="daysBody">
+                        <span class="panel-toggle-label">Tage</span>
+                        <span class="panel-summary" id="sumDays"></span>
+                        <span class="panel-chevron" aria-hidden="true">▾</span>
+                    </button>
+                </h2>
+                <div class="panel-body" id="daysBody">
+                    <div id="days" class="days"></div>
+                </div>
+            </section>
+            <section class="panel collapsible" data-panel="week" data-always>
                 <h2 class="panel-title">
                     <button type="button" class="panel-toggle" aria-controls="weekBody">
                         <span class="panel-toggle-label">Woche</span>
@@ -89,19 +94,21 @@
                     <div id="legend" class="legend"></div>
                 </div>
             </section>
-            <section class="panel collapsible" data-panel="days">
-                <h2 class="panel-title">
-                    <button type="button" class="panel-toggle" aria-controls="daysBody">
-                        <span class="panel-toggle-label">Tage</span>
-                        <span class="panel-summary" id="sumDays"></span>
-                        <span class="panel-chevron" aria-hidden="true">▾</span>
-                    </button>
-                </h2>
-                <div class="panel-body" id="daysBody">
-                    <div id="days" class="days"></div>
-                </div>
-            </section>
         </aside>
+        <section class="panel collapsible editor-panel" data-panel="editor">
+            <h2 class="panel-title">
+                <button type="button" class="panel-toggle" aria-controls="editorBody">
+                    <span class="panel-toggle-label">Themen</span>
+                    <span class="panel-summary" id="sumEditor"></span>
+                    <span class="panel-chevron" aria-hidden="true">▾</span>
+                </button>
+            </h2>
+            <div class="panel-body" id="editorBody">
+                <p class="panel-hint">Wert pro Tag oder pro Woche, gültig an den gewählten Wochentagen. Hat ein Thema Unterpunkte, ist seine Zeit deren Summe.</p>
+                <div id="tree" class="tree"></div>
+                <button type="button" class="btn btn-add" id="btnAddTop">+ Thema</button>
+            </div>
+        </section>
     </div>
 </div>
 
