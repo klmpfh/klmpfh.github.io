@@ -35,7 +35,7 @@ function createNode(opts) {
         id: uid(),
         name: opts.name || '',
         amount: opts.amount || 0,
-        per: opts.per === 'day' ? 'day' : 'week',
+        per: opts.per === 'week' ? 'week' : 'day',
         days: (opts.days || allDays()).slice(),
         colorSlot: opts.colorSlot == null ? 0 : opts.colorSlot,
         collapsed: false,
@@ -54,10 +54,10 @@ function createExampleScenario() {
         createNode({
             name: 'Arbeit', amount: 38, per: 'week', days: workDays(), colorSlot: 1,
             children: [
-                createNode({ name: 'Projekt A', amount: 16, days: workDays() }),
-                createNode({ name: 'Projekt B', amount: 8, days: [true, true, false, false, false, false, false] }),
+                createNode({ name: 'Projekt A', amount: 16, per: 'week', days: workDays() }),
+                createNode({ name: 'Projekt B', amount: 8, per: 'week', days: [true, true, false, false, false, false, false] }),
                 createNode({ name: 'Meetings', amount: 1.5, per: 'day', days: workDays() }),
-                createNode({ name: 'E-Mails', amount: 4, days: workDays() })
+                createNode({ name: 'E-Mails', amount: 4, per: 'week', days: workDays() })
             ]
         }),
         createNode({ name: 'Pendeln', amount: 1, per: 'day', days: workDays(), colorSlot: 2 }),
@@ -66,7 +66,7 @@ function createExampleScenario() {
             name: 'Haushalt', amount: 8, per: 'week', colorSlot: 4,
             children: [
                 createNode({ name: 'Kochen', amount: 0.5, per: 'day' }),
-                createNode({ name: 'Putzen', amount: 2, days: [false, false, false, false, false, true, false] })
+                createNode({ name: 'Putzen', amount: 2, per: 'week', days: [false, false, false, false, false, true, false] })
             ]
         })
     ];

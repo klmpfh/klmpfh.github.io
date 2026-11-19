@@ -98,7 +98,7 @@ function buildNode(node, parent, colors, index, count) {
     amount.title = 'Stunden, z. B. 6, 1,5 oder 1:30';
     const per = el('select', 'node-per');
     per.setAttribute('aria-label', 'Einheit');
-    [['week', 'pro Woche'], ['day', 'pro Tag']].forEach(o => {
+    [['day', 'pro Tag'], ['week', 'pro Woche']].forEach(o => {
         const opt = el('option', null, o[1]);
         opt.value = o[0];
         per.appendChild(opt);
@@ -177,23 +177,30 @@ function updateInfos() {
         if (!n) {
             info.appendChild(el('span', 'info-hint', '⚠ Keine Wochentage gewählt – zählt nicht mit.'));
         } else {
+            // Kurzform der Einheiten: h/T = Stunden pro Tag, h/W = Stunden pro Woche.
+            const perDay = h => fmtNumber(h) + ' h/T';
+            const perWeek = h => fmtNumber(h) + ' h/W';
             const parts = node.per === 'day'
-                ? ['= ' + fmtHours(w) + ' pro Woche', fmtDays(node.days), fmtPercent(w / ref) + ' der Woche']
-                : ['= ' + fmtHours(w / n) + ' pro Tag', fmtDays(node.days), fmtPercent(w / ref) + ' der Woche'];
+                ? ['= ' + perWeek(w), fmtDays(node.days), fmtPercent(w / ref) + ' der Woche']
+                : ['= ' + perDay(w / n), fmtDays(node.days), fmtPercent(w / ref) + ' der Woche'];
             info.appendChild(el('span', 'info-main', parts.join(' · ')));
 
             if (node.children.length) {
                 const cs = sumWeekly(node.children);
                 const label = node.name.trim() || 'dieses Thema';
+                // Pro-Tag-Werte beziehen sich auf die beim Thema gewählten Tage.
                 if (cs - w > EPS) {
                     over = true;
                     info.appendChild(el('span', 'info-warn zf-pulse',
-                        '⚠ Unterpunkte: ' + fmtHours(cs) + ' – ' + fmtHours(cs - w) + ' mehr als „' + label + '“'));
+                        '⚠ Unterpunkte: ' + perDay(cs / n) + ' (' + perWeek(cs) + ') – ' +
+                        perDay((cs - w) / n) + ' mehr als „' + label + '“'));
                 } else if (w - cs > EPS) {
                     const span = el('span', 'info-rest');
                     span.appendChild(el('span', 'info-hatch'));
                     span.appendChild(document.createTextNode(
-                        'Unterpunkte: ' + fmtHours(cs) + ' von ' + fmtHours(w) + ' – ' + fmtHours(w - cs) + ' nicht zugeordnet'));
+                        'Unterpunkte: ' + fmtNumber(cs / n) + ' von ' + perDay(w / n) + ' (' +
+                        fmtNumber(cs) + ' von ' + perWeek(w) + ') – ' +
+                        perDay((w - cs) / n) + ' nicht zugeordnet'));
                     info.appendChild(span);
                 } else {
                     info.appendChild(el('span', 'info-ok', '✓ Unterpunkte decken alles ab'));
