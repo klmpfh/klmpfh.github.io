@@ -6,6 +6,9 @@
 <meta name="description" content="Teilt gemeinsame Ausgaben unter Freunden auf – gleichmäßig, in Prozent oder nach Anteilen – und rechnet aus, wer wem was schuldet.">
 <title>Kwidt</title>
 <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="theme-color" content="#cc1919">
 <link rel="stylesheet" href="../assets/css/reset.css">
 <link rel="stylesheet" href="../assets/css/theme.css">
 <style>
@@ -582,14 +585,15 @@
 <div class="container">
     <main id="app"></main>
     <noscript>Kwidt braucht JavaScript.</noscript>
-    <div class="footer-info">v<span id="versionNumber">1.44</span></div>
+    <div class="footer-info">v<span id="versionNumber">1.45</span></div>
 </div>
 <div id="toast" role="status" hidden></div>
 
 <script src="../fileshare/vendor/peerjs.min.js"></script>
 <script src="../fileshare/vendor/qrcode.min.js"></script>
 <!-- ?v= immer zusammen mit der Versionsnummer oben ändern: Sonst läuft die neue Seite mit alten Skripten aus dem Browser-Cache. -->
-<script src="core.js?v=1.44"></script>
-<script src="app.js?v=1.44"></script>
+<script src="core.js?v=1.45"></script>
+<script src="kv.js?v=1.45"></script>
+<script src="app.js?v=1.45"></script>
 </body>
 </html>

@@ -865,6 +865,39 @@
         return null;
     }
 
+    /**
+     * Was der Service Worker über die Serien einer Gruppe wissen muss, um fällige Termine
+     * zu melden, ohne an die ganze Gruppe zu kommen: die Vorlagen und je Vorlage der
+     * zuletzt gebuchte Termin (`booked`, sonst '').
+     */
+    function seriesDigest(doc) {
+        var latest = latestOccurrences(doc);
+        return Object.keys(doc.expenses).map(function (k) { return doc.expenses[k]; })
+            .filter(function (e) { return !e.del && !e.parent && e.repeat && e.repeat !== 'none'; })
+            .map(function (e) {
+                return {
+                    id: e.id, desc: e.desc, amount: e.amount, currency: e.currency, refund: !!e.refund,
+                    date: e.date, repeat: e.repeat, every: seriesEvery(e), until: seriesUntil(e), count: seriesCount(e),
+                    booked: latest[e.id] || ''
+                };
+            });
+    }
+
+    /**
+     * Termine einer Serie aus seriesDigest, die nach `after` bis einschließlich `today`
+     * fällig wurden und noch nicht gebucht sind. Gebucht wird wie bei expandRecurring
+     * nur nach dem zuletzt gebuchten Termin.
+     */
+    function dueDates(series, after, today) {
+        var out = [];
+        for (var n = 0; n <= MAX_COUNT; n++) {
+            var date = occurrence(series.date, series.repeat, n, series.every);
+            if (date > today || !withinSeries(series, n, date)) break;
+            if (date > after && date > series.booked) out.push(date);
+        }
+        return out;
+    }
+
     /* ---------- Fixkosten & Vorausberechnung ---------- */
 
     /** Wie oft eine Serie im Schnitt pro Monat bucht (ein Jahr = 365,25 Tage). */
@@ -1949,6 +1982,8 @@
         liveSeries: liveSeries,
         occurrencesOf: occurrencesOf,
         nextOccurrence: nextOccurrence,
+        seriesDigest: seriesDigest,
+        dueDates: dueDates,
         fixedCosts: fixedCosts,
         forecast: forecast,
         dataFingerprint: dataFingerprint,

@@ -28,7 +28,7 @@
     const app = document.getElementById('app');
     const toastEl = document.getElementById('toast');
 
-    let store = { groups: {}, me: {}, last: null, seen: {}, contacts: {}, offsets: {} };
+    let store = { groups: {}, me: {}, last: null, seen: {}, contacts: {}, offsets: {}, notify: {} };
     const state = { formActive: false, pendingRender: false, unsaved: false, search: '', filter: emptyFilter(), filterOpen: false, statsCur: null, statsCategory: '', statsOpen: {}, lastPath: null };
 
     function emptyFilter() {
@@ -164,7 +164,7 @@
     /* ---------- Speicher ---------- */
 
     function readStored() {
-        const out = { groups: {}, me: {}, last: null, seen: {}, contacts: {}, offsets: {} };
+        const out = { groups: {}, me: {}, last: null, seen: {}, contacts: {}, offsets: {}, notify: {} };
         try {
             const raw = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
             if (raw && raw.groups) {
@@ -181,6 +181,14 @@
                 });
                 out.contacts = cleanContacts(raw.contacts);
                 out.offsets = cleanOffsets(raw.offsets);
+                Object.keys(raw.notify || {}).forEach(function (gid) {
+                    // Ein früherer Stand speicherte nur `true`: alle Arten an.
+                    const v = raw.notify[gid] === true ? { due: true, live: true } : raw.notify[gid];
+                    if (!v || typeof v !== 'object' || !out.groups[gid]) return;
+                    const kinds = {};
+                    NOTIFY_KINDS.forEach(function (k) { if (v[k] === true) kinds[k] = true; });
+                    if (Object.keys(kinds).length) out.notify[gid] = kinds;
+                });
             }
         } catch (e) {
             console.warn('Kwidt: Gespeicherte Daten nicht lesbar.', e);
@@ -198,6 +206,7 @@
             toast('Speichern fehlgeschlagen. Bitte ein Backup sichern.');
         }
         askToKeepData();
+        saveSchedule();
     }
 
     /** Ohne diese Bitte darf der Browser die Daten löschen, sobald der Speicher knapp wird. */
@@ -233,6 +242,7 @@
         store.seen = loaded.seen;
         store.contacts = loaded.contacts;
         store.offsets = loaded.offsets;
+        store.notify = loaded.notify;
         return changed;
     }
 
@@ -246,6 +256,117 @@
         if (saveNow || Date.now() - seenSaved > 60000) {
             seenSaved = Date.now();
             persist();
+        }
+    }
+
+    /* ---------- Benachrichtigungen ---------- */
+
+    // Ein Server, der Nachrichten an geschlossene Apps schickt (Web Push), fehlt mit Absicht.
+    // Gemeldet wird darum nur, was dieses Gerät selbst mitbekommt:
+    //  - Neue Einträge anderer, die über den Live-Abgleich ankommen, solange die App offen
+    //    ist, aber nicht im Vordergrund.
+    //  - Fällige wiederkehrende Ausgaben. Das prüft der Service Worker (sw.js), auch bei
+    //    geschlossener App, wenn der Browser ihn weckt (periodicsync, nur Chrome/Edge bei
+    //    installierter App). Dafür legt saveSchedule() eine Übersicht in IndexedDB ab.
+    // Pro Gruppe einzeln abschaltbar: store.notify[gid] = { due: true, live: true }.
+    const NOTIFY_KINDS = ['due', 'live'];
+    const DUE_TAG = 'kwidt-due';
+    const LIVE_LINES = 50;
+
+    function canNotify() {
+        return 'Notification' in window && 'serviceWorker' in navigator;
+    }
+
+    function notifyWanted(gid, kind) {
+        return !!(store.notify[gid] && store.notify[gid][kind]);
+    }
+
+    function notifyOn(gid, kind) {
+        return notifyWanted(gid, kind) && canNotify() && Notification.permission === 'granted';
+    }
+
+    function setNotify(gid, kind, on) {
+        const kinds = Object.assign({}, store.notify[gid]);
+        if (on) kinds[kind] = true;
+        else delete kinds[kind];
+        if (Object.keys(kinds).length) store.notify[gid] = kinds;
+        else delete store.notify[gid];
+        persist();
+    }
+
+    /** Gruppen, deren fällige Wiederholungen gemeldet werden sollen. */
+    function dueGroups() {
+        return Object.keys(store.notify).filter(function (gid) { return notifyWanted(gid, 'due') && store.groups[gid]; });
+    }
+
+    let scheduleSaved = null;
+    function saveSchedule() {
+        if (!window.indexedDB || !window.KwidtKV) return;
+        const groups = dueGroups().map(function (gid) { return { gid: gid, name: store.groups[gid].meta.name, series: C.seriesDigest(store.groups[gid]) }; });
+        const json = JSON.stringify(groups);
+        if (json === scheduleSaved) return;
+        scheduleSaved = json;
+        KwidtKV.set('schedule', groups).catch(function (e) {
+            scheduleSaved = null;
+            console.warn('Kwidt: Übersicht für Benachrichtigungen nicht gespeichert.', e);
+        });
+    }
+
+    /**
+     * Bittet den Browser, den Service Worker ab und zu zu wecken. Liefert, ob das klappt:
+     * 'on', 'install' (geht erst, wenn die App installiert ist) oder 'none' (kann der Browser nicht).
+     */
+    async function updateBackgroundCheck() {
+        try {
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (!reg || !reg.periodicSync) return 'none';
+            if (!dueGroups().length) {
+                await reg.periodicSync.unregister(DUE_TAG);
+                return 'none';
+            }
+            const status = await navigator.permissions.query({ name: 'periodic-background-sync' });
+            if (status.state !== 'granted') return 'install';
+            await reg.periodicSync.register(DUE_TAG, { minInterval: 6 * 3600 * 1000 });
+            return 'on';
+        } catch (e) {
+            return 'none';
+        }
+    }
+
+    /** Lässt den Service Worker fällige Termine melden. Er schweigt, solange die App sichtbar ist. */
+    async function askForDueCheck() {
+        if (!dueGroups().length || !canNotify()) return;
+        try {
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (reg && reg.active) reg.active.postMessage({ type: 'check-due' });
+        } catch (e) { /* dann eben beim nächsten Wecken */ }
+    }
+
+    /**
+     * Neue Einträge anderer melden, wenn die App nicht im Vordergrund ist. Kommt mehr nach,
+     * bevor die Meldung weggetippt ist, wird sie ergänzt statt eine zweite daneben zu legen.
+     */
+    async function notifyActivity(doc, entries) {
+        if (!entries.length || !notifyOn(doc.id, 'live') || (!document.hidden && document.hasFocus())) return;
+        try {
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (!reg) return;
+            const tag = 'kwidt-live-' + doc.id;
+            const old = (await reg.getNotifications({ tag: tag }))[0];
+            const lines = ((old && old.data && old.data.lines) || []).concat(entries.map(function (a) {
+                return activityText(doc, a) + (a.amount ? ' · ' + money(a.amount, a.currency) : '');
+            })).slice(-LIVE_LINES);
+            const newest = lines.slice(-4).reverse();
+            if (lines.length > newest.length) newest.push('und ' + (lines.length - newest.length) + ' weitere');
+            await reg.showNotification(doc.meta.name + (lines.length === 1 ? '' : ': ' + lines.length + ' Änderungen'), {
+                body: newest.join('\n'),
+                tag: tag,
+                renotify: true,
+                icon: 'icons/icon-192.png',
+                data: { hash: '#/g/' + doc.id + '/activity', lines: lines }
+            });
+        } catch (e) {
+            console.warn('Kwidt: Benachrichtigung nicht möglich.', e);
         }
     }
 
@@ -525,9 +646,15 @@
             const incoming = C.sanitizeGroup(msg.doc);
             const doc = store.groups[this.gid];
             if (!incoming || !doc || incoming.id !== this.gid) return;
+            const before = new Set(Object.keys(doc.activity));
             if (C.mergeGroups(doc, incoming)) {
                 persist();
                 softRender();
+                const me = meId(doc.id);
+                notifyActivity(doc, Object.keys(doc.activity)
+                    .filter(function (id) { return !before.has(id) && doc.activity[id].by !== me; })
+                    .map(function (id) { return doc.activity[id]; })
+                    .sort(function (a, b) { return a.t - b.t; }));
                 const self = this;
                 this.conns.forEach(function (conn) {
                     if (conn !== from) self.send(conn);
@@ -2383,6 +2510,7 @@
         delete store.me[doc.id];
         if (store.last === doc.id) store.last = null;
         delete store.seen[doc.id];
+        delete store.notify[doc.id];
         persist();
         go('/');
     }
@@ -3175,6 +3303,67 @@
         softRender();
     }
 
+    /** Benachrichtigungen gelten pro Gruppe und nur für dieses Gerät, darum liegen sie nicht im Dokument. */
+    function viewNotifyPanel(doc) {
+        const panel = h('section', { class: 'panel' }, h('h2', null, 'Benachrichtigungen'));
+        if (!canNotify()) {
+            panel.appendChild(h('p', { class: 'small muted' }, 'Dieser Browser kann keine Benachrichtigungen zeigen. Auf dem iPhone geht das erst, wenn Kwidt über „Zum Home-Bildschirm“ installiert ist.'));
+            return panel;
+        }
+        if (Notification.permission === 'denied') {
+            panel.appendChild(h('p', { class: 'small muted' }, 'Benachrichtigungen sind für diese Seite im Browser blockiert. Du kannst sie in den Website-Einstellungen des Browsers erlauben.'));
+            return panel;
+        }
+
+        const status = h('div', { class: 'small muted', style: 'margin-top:6px' });
+        async function showStatus() {
+            status.textContent = '';
+            // Meldet die Prüfung im Hintergrund auch ab, wenn keine Gruppe sie mehr braucht.
+            const mode = await updateBackgroundCheck();
+            if (!notifyOn(doc.id, 'due')) return;
+            status.textContent = mode === 'on'
+                ? 'Auch bei geschlossener App. Wann genau, entscheidet der Browser, meist etwa einmal am Tag.'
+                : mode === 'install'
+                    ? 'Bei geschlossener App erst, wenn Kwidt installiert ist („App installieren“ bzw. „Zum Startbildschirm hinzufügen“). Bis dahin nur, solange die App im Hintergrund offen ist.'
+                    : 'Dieser Browser weckt Kwidt nicht im Hintergrund. Gemeldet wird deshalb nur, solange die App im Hintergrund offen ist.';
+        }
+
+        function kindSwitch(kind, title, text, extra) {
+            return h('label', { class: 'switch-row', style: kind === 'live' ? 'margin-top:14px' : null },
+                h('input', {
+                    type: 'checkbox', checked: notifyOn(doc.id, kind),
+                    onchange: async function (e) {
+                        const box = e.target;
+                        box.blur();
+                        if (box.checked && Notification.permission !== 'granted') {
+                            let answer = 'default';
+                            try { answer = await Notification.requestPermission(); } catch (err) { /* bleibt aus */ }
+                            if (answer !== 'granted') {
+                                box.checked = false;
+                                if (answer === 'denied') softRender();
+                                return;
+                            }
+                        }
+                        setNotify(doc.id, kind, box.checked);
+                        if (kind === 'due') showStatus();
+                    }
+                }),
+                h('span', null,
+                    h('strong', null, title),
+                    h('div', { class: 'small muted' }, text),
+                    extra));
+        }
+
+        panel.append(
+            h('p', { class: 'small muted' }, 'Gilt nur für diese Gruppe auf diesem Gerät.'),
+            kindSwitch('due', 'Fällige Wiederholungen', 'Wenn eine wiederkehrende Ausgabe oder Rückzahlung fällig wird.', status),
+            kindSwitch('live', 'Änderungen von anderen',
+                'Wenn jemand anderes etwas einträgt, ändert oder löscht, während ihr beide die Gruppe offen habt. '
+                + 'Ohne Server erfährt dein Gerät davon nur, solange beide online sind.'));
+        showStatus();
+        return panel;
+    }
+
     function viewInvitePanel(doc) {
         const qrBox = h('div', { class: 'qr-card' });
         if (typeof QRCode !== 'undefined') {
@@ -3374,6 +3563,7 @@
                 h('div', { class: 'field' },
                     h('label', { for: 'editCurrency' }, 'Standardwährung'),
                     currencySelect(doc.meta.currency, function (e) { saveMeta(doc, { currency: e.target.value }, true); }, { id: 'editCurrency' }))),
+            viewNotifyPanel(doc),
             h('section', { class: 'panel' },
                 h('h2', null, 'Daten'),
                 h('div', { class: 'actions', style: 'margin-top:0' },
@@ -4501,11 +4691,18 @@
     window.addEventListener('online', function () { Sync.wake(); });
     window.addEventListener('offline', function () { updateSyncPill(); });
 
-    // Hält „zuletzt online“ aktuell, solange die Seite offen ist.
+    // Hält „zuletzt online“ aktuell, solange die Seite offen ist. Beginnt dabei ein neuer
+    // Tag, werden fällige Wiederholungen gebucht (sichtbar) oder gemeldet (im Hintergrund).
+    let today = C.todayStr();
     setInterval(function () {
         Sync.heartbeat();
         if (Sync.conns.size) markSeen(Sync.gid);
         updateSyncPill();
+        if (today !== C.todayStr()) {
+            today = C.todayStr();
+            if (document.hidden) askForDueCheck();
+            else softRender();
+        }
     }, HEARTBEAT);
 
     store = readStored();
@@ -4514,9 +4711,18 @@
     handleJoin().then(render);
 
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js').catch(function (e) {
-            // Normal bei file://, die App läuft dann ohne Offline-Modus.
-            console.info('Kwidt: Kein Service Worker.', e);
+        navigator.serviceWorker.register('sw.js')
+            .then(function () { if (dueGroups().length) updateBackgroundCheck(); })
+            .catch(function (e) {
+                // Normal bei file://, die App läuft dann ohne Offline-Modus.
+                console.info('Kwidt: Kein Service Worker.', e);
+            });
+        // Tippen auf eine Benachrichtigung, während die App schon offen ist.
+        navigator.serviceWorker.addEventListener('message', function (e) {
+            const msg = e.data;
+            if (msg && msg.app === 'quitt' && msg.type === 'open' && /^#\/g\/[0-9a-f]{32}(\/activity)?$/.test(msg.hash)) {
+                location.hash = msg.hash;
+            }
         });
     }
 })();
