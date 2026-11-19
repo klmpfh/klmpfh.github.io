@@ -39,6 +39,12 @@ function loadFromUrlParams() {
     const pausesParam = params.get('pauses');
     if (pausesParam) pauses = parsePausesParam(pausesParam);
 
+    // Benachrichtigungen: Hauptschalter, Pflichtpausen, Positionen der Arbeitszeiten (wie in daily) und der Pausen
+    notifyEnabled    = params.get('notify') === '1';
+    notifyAutoPauses = params.get('notifyAuto') === '1';
+    parseIndexList(params.get('notifyWork')).forEach(i => { if (workTimeRows[i]) workTimeRows[i].notify = true; });
+    parseIndexList(params.get('notifyPauses')).forEach(i => { if (pauses[i]) pauses[i].notify = true; });
+
     // "H:MM"; fehlt der Parameter, bleibt der gesetzliche Standardwert
     const maxWorkParam = parseDuration(params.get('maxWork'));
     if (maxWorkParam > 0) maxWorkInput.value = formatDuration(maxWorkParam);
@@ -59,6 +65,16 @@ function loadFromUrlParams() {
     // "times,pauses": eingeklappte Einstellungsbereiche
     const collapsed = (params.get('collapsed') || '').split(',');
     Object.entries(settingsPanels).forEach(([key, panel]) => { panel.open = !collapsed.includes(key); });
+}
+
+/** "0,2" → [0, 2] (ungültige Einträge entfallen) */
+function parseIndexList(str) {
+    return (str || '').split(',').map(s => parseInt(s, 10)).filter(i => i >= 0);
+}
+
+/** Positionen der Einträge mit gesetztem Merkmal → "0,2" */
+function serializeIndexList(list, isSet) {
+    return list.map((item, i) => isSet(item) ? i : -1).filter(i => i >= 0).join(',');
 }
 
 /** "HH:MM-HH:MM,HH:MM-HH:MM" → [{ startMin, durationMin }] */
@@ -110,7 +126,11 @@ function updateUrlParams() {
         maxWork:   maxWorkMin !== defaultMaxWorkMin ? formatDuration(maxWorkMin) : '',
         rest:      restMin !== defaultRestMin ? formatDuration(restMin) : '',
         timeline:  isDefaultTimeline ? '' : `${timelineFrom}-${timelineTo}`,
-        collapsed: Object.keys(settingsPanels).filter(key => !settingsPanels[key].open).join(',')
+        collapsed: Object.keys(settingsPanels).filter(key => !settingsPanels[key].open).join(','),
+        notify:       notifyEnabled ? '1' : '',
+        notifyAuto:   notifyAutoPauses ? '1' : '',
+        notifyWork:   serializeIndexList(targets, t => workTimeRows[t.index].notify),
+        notifyPauses: serializeIndexList(pauses, p => p.notify)
     });
     if (qs === lastUrlQuery) return;
     lastUrlQuery = qs;

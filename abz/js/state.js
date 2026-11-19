@@ -14,6 +14,8 @@ let autoPauseMode      = false;  // true = fehlende Pflichtpausen werden automat
 let workTimeRows       = [];     // [{ el, dailyInput, weeklyInput, relevantBtn }] – eingegebene Arbeitszeiten
 let workTimeRowUid     = 0;      // fortlaufend für eindeutige Feld-IDs
 let relevantIndex      = 0;      // Zeile in workTimeRows, deren Werte im Seitentitel stehen
+let notifyEnabled      = false;  // Hauptschalter Benachrichtigungen (einzelne: row.notify, pause.notify)
+let notifyAutoPauses   = false;  // Benachrichtigung für automatisch ergänzte Pflichtpausen
 
 const titleStatLabels = {
     percent: 'Fortschritt',
@@ -77,7 +79,8 @@ const dom = {
 // Einklappbare Einstellungsbereiche; Schlüssel = Wert im URL-Parameter „collapsed“
 const settingsPanels = {
     times:  document.getElementById('timesPanel'),
-    pauses: document.getElementById('pausesPanel')
+    pauses: document.getElementById('pausesPanel'),
+    notify: document.getElementById('notifyPanel')
 };
 
 // Kacheln der gemeinsamen Werte; die Kacheln je Arbeitszeit entstehen dynamisch (renderTargetStats)

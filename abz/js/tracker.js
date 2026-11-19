@@ -217,6 +217,9 @@ function updateTracker() {
     renderPauseList(currentMinOfDay, effectivePauses, runningPauseMin);
     renderWarnings(netWorkMin, allPauseMin, warnMarkersAll, maxWorkMin);
     updateSettingsSummaries(targets, effectivePauses, allPauseMin);
+    updateNotifyUi(targets);
+    // "Jetzt" im selben Bezugssystem wie targetEndMin (ab Startzeit, nach Mitternacht über 1440 hinaus)
+    checkNotifications({ nowMin: startMin + clockSinceStartMin, startMin, hasStart, targets, pauses: effectivePauses });
     drawTimeline(elapsedMin, startMin, currentMinOfDay, runningPauseMin, targetMarkers, warnMarkers, effectivePauses, axisMaxDuration);
     updateTimelineRangeWarning(startMin, targetEnds, startMin + elapsedMin);
     updateUrlParams();
