@@ -61,6 +61,15 @@ relativ, über die eigene `src`-Angabe.
   (Schalter „Von mir“ / „An mich“): was, wann, an wen bzw. von wem, bis wann geplant.
   Status (offen/fällig/überfällig/zurück), Filter und Suche. Daten liegen nur im localStorage des Browsers,
   Backup als JSON-Datei herunterladen und wieder einlesen.
+- `/wohnung/` – Wohnungskauf: persönliche Finanzen (Cash, Eigenkapital, Einkommen, Kreditrahmen der Bank) auf der
+  Übersicht, je Wohnung Kaufpreis, Nebenkosten (Grunderwerbsteuer je Bundesland), Hausgeld, WG-Zimmer mit Untermiete
+  (inkl. grober Steuerschätzung), Annuitätendarlehen mit Zinsbindung/Anschlusszins/Sondertilgung. Monatsbilanz, Checks,
+  Tilgungsplan, Diagramm und Vergleichstabelle. Objekt-Bewertung gegen Faustwerte (Hausgeld/m², Baujahr, Grundsteuer,
+  Makler, Inventar, WG-Eignung) mit Rückfragen an Makler/Verwaltung zum Kopieren und Unterlagen-Checkliste. Wünsche & Bedingungen:
+  Personen ergänzen frei formulierte Wünsche, jede Person gewichtet jeden Wunsch (0–100 %) und bewertet ihn in jeder Wohnung;
+  daraus Passung je Person und gemeinsam (offene Gewichtungen/Bewertungen werden angezeigt). `js/calc.js` ist die Rechenlogik, `js/app.js` die Oberfläche. Daten im
+  localStorage, Übertragung zwischen Geräten per JSON-Export/-Import (alles oder einzelne Wohnung) oder per Link/QR-Code
+  (`#import=…`, Daten deflate-komprimiert im Hash, überschreibt nach Rückfrage alles auf dem Zielgerät).
 - `/zauberkloppen/` – Szenario-Generator für Fantasy-Rollenspiele.
 - `/zeitfresser/` – Zeitfresser: Wochenanalyse, wohin die Zeit geht. Themen mit Wert pro Woche oder pro Tag
   an gewählten Wochentagen, darunter eine Ebene Unterpunkte; nicht zugeordnete Zeit wird schraffiert gezeigt,
