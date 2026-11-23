@@ -743,11 +743,10 @@ table {
 .cost-split { display: flex; gap: 8px; min-width: 0; }
 .cost-split select { flex: 1 1 0; }
 .cost-split .input-wrap { flex: 0 0 84px; }
-.cost-split .input-wrap[hidden],
-.cost-persons[hidden] { display: none; }
+.cost-split .input-wrap[hidden] { display: none; }
 .cost-mine { font-variant-numeric: tabular-nums; text-align: right; }
 .cost-row:not(.room-head) .cost-mine { font-size: 13px; font-weight: 600; }
-.cost-persons { margin-bottom: 12px; }
+.cost-persons { margin: 4px 0 12px; }
 .cost-total { font-weight: 600; }
 .cost-total:empty { display: none; }
 .cost-row .input-wrap input,
@@ -779,7 +778,8 @@ table {
         border-bottom: 1px solid var(--border);
     }
     .cost-row.room-head { display: none; }
-    .cost-row > input { grid-column: 1 / 3; grid-row: 1; }
+    .cost-row > input,
+    .cost-row > .cost-heat-name { grid-column: 1 / 3; grid-row: 1; }
     .cost-row > .icon-btn { grid-column: 3; grid-row: 1; }
     .cost-row > .input-wrap { grid-column: 1; }
     .cost-row > select { grid-column: 2 / -1; }
@@ -813,7 +813,15 @@ table {
 .cost-state:empty { display: none; }
 .cost-check.is-covered .cost-name,
 .cost-check.is-covered .cost-amount { color: var(--muted); text-decoration: line-through; }
-.cost-sum { padding: 6px 8px 0; }
+.cost-sum { margin: 0 0 8px; font-weight: 600; }
+.cost-sum:empty { display: none; }
+.cost-single { margin-bottom: 12px; }
+.cost-single > p { margin: 8px 0 4px; }
+.cost-heating { margin-top: 18px; }
+.cost-heating .cost-sum { margin-top: 8px; }
+.cost-heating .field[hidden] { display: none; }
+.cost-heat-title { margin-top: 20px; }
+.cost-heat-name { font-weight: 600; }
 
 /* Art der Wohnung (Kauf / Miete) auf den Karten */
 .kind-tag {
@@ -852,32 +860,15 @@ table {
 .person-me { display: flex; justify-content: center; }
 .person .input-wrap input { padding-right: 30px; }
 .person .unit { right: 8px; }
-/* Rechenwege unter „Was ist drin?“ */
-.budget-ways {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
-    gap: 8px 32px;
-    max-width: 860px;
-    margin: 16px 0 10px;
-}
-
-.budget-ways h4 { font-size: 13.5px; margin-bottom: 6px; }
-
-.person-fin {
+.person-more {
     margin: 0 0 8px;
     padding-left: 12px;
     border-left: 3px solid var(--border);
+    font-size: 12.5px;
 }
 
-.person-limit { margin: 8px 0 0; font-weight: 600; line-height: 1.4; }
-
-.person-limit.is-warn {
-    padding: 8px 10px;
-    border: 1px solid var(--theme-warning);
-    border-radius: 8px;
-    background: var(--theme-warning-soft);
-    font-weight: 400;
-}
+.person-more > summary { cursor: pointer; color: var(--muted); }
+.person-more > .person-incl { margin: 8px 0; padding-left: 0; border-left: 0; }
 
 .person-incl {
     display: flex;
@@ -890,7 +881,6 @@ table {
     line-height: 1.4;
 }
 
-.person-incl[hidden] { display: none; }
 .person-incl label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
 .person-incl label:has(:disabled) { color: var(--muted); cursor: default; }
 .person-incl input { flex: none; margin: 0; }
@@ -1059,7 +1049,6 @@ table {
 }
 
 .loan-out b { color: var(--text); }
-.loan-target { margin-top: 10px; }
 
 /* Diagramm */
 .chart-box { margin-top: 8px; }
@@ -1098,8 +1087,6 @@ table {
 .chart-area .axis { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .chart-area .end-label { fill: var(--text); font-size: 11.5px; font-weight: 600; }
 .chart-area .fixed { stroke: var(--theme-gray-400); stroke-dasharray: 4 4; }
-.chart-area .target { stroke: var(--primary); stroke-dasharray: 2 3; }
-.chart-area .target-label { fill: var(--primary-strong); font-weight: 700; }
 .chart-area .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .chart-area .line.s1 { stroke: var(--series-1); }
 .chart-area .line.s2 { stroke: var(--series-2); }

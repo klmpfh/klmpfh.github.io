@@ -64,12 +64,12 @@ relativ, über die eigene `src`-Angabe.
   (Schalter „Von mir“ / „An mich“): was, wann, an wen bzw. von wem, bis wann geplant.
   Status (offen/fällig/überfällig/zurück), Filter und Suche. Daten liegen nur im localStorage des Browsers,
   Backup als JSON-Datei herunterladen und wieder einlesen.
-- `/wohnung/` – Wohnung kaufen oder mieten: Personen (gelten für Kostenaufteilung, Maximum je Person und Wünsche; faire Miete je Zimmer nach Größe, Lage und Ausstattung), persönliche Finanzen (Cash, Eigenkapital, Einkommen, Kreditrahmen der Bank,
-  private Nebenkosten wie Strom/Internet/Rundfunk – mit Zeitraum (Monat bis Jahr) und Aufteilung (gleichmäßig, Prozent, je Person,
-  komplett), je Wohnung abwählbar, wenn schon in Warmmiete/Hausgeld enthalten) auf der
+- `/wohnung/` – Wohnung kaufen oder mieten: Personen (gelten für Kostenaufteilung, ein Maximum pro Monat je Person und Wünsche; faire Miete je Zimmer nach Größe, Lage und Ausstattung), Finanzierung laut Bank (max. Monatsrate, max. Darlehen, Eigenkapital, Konditionen – gilt für alle Kaufwohnungen, mit Anleitung zum Selberrechnen),
+  private Nebenkosten (Strom/Internet/Rundfunk, mit Zeitraum (Monat bis Jahr) und Aufteilung (gleichmäßig, Prozent, je Person,
+  komplett), je Wohnung abwählbar, wenn schon in Warmmiete/Hausgeld enthalten; Heizung als eigener Posten, je Wohnung extra oder enthalten) auf der
   Übersicht. Mietwohnungen mit Kalt-/Warmmiete, Kaution und fester, Staffel- oder Indexmiete (Mietentwicklung über 10 Jahre),
   im selben Vergleich wie Kaufwohnungen. Je Kaufwohnung Kaufpreis, Nebenkosten (Grunderwerbsteuer je Bundesland), Hausgeld, WG-Zimmer mit Untermiete
-  (ohne Steuer), Annuitätendarlehen mit Zinsbindung/Anschlusszins/Sondertilgung, Abgleich mit einer Wunschlaufzeit. Monatsbilanz, Checks,
+  (ohne Steuer), Annuitätendarlehen mit Zinsbindung/Anschlusszins/Sondertilgung (Rate standardmäßig die max. Monatsrate der Bank). Monatsbilanz, Checks,
   Tilgungsplan, Diagramm und Vergleichstabelle. Objekt-Bewertung gegen Faustwerte (Hausgeld/m², Baujahr, Energieverbrauch und Heizung mit geschätzten Heizkosten, Grundsteuer,
   Makler, Inventar, WG-Eignung) mit Rückfragen an Makler/Verwaltung zum Kopieren und Unterlagen-Checkliste. Wünsche & Bedingungen:
   gemeinsame Liste frei formulierter Wünsche (für alle gleich oder bezogen auf einen Ort je Person), jede Person gewichtet jeden Wunsch (0–100 %) und bewertet ihn in jeder Wohnung;

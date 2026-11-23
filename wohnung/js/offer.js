@@ -25,6 +25,7 @@ var OFFER = (function () {
         { key: 'energyCert', kind: 'both', type: 'enum', options: WK.ENERGY_CERTS, label: 'Art des Energieausweises', text: 'Art des Energieausweises' },
         { key: 'energySource', kind: 'both', type: 'enum', options: WK.ENERGY_SOURCES, label: 'Energieträger', text: 'wesentlicher Energieträger der Heizung' },
         { key: 'heatingType', kind: 'both', type: 'enum', options: WK.HEATING_TYPES, label: 'Heizungsart', text: 'Heizungsart; "Fußbodenheizung" allein sagt nichts darüber, dann null' },
+        { key: 'heatPay', kind: 'both', type: 'enum', options: WK.HEAT_PAY, label: 'Abrechnung der Heizung', text: 'wie die Heizung abgerechnet wird, nur wenn es im Angebot steht (z. B. "Hausgeld inkl. Heizung" oder eigener Gasvertrag), sonst null' },
         { key: 'utilities', kind: 'both', type: 'num', label: 'Weitere laufende Kosten', text: 'weitere feste Kosten pro Monat, die nur diese Wohnung betreffen, z. B. Miete für den Stellplatz' },
         { key: 'notes', kind: 'both', type: 'text', label: 'Notizen', text: 'alles Weitere in Stichpunkten, Zeilen mit \\n getrennt: Zimmerzahl und -größen, Etage, Aufzug, Balkon, Keller, Stellplatz, Küche, Zustand und Sanierungen, frei ab, Befristung oder Kündigungsverzicht, Haustiere, WG erlaubt, Anbieter; außerdem Unklarheiten und Widersprüche' },
 
@@ -56,7 +57,7 @@ var OFFER = (function () {
     var EXAMPLES = {
         rent: {
             kind: 'rent', name: '3 Zimmer Nordstadt', address: 'Musterstraße 12, 12345 Musterstadt (Nordstadt)', link: 'https://example.com/angebot/123',
-            area: 74.5, year: 1968, energyUse: 142, energyCert: 'verbrauch', energySource: 'gas', heatingType: 'zentral', utilities: 60,
+            area: 74.5, year: 1968, energyUse: 142, energyCert: 'verbrauch', energySource: 'gas', heatingType: 'zentral', heatPay: 'incl', utilities: 60,
             distanceBasis: 'adresse', station: 'U Nordstadt (U2)', stationM: 450,
             notes: '3 Zimmer, 2. OG, kein Aufzug, Balkon\nStellplatz 60 € pro Monat\nFrei ab 01.03.\nUnklar: Ist Warmwasser in den Heizkosten enthalten?',
             coldRent: 890, serviceCharges: 140, heatingCosts: 95, deposit: 2670, rentType: 'staffel',
@@ -64,7 +65,7 @@ var OFFER = (function () {
         },
         buy: {
             kind: 'buy', name: 'Altbau am Park', address: '54321 Beispielstadt (Altstadt)', link: null,
-            area: 82, year: 1912, energyUse: null, energyCert: null, energySource: 'gas', heatingType: 'etage', utilities: null,
+            area: 82, year: 1912, energyUse: null, energyCert: null, energySource: 'gas', heatingType: 'etage', heatPay: null, utilities: null,
             distanceBasis: 'gebiet', station: null, stationM: null,
             notes: '3 Zimmer, Hochparterre, Bad 2018 saniert, Keller\nEnergieausweis: Denkmalschutz, nicht erforderlich\nSonderumlage für das Dach angekündigt, Höhe unklar',
             price: 329000, inventory: 6000, state: 'NW', brokerPct: 3.57, hoa: 310, hoaApport: 205, propertyTax: 420
