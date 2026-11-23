@@ -719,7 +719,7 @@
                         : 'keine Daten von dir.') +
                         (places.length ? '' : ' Mit wichtigen Orten unter „Personen“ (Übersicht) ermittelt die KI auch die Entfernungen.') +
                         (wishCount ? '' : ' Mit Wünschen (Übersicht) bewertet sie auch, was eindeutig ist.') }),
-                    el('li', { text: 'Den Text des Angebots dahinter einfügen, oder PDF bzw. Screenshots anhängen, und abschicken.' }),
+                    el('li', { text: 'Dahinter den Text oder den Link des Angebots einfügen, oder PDF bzw. Screenshots anhängen, und abschicken. Kann die KI den Link nicht öffnen (manche Portale sperren das), nimm Text, PDF oder Screenshots.' }),
                     el('li', { text: 'Die Antwort unten einfügen und übernehmen.' + (wishCount ? ' Bei Wünschen werden offene Bewertungen gefüllt; weicht eine eigene ab, wirst du gefragt.' : '') })
                 ]),
                 el('div', { class: 'actions' }, [
