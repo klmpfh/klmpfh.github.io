@@ -1,11 +1,15 @@
 /* Wohnung – Angebot per KI übernehmen (ohne DOM-Zugriff).
    prompt() erklärt einer KI, welche Angaben aus einem Angebot gebraucht werden
    und wie das JSON aussieht; read()/parse() lesen die Antwort wieder ein.
-   Beides entsteht aus FIELDS – neue Angaben nur dort ergänzen. */
+   Beides entsteht aus FIELDS – neue Angaben nur dort ergänzen.
+   places: [{ id, name, address }] – wichtige Orte der Personen. Namen der
+   Personen stehen nicht im Prompt, wohl aber die Adressen der Orte. */
 var OFFER = (function () {
     'use strict';
 
-    // kind: 'both' | 'rent' | 'buy'; type: 'num' | 'text' | 'enum'
+    var BASIS = [['adresse', 'genaue Adresse'], ['gebiet', 'nur ungefähre Lage']];
+
+    // kind: 'both' | 'rent' | 'buy' | 'geo' (Entfernungen, für beide); type: 'num' | 'text' | 'enum' | 'steps' | 'distances'
     var FIELDS = [
         { key: 'name', kind: 'both', type: 'text', label: 'Spitzname', text: 'kurzer Name für die Wohnung, höchstens 40 Zeichen, z. B. "3 Zimmer Nordstadt"' },
         { key: 'address', kind: 'both', type: 'text', label: 'Adresse / Lage', text: 'Straße, PLZ, Ort, Stadtteil – so genau wie angegeben' },
@@ -32,7 +36,12 @@ var OFFER = (function () {
         { key: 'brokerPct', kind: 'buy', type: 'num', label: 'Makler (Käuferanteil)', text: 'Provision für den Käufer in Prozent inkl. MwSt.; provisionsfrei = 0, ohne Angabe null' },
         { key: 'hoa', kind: 'buy', type: 'num', label: 'Hausgeld', text: 'Hausgeld pro Monat, gesamt inkl. Rücklage' },
         { key: 'hoaApport', kind: 'buy', type: 'num', label: 'Umlagefähiges Hausgeld', text: 'davon auf Mieter umlegbarer Teil pro Monat, nur wenn beziffert' },
-        { key: 'propertyTax', kind: 'buy', type: 'num', label: 'Grundsteuer pro Jahr', text: 'Grundsteuer pro Jahr (Quartalsbetrag × 4)' }
+        { key: 'propertyTax', kind: 'buy', type: 'num', label: 'Grundsteuer pro Jahr', text: 'Grundsteuer pro Jahr (Quartalsbetrag × 4)' },
+
+        { key: 'distanceBasis', kind: 'geo', type: 'enum', options: BASIS, label: 'Genauigkeit der Lage', text: '"adresse" nur, wenn Straße und Hausnummer bekannt sind; bei Straße ohne Hausnummer, Stadtteil oder PLZ "gebiet" und von der Mitte dieses Gebiets rechnen' },
+        { key: 'station', kind: 'geo', type: 'text', label: 'Nächste U-/S-Bahn', text: 'nächste U- oder S-Bahn-Station mit Linien, z. B. "U Nordstadt (U2)". Bei "gebiet" nur, wenn das Angebot sie nennt. Gibt es dort keine U- oder S-Bahn: null' },
+        { key: 'stationM', kind: 'geo', type: 'num', label: 'Fußweg zur U-/S-Bahn', text: 'Fußweg zu dieser Station in Metern. Im Angebot genannte Gehminuten × 80, sonst Luftlinie × 1,3, auf 50 m gerundet' },
+        { key: 'distances', kind: 'geo', type: 'distances', label: 'Entfernungen', text: 'Luftlinie von der Wohnung zu jedem der unten genannten Orte in km, eine Nachkommastelle: Liste aus { "id": Kennung des Ortes, "km": Zahl oder null }' }
     ];
 
     var KINDS = [['rent', 'Miete'], ['buy', 'Kauf']];
@@ -41,6 +50,7 @@ var OFFER = (function () {
         rent: {
             kind: 'rent', name: '3 Zimmer Nordstadt', address: 'Musterstraße 12, 12345 Musterstadt (Nordstadt)', link: 'https://example.com/angebot/123',
             area: 74.5, year: 1968, energyUse: 142, energyCert: 'verbrauch', energySource: 'gas', heatingType: 'zentral', utilities: 60,
+            distanceBasis: 'adresse', station: 'U Nordstadt (U2)', stationM: 450,
             notes: '3 Zimmer, 2. OG, kein Aufzug, Balkon\nStellplatz 60 € pro Monat\nFrei ab 01.03.\nUnklar: Ist Warmwasser in den Heizkosten enthalten?',
             coldRent: 890, serviceCharges: 140, heatingCosts: 95, deposit: 2670, rentType: 'staffel',
             steps: [{ year: 2, rent: 915 }, { year: 3, rent: 940 }]
@@ -48,32 +58,80 @@ var OFFER = (function () {
         buy: {
             kind: 'buy', name: 'Altbau am Park', address: '54321 Beispielstadt (Altstadt)', link: null,
             area: 82, year: 1912, energyUse: null, energyCert: null, energySource: 'gas', heatingType: 'etage', utilities: null,
+            distanceBasis: 'gebiet', station: null, stationM: null,
             notes: '3 Zimmer, Hochparterre, Bad 2018 saniert, Keller\nEnergieausweis: Denkmalschutz, nicht erforderlich\nSonderumlage für das Dach angekündigt, Höhe unklar',
             price: 329000, inventory: 6000, state: 'NW', brokerPct: 3.57, hoa: 310, hoaApport: 205, propertyTax: 420
         }
     };
 
+    /** Beispiel mit erfundenen Entfernungen zu den echten Orten. */
+    function exampleFlat(kind, places) {
+        var flat = Object.assign({}, EXAMPLES[kind]);
+        if (places.length) flat.distances = places.map(function (p, i) {
+            return { id: p.id, km: Math.round((kind === 'rent' ? 4.2 + 3.3 * i : 6.8 + 2.1 * i) * 10) / 10 };
+        });
+        return flat;
+    }
+
     function wrap(flat) { return { app: 'wohnungskauf', version: 1, kind: 'flat', flat: flat }; }
 
     function fieldLine(f) {
-        var type = f.type === 'num' ? 'Zahl' : f.type === 'text' ? 'Text' : f.type === 'steps' ? 'Liste' : 'Auswahl';
+        var type = f.type === 'num' ? 'Zahl' : f.type === 'text' ? 'Text' : f.options ? 'Auswahl' : 'Liste';
         return '- "' + f.key + '" (' + type + '): ' + f.text +
             (f.options ? '\n  Erlaubt: ' + f.options.map(function (o) { return '"' + o[0] + '" = ' + o[1]; }).join(', ') : '');
     }
 
-    function fieldLines(kind) {
-        return FIELDS.filter(function (f) { return f.kind === kind; }).map(fieldLine).join('\n');
+    function fieldLines(kind, places) {
+        return FIELDS.filter(function (f) { return f.kind === kind && (f.type !== 'distances' || places.length); }).map(fieldLine).join('\n');
     }
 
-    function example(kind) { return '```json\n' + JSON.stringify(wrap(EXAMPLES[kind]), null, 2) + '\n```'; }
+    function json(flat) { return '```json\n' + JSON.stringify(wrap(flat), null, 2) + '\n```'; }
 
-    function prompt() {
+    function oneLine(s) { return String(s || '').replace(/\s+/g, ' ').trim(); }
+
+    /** Orte, zu denen sich eine Entfernung bestimmen lässt. */
+    function located(places) { return (places || []).filter(function (p) { return oneLine(p.address); }); }
+
+    var GEO_RULES = [
+        '- Nutze eine Karten- oder Websuche, wenn du eine hast, sonst dein Wissen über die Lage. Schätzen ist hier erlaubt.',
+        '- Ist nur die Stadt oder gar keine Lage bekannt, setze alle Entfernungen auf null. Ebenso einzelne, die du nicht sinnvoll schätzen kannst.'
+    ];
+
+    function geoLines(places) {
+        return GEO_RULES.concat(fieldLines('geo', places)).concat(places.length
+            ? ['', 'Orte für "distances" (Kennung = Bezeichnung, Adresse):'].concat(places.map(function (p) {
+                return '- "' + p.id + '" = ' + (oneLine(p.name) || 'Ort') + ', ' + oneLine(p.address);
+            })) : []);
+    }
+
+    /** Nur Entfernungen für eine Wohnung, die schon eingetragen ist. */
+    function distancePrompt(places, flat) {
+        places = located(places);
+        var ex = { kind: flat.kind, distanceBasis: 'adresse', station: 'U Nordstadt (U2)', stationM: 450 };
+        if (places.length) ex.distances = exampleFlat('rent', places).distances;
+        return [
+            'Bestimme für die Wohnung am Ende die Entfernungen und gib sie als JSON im folgenden Format zurück. Ich importiere das JSON danach in meine Wohnungsberechnung.',
+            '',
+            'Regeln:',
+            '- Antworte nur mit einem einzigen JSON-Codeblock, ohne Text davor oder danach.',
+            '- Zahlen ohne Einheit, Dezimalpunkt statt Komma.'
+        ].concat(geoLines(places), [
+            '',
+            'Beispiel (Werte erfunden, nicht übernehmen; die Felder außer den Entfernungen bleiben genau so):',
+            json(ex),
+            '',
+            'Adresse oder Lage der Wohnung: ' + oneLine(flat.address)
+        ]).join('\n');
+    }
+
+    function prompt(places) {
+        places = located(places);
         return [
             'Lies aus dem Wohnungsangebot am Ende (Miete oder Kauf; als Text, PDF oder Bild) die Daten heraus und gib sie als JSON im folgenden Format zurück. Ich importiere das JSON danach in meine Wohnungsberechnung.',
             '',
             'Regeln:',
             '- Antworte nur mit einem einzigen JSON-Codeblock, ohne Text davor oder danach.',
-            '- Übernimm nur, was im Angebot steht. Nichts raten oder schätzen. Fehlt eine Angabe, setze null.',
+            '- Übernimm nur, was im Angebot steht. Nichts raten oder schätzen (Ausnahme: Entfernungen, siehe unten). Fehlt eine Angabe, setze null.',
             '- Umrechnen ist erlaubt, z. B. Quartalsbetrag auf Monat oder Kaution in Kaltmieten auf einen Betrag.',
             '- Zahlen ohne Einheit und ohne Tausenderpunkt, Dezimalpunkt statt Komma: 1250.5. Beträge in Euro, Prozent als 3.57 für 3,57 %.',
             '- Bei Auswahlfeldern sind nur die genannten Schlüssel erlaubt. Passt keiner, setze null und schreib die Angabe in notes.',
@@ -86,19 +144,22 @@ var OFFER = (function () {
             '',
             'Felder in "flat", immer:',
             '- "kind" (Auswahl): Art des Angebots, Pflicht\n  Erlaubt: ' + KINDS.map(function (k) { return '"' + k[0] + '" = ' + k[1]; }).join(', '),
-            fieldLines('both'),
+            fieldLines('both', places),
             '',
             'Zusätzlich nur bei Miete ("kind": "rent"):',
-            fieldLines('rent'),
+            fieldLines('rent', places),
             '',
             'Zusätzlich nur bei Kauf ("kind": "buy"):',
-            fieldLines('buy'),
+            fieldLines('buy', places),
+            '',
+            'Entfernungen, ebenfalls in "flat":',
+            geoLines(places).join('\n'),
             '',
             'Beispiel Miete (Werte erfunden, nicht übernehmen):',
-            example('rent'),
+            json(exampleFlat('rent', places)),
             '',
             'Beispiel Kauf (Werte erfunden, nicht übernehmen):',
-            example('buy'),
+            json(exampleFlat('buy', places)),
             '',
             'Hier ist das Angebot:',
             ''
@@ -135,21 +196,43 @@ var OFFER = (function () {
         return typeof v === 'string' || typeof v === 'number' ? String(v).trim() || null : null;
     }
 
-    /** Liest nur bekannte, gültige Angaben. Ergebnis: { error } oder
+    /** Liste [{ id, km }] (oder { id: km }) → { id: km } für bekannte Orte.
+     *  Ergebnis: { map, bad } – bad: unlesbar oder unbekannter Ort. */
+    function toDistances(v, places, parseNum) {
+        var list = Array.isArray(v) ? v.filter(isObj) : isObj(v) ? Object.keys(v).map(function (id) { return { id: id, km: v[id] }; }) : null;
+        var res = { map: {}, bad: !list };
+        (list || []).forEach(function (x) {
+            if (empty(x.km)) return;
+            var place = places.find(function (p) { return p.id === String(x.id); });
+            var km = toNum(x.km, parseNum);
+            if (place && km !== null) res.map[place.id] = km; else res.bad = true;
+        });
+        return res;
+    }
+
+    /** Liest nur bekannte, gültige Angaben. ctx: { parseNum, places, kind } –
+     *  kind gilt, wenn die Antwort keine Art nennt. Ergebnis: { error } oder
      *  { flat: vorhandene Angaben, ignored: Namen unlesbarer Angaben }. */
-    function read(data, parseNum) {
+    function read(data, ctx) {
+        var parseNum = ctx.parseNum;
         if (data && Array.isArray(data.flats)) return { error: 'Das ist ein Gesamt-Export. Den kannst du auf der Übersicht unter „Daten übertragen“ importieren.' };
         var raw = isObj(data) && isObj(data.flat) ? data.flat : data;
         if (!isObj(raw)) return { error: 'In der Antwort wurden keine Wohnungsdaten gefunden.' };
         var kind = empty(raw.kind) ? null : toOption(raw.kind, KINDS);
-        if (!kind) kind = !empty(raw.price) ? 'buy' : !empty(raw.coldRent) ? 'rent' : null;
+        if (!kind) kind = !empty(raw.price) ? 'buy' : !empty(raw.coldRent) ? 'rent' : ctx.kind || null;
         if (!kind) return { error: 'In der Antwort fehlt, ob es eine Miet- oder Kaufwohnung ist („kind“).' };
 
         var flat = {}, ignored = [];
         FIELDS.forEach(function (f) {
-            if (f.kind !== 'both' && f.kind !== kind) return;
+            if ((f.kind === 'rent' || f.kind === 'buy') && f.kind !== kind) return;
             var v = raw[f.key];
             if (empty(v) || (Array.isArray(v) && !v.length)) return;
+            if (f.type === 'distances') {
+                var d = toDistances(v, ctx.places || [], parseNum);
+                if (Object.keys(d.map).length) flat[f.key] = d.map;
+                if (d.bad) ignored.push(f.label);
+                return;
+            }
             var x = toValue(f, v, parseNum);
             if (x === null) ignored.push(f.label); else flat[f.key] = x;
         });
@@ -160,7 +243,7 @@ var OFFER = (function () {
     }
 
     /** Antwort einer KI: reines JSON, JSON im Codeblock oder mit Text drumherum. */
-    function parse(text, parseNum) {
+    function parse(text, ctx) {
         text = String(text || '').replace(/ /g, ' ').trim();
         if (!text) return { error: 'Bitte zuerst die Antwort der KI einfügen.' };
         var block = text.match(/```[a-z]*\s*([\s\S]*?)```/i);
@@ -170,7 +253,7 @@ var OFFER = (function () {
             if (!tries[i]) continue;
             var data;
             try { data = JSON.parse(tries[i]); } catch (e) { continue; }
-            return read(data, parseNum);
+            return read(data, ctx);
         }
         return { error: 'Die Antwort enthält kein gültiges JSON – wurde sie vollständig kopiert?' };
     }
@@ -181,5 +264,5 @@ var OFFER = (function () {
         return FIELDS.filter(function (f) { return keys.indexOf(f.key) !== -1 && empty(flat[f.key]); }).map(function (f) { return f.label; });
     }
 
-    return { FIELDS: FIELDS, EXAMPLES: EXAMPLES, prompt: prompt, read: read, parse: parse, missing: missing };
+    return { FIELDS: FIELDS, BASIS: BASIS, EXAMPLES: EXAMPLES, located: located, prompt: prompt, distancePrompt: distancePrompt, read: read, parse: parse, missing: missing };
 })();

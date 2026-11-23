@@ -894,6 +894,23 @@ table {
 .person-incl label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
 .person-incl label:has(:disabled) { color: var(--muted); cursor: default; }
 .person-incl input { flex: none; margin: 0; }
+.person-places {
+    margin: 0 0 14px;
+    padding-left: 12px;
+    border-left: 3px solid var(--border);
+    font-size: 12.5px;
+}
+
+.place {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr) 32px;
+    gap: 8px;
+    align-items: center;
+    margin: 6px 0;
+}
+
+.person-places .btn { display: block; margin-top: 4px; padding: 4px 10px; font-size: 12.5px; min-height: 32px; }
+.distance-note { margin-top: 10px; line-height: 1.45; }
 .incl-left { flex-basis: 100%; }
 .incl-left:empty { display: none; }
 .people-sum { font-weight: 600; margin-top: 10px; }

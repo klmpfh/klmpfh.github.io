@@ -72,6 +72,8 @@
             id: uid(), kind: kind === 'rent' ? 'rent' : 'buy', name: 'Neue Wohnung', address: '', link: '', notes: '',
             area: null, year: null, price: null, inventory: null,
             energyUse: null,     // kWh/(m²·a) laut Energieausweis
+            distances: {},       // { placeId: Luftlinie in km } zu den wichtigen Orten der Personen
+            distanceBasis: '', station: '', stationM: null,   // Genauigkeit (OFFER.BASIS), nächste U-/S-Bahn und Fußweg in m
             energySource: '', heatingType: '', energyCert: '',   // Schlüssel aus WK.ENERGY_SOURCES, HEATING_TYPES, ENERGY_CERTS; '' = unbekannt
             state: p.state, transferTaxPct: WK.transferTaxFor(p.state),
             notaryPct: p.notaryPct, brokerPct: p.brokerPct,
@@ -96,9 +98,15 @@
      *  (mit keepSaving = will sie weiter sparen, freiwillig) ihr Maximum im
      *  Monat für alles (personLimit in calc.js). rent: eigene
      *  Grenze, geht dem berechneten Maximum vor. includes: { Posten: false } = zahlt sie nicht über
-     *  mich (running = Nebenkosten & Heizung bzw. Hausgeld, sonst privateCostId). */
+     *  mich (running = Nebenkosten & Heizung bzw. Hausgeld, sonst privateCostId).
+     *  places: wichtige Orte wie Arbeit oder Familie, siehe newPlace. */
     function newPerson() {
-        return { id: uid(), name: '', self: false, netIncome: null, livingCosts: null, otherDebt: null, keepSaving: null, rent: null, includes: {} };
+        return { id: uid(), name: '', self: false, netIncome: null, livingCosts: null, otherDebt: null, keepSaving: null, rent: null, includes: {}, places: [] };
+    }
+
+    /** Entfernungen dorthin stehen je Wohnung in flat.distances. */
+    function newPlace() {
+        return { id: uid(), name: '', address: '' };
     }
 
     /** Wünsche gelten gemeinsam für alle. weights: { personId: 0–100 } – wie wichtig der Wunsch der jeweiligen Person ist. */
@@ -121,7 +129,7 @@
         out.id = out.id ? String(out.id) : uid();
         out.kind = out.kind === 'rent' ? 'rent' : 'buy';
         if (['fixed', 'staffel', 'index'].indexOf(out.rentType) === -1) out.rentType = 'fixed';
-        [['energySource', WK.ENERGY_SOURCES], ['heatingType', WK.HEATING_TYPES], ['energyCert', WK.ENERGY_CERTS]].forEach(function (x) {
+        [['energySource', WK.ENERGY_SOURCES], ['heatingType', WK.HEATING_TYPES], ['energyCert', WK.ENERGY_CERTS], ['distanceBasis', OFFER.BASIS]].forEach(function (x) {
             if (!x[1].some(function (o) { return o[0] === out[x[0]]; })) out[x[0]] = '';
         });
         out.steps = Array.isArray(out.steps) ? out.steps.filter(isObj).map(function (s) {
@@ -135,6 +143,8 @@
         out.wg.rooms = Array.isArray(out.wg.rooms) ? out.wg.rooms.map(function (r) {
             return Object.assign(newRoom(), r, { id: r && r.id ? String(r.id) : uid(), features: Object.assign({}, r && isObj(r.features) ? r.features : null) });
         }) : base.wg.rooms;
+        out.distances = isObj(out.distances) ? Object.assign({}, out.distances) : {};
+        Object.keys(out.distances).forEach(function (id) { if (!WK.isSet(out.distances[id])) delete out.distances[id]; else out.distances[id] = Number(out.distances[id]); });
         out.ratings = {};
         if (isObj(f && f.ratings)) Object.keys(f.ratings).forEach(function (wid) {
             if (isObj(f.ratings[wid])) out.ratings[wid] = Object.assign({}, f.ratings[wid]);
@@ -154,7 +164,10 @@
                 return { id: p.id ? String(p.id) : uid(), name: String(p.name || ''), self: p.self === true,
                     netIncome: numOrNull(p.netIncome), livingCosts: numOrNull(p.livingCosts), otherDebt: numOrNull(p.otherDebt),
                     keepSaving: numOrNull(p.keepSaving), rent: numOrNull(p.rent),
-                    includes: isObj(p.includes) ? Object.assign({}, p.includes) : {} };
+                    includes: isObj(p.includes) ? Object.assign({}, p.includes) : {},
+                    places: (Array.isArray(p.places) ? p.places : []).filter(isObj).map(function (x) {
+                        return { id: x.id ? String(x.id) : uid(), name: String(x.name || ''), address: String(x.address || '') };
+                    }) };
             })
             : [newPerson(), newPerson()];
         if (!people.length) people = [newPerson()];
@@ -507,7 +520,7 @@
                 route();
             } else if (data && isObj(data.flat) && !data.flat.id && !data.exported) {
                 // Antwort einer KI als Datei (siehe offer.js), kein Export dieser Seite
-                var read = OFFER.read(data, parseNum);
+                var read = OFFER.read(data, { parseNum: parseNum, places: allPlaces() });
                 if (read.error) alert(read.error);
                 else addOfferFlat(read);
             } else if (data && data.flat && typeof data.flat === 'object') {
@@ -545,6 +558,7 @@
             if (k === 'name') { if (autoName(f.name)) f.name = offer.name; }
             else if (k === 'notes') { if ((f.notes || '').indexOf(offer.notes) === -1) f.notes = (f.notes ? f.notes + '\n\n' : '') + offer.notes; }
             else if (k === 'steps') f.steps = offer.steps.map(function (s) { return Object.assign(newStep(), s); });
+            else if (k === 'distances') Object.assign(f.distances, offer.distances);
             else f[k] = offer[k];
         });
         if (f.state !== stateBefore) f.transferTaxPct = WK.transferTaxFor(f.state);
@@ -568,6 +582,12 @@
         OFFER.FIELDS.forEach(function (field) {
             var k = field.key, now = f[k], next = offer[k];
             if (next === undefined || k === 'name' || k === 'notes') return;
+            if (k === 'distances') {
+                allPlaces().forEach(function (x) {
+                    if (WK.isSet(now[x.id]) && WK.isSet(next[x.id]) && now[x.id] !== next[x.id]) out.push(x.label + ': ' + fmtKm(now[x.id]) + ' → ' + fmtKm(next[x.id]));
+                });
+                return;
+            }
             if (k === 'steps') {
                 if (!now.length || JSON.stringify(now.map(function (s) { return [s.year, s.rent]; })) === JSON.stringify(next.map(function (s) { return [s.year, s.rent]; }))) return;
             } else if (now === null || now === undefined || now === '' || now === next || now === base[k]) return;
@@ -578,8 +598,9 @@
 
     function offerDone(f, read) {
         var count = Object.keys(read.flat).length - 1;   // ohne "kind"
-        var missing = OFFER.missing(f);
-        offerStatus = { id: f.id, text: count + (count === 1 ? ' Angabe' : ' Angaben') + ' aus dem Angebot übernommen – bitte kurz prüfen.' +
+        var missing = OFFER.missing(f).concat(OFFER.located(allPlaces()).filter(function (x) { return !WK.isSet(f.distances[x.id]); })
+            .map(function (x) { return 'Entfernung zu ' + x.label; }));
+        offerStatus = { id: f.id, text: count + (count === 1 ? ' Angabe' : ' Angaben') + ' übernommen – bitte kurz prüfen.' +
             (missing.length ? ' Es fehlen noch: ' + missing.join(', ') + '.' : '') +
             (read.ignored.length ? ' Nicht lesbar: ' + read.ignored.join(', ') + '.' : '') };
     }
@@ -597,14 +618,15 @@
     function offerPanel(f) {
         var answer = el('textarea', { rows: 5, spellcheck: 'false', placeholder: '{ "app": "wohnungskauf", … }' });
         var error = el('p', { class: 'small offer-error', role: 'alert' });
-        function withAnswer(fn) {
+        function withAnswer(fn, kind) {
             return function () {
-                var read = OFFER.parse(answer.value, parseNum);
+                var read = OFFER.parse(answer.value, { parseNum: parseNum, places: allPlaces(), kind: kind });
                 error.textContent = read.error || '';
                 if (!read.error) fn(read);
             };
         }
-        var preview = el('pre', { class: 'offer-prompt', tabindex: '0', text: OFFER.prompt() });
+        var places = OFFER.located(allPlaces());
+        var preview = el('pre', { class: 'offer-prompt', tabindex: '0', text: OFFER.prompt(places) });
         var open = f.kind === 'rent' ? !(n(f.coldRent) > 0) : !(n(f.price) > 0);
         var status = offerStatus && offerStatus.id === f.id ? offerStatus.text : null;
 
@@ -613,12 +635,18 @@
             el('details', { class: 'offer', open: open && !status }, [
                 el('summary', { text: 'Anleitung, Prompt & Antwort einfügen' }),
                 el('ol', { class: 'offer-steps' }, [
-                    el('li', { text: 'Prompt kopieren und in eine KI einfügen (z. B. ChatGPT, Claude, Gemini). Er enthält keine Daten von dir.' }),
+                    el('li', { text: 'Prompt kopieren und in eine KI einfügen (z. B. ChatGPT, Claude, Gemini). ' + (places.length
+                        ? 'Er enthält die Adressen eurer wichtigen Orte (' + places.map(function (x) { return (x.name || '').trim() || 'Ort'; }).join(', ') + '), aber keine Personennamen und keine Finanzen.'
+                        : 'Er enthält keine Daten von dir. Mit wichtigen Orten unter „Personen“ (Übersicht) ermittelt die KI auch die Entfernungen.') }),
                     el('li', { text: 'Den Text des Angebots dahinter einfügen, oder PDF bzw. Screenshots anhängen, und abschicken.' }),
                     el('li', { text: 'Die Antwort unten einfügen und übernehmen.' })
                 ]),
                 el('div', { class: 'actions' }, [
-                    btn('Prompt kopieren', 'btn-primary', function (e) { copyText(OFFER.prompt(), e.currentTarget); })
+                    btn('Prompt kopieren', 'btn-primary', function (e) { copyText(OFFER.prompt(places), e.currentTarget); }),
+                    btn('Prompt nur für Entfernungen', 'btn-ghost', function (e) {
+                        error.textContent = (f.address || '').trim() ? '' : 'Trag zuerst unter „Objekt“ eine Adresse oder Lage ein.';
+                        if (!error.textContent) copyText(OFFER.distancePrompt(places, f), e.currentTarget);
+                    }, 'Für eine schon eingetragene Wohnung: schickt deren Adresse statt eines Angebots')
                 ]),
                 el('details', { class: 'explain offer-preview' }, [el('summary', { text: 'Prompt ansehen' }), preview]),
                 fieldWrap('Antwort der KI', answer),
@@ -631,11 +659,76 @@
                         offerDone(f, read);
                         saveNow();
                         renderDetail(f);
-                    })),
+                    }, f.kind)),
                     btn('Als neue Wohnung anlegen', 'btn-ghost', withAnswer(addOfferFlat))
                 ])
             ])
         ]);
+    }
+
+    /* ---------- Wichtige Orte & Entfernungen ---------- */
+
+    /** Alle Orte aller Personen; label nennt bei mehreren Personen auch den Namen. */
+    function allPlaces() {
+        return state.people.reduce(function (out, p) {
+            return out.concat(p.places.filter(function (x) { return x.name.trim() || x.address.trim(); }).map(function (x) {
+                return { id: x.id, name: x.name, address: x.address, label: (x.name.trim() || 'Ort') + (state.people.length > 1 ? ' (' + personName(p) + ')' : '') };
+            }));
+        }, []);
+    }
+
+    function fmtKm(v) { return fmtInput(v, 1) + ' km'; }
+
+    /** "ca." bei nur ungefähr bekannter Lage. */
+    function approx(f, text) { return (f.distanceBasis === 'gebiet' ? 'ca. ' : '') + text; }
+
+    /** Vergleichszeilen: nächste Station und jeder wichtige Ort. */
+    function distanceRows() {
+        return [{ label: 'Fußweg zur U-/S-Bahn', sep: true, best: 'min', get: function (a) { return WK.isSet(a.flat.stationM) ? Number(a.flat.stationM) : null; },
+            f: function (v, a) {
+                var name = (a.flat.station || '').trim();
+                return v === null ? name || '–' : approx(a.flat, fmtInput(v, 0) + ' m') + (name ? ' · ' + name : '');
+            } }].concat(allPlaces().map(function (x) {
+            return { label: 'Entfernung: ' + x.label, best: 'min', get: function (a) { return WK.isSet(a.flat.distances[x.id]) ? Number(a.flat.distances[x.id]) : null; },
+                f: function (v, a) { return v === null ? '–' : approx(a.flat, fmtKm(v)); } };
+        }));
+    }
+
+    /** Wichtige Orte einer Person (Übersicht). */
+    function renderPlaces(box, p, focusLast) {
+        box.innerHTML = '';
+        box.appendChild(el('span', { class: 'muted', text: 'Wichtige Orte:' }));
+        p.places.forEach(function (x, idx) {
+            function input(key, placeholder, label) {
+                var i = el('input', { type: 'text', autocomplete: 'off', placeholder: placeholder, 'aria-label': label, list: key === 'name' ? 'place-names' : null });
+                i.value = x[key];
+                i.addEventListener('input', function () { x[key] = i.value; changed(); });
+                return i;
+            }
+            var name = input('name', 'z. B. Arbeit', 'Bezeichnung des Ortes');
+            box.appendChild(el('div', { class: 'place' }, [
+                name,
+                input('address', 'Straße, PLZ Ort', 'Adresse des Ortes'),
+                el('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Ort entfernen', title: 'Ort entfernen', text: '×', onclick: function () {
+                    var used = state.flats.some(function (f) { return WK.isSet(f.distances[x.id]); });
+                    if (used && !confirm('„' + (x.name.trim() || 'Ort') + '“ entfernen?\n\nDie Entfernungen dorthin gehen in allen Wohnungen verloren.')) return;
+                    removePlace(p, x);
+                    renderPlaces(box, p);
+                    changed();
+                } })
+            ]));
+            if (focusLast && idx === p.places.length - 1) setTimeout(function () { name.focus(); }, 0);
+        });
+        box.appendChild(btn('+ Ort', 'btn-ghost', function () {
+            p.places.push(newPlace());
+            renderPlaces(box, p, true);
+            changed();
+        }));
+    }
+
+    function removePlace(p, x) {
+        state.flats.forEach(function (f) { delete f.distances[x.id]; });
+        p.places.splice(p.places.indexOf(x), 1);
     }
 
     /* ---------- Übersicht ---------- */
@@ -752,6 +845,7 @@
                 ['Wie das Maximum entsteht', 'Netto − Lebenshaltung − andere Kreditraten − was die Person weiter sparen will. Davon bleiben 10 % als Luft. Die heutige Miete wird nicht abgezogen, weil sie wegfällt. Das Maximum gilt für alles zusammen: Miete, Nebenkosten, Strom, Internet usw.'],
                 ['Max. im Monat', 'Leer lassen, dann gilt das berechnete Maximum (grau im Feld). Will jemand weniger oder mehr zahlen, hier die eigene Grenze eintragen – sie geht vor. Zahlt jemand nichts, 0 eintragen; dann zählt auch das Einkommen nicht mit.'],
                 ['Zahlt über mich', 'Mit Haken: Du bezahlst die Rechnung, und die Person gibt dir ihren Anteil mit der Miete. Der Anteil ist deshalb kein Geld für Kredit oder Kaltmiete. Ohne Haken: Die Person zahlt ihren Anteil selbst, z. B. direkt an den Anbieter. Bei Nebenkosten & Heizung heißt ohne Haken: Sie zahlt dir den Anteil zusätzlich zur Miete.'],
+                ['Wichtige Orte', 'Z. B. Arbeit, Uni oder Familie mit Adresse. Der KI-Prompt auf der Seite einer Wohnung enthält diese Adressen, damit die KI die Entfernungen ermittelt; sie stehen dann im Vergleich. Alternativ trägst du die Entfernungen in jeder Wohnung selbst ein. Wer die Adressen nicht an eine KI schicken will, lässt das Adressfeld leer.'],
                 ['Was davon im Budget zählt', '„Was ist drin?“ rechnet mit dem, was vom Maximum nach den privaten Nebenkosten übrig ist, aber höchstens mit 30 % vom Netto der Person (mehr Miete wäre unrealistisch). Für die Bank zählen davon nur 70 %, weil Banken Mieteinnahmen meist nicht voll anrechnen. Was eine Person wirklich zahlt, steht in jeder Wohnung.']
             ])], {
             hint: 'Wer zusammen wohnen will. Alle hier teilen sich die privaten Nebenkosten und gewichten die Wünsche. ' +
@@ -1064,6 +1158,7 @@
 
     function removePerson(p) {
         state.wishes.forEach(function (w) { delete w.weights[p.id]; });
+        p.places.slice().forEach(function (x) { removePlace(p, x); });
         state.flats.forEach(function (f) {
             Object.keys(f.ratings).forEach(function (wid) { delete f.ratings[wid][p.id]; });
             // Zimmer mit Angaben bleiben stehen, dort wohnt dann jemand anderes.
@@ -1134,7 +1229,7 @@
             if (p.self) { rent._input.disabled = true; rent._input.placeholder = 'ich'; rent._input.value = ''; }
             // Ich bleibe immer in der Liste.
             var del = p.self ? null : el('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Person entfernen', title: 'Person entfernen', text: '×', onclick: function () {
-                if (!confirm(personName(p) + ' entfernen?\n\nDabei gehen alle Gewichtungen, Bewertungen und Finanzangaben dieser Person verloren. Ein Zimmer mit Angaben bleibt in der Wohnung als „jemand anderes“ stehen. Die privaten Nebenkosten werden neu aufgeteilt.')) return;
+                if (!confirm(personName(p) + ' entfernen?\n\nDabei gehen alle Gewichtungen, Bewertungen und Finanzangaben und Orte dieser Person verloren. Ein Zimmer mit Angaben bleibt in der Wohnung als „jemand anderes“ stehen. Die privaten Nebenkosten werden neu aufgeteilt.')) return;
                 removePerson(p);
                 renderPeople(box, onList);
                 onList();
@@ -1151,8 +1246,12 @@
                 el('p', { class: 'small person-limit', 'data-limit': p.id })
             ]));
             box.appendChild(el('div', { class: 'person-incl', 'data-incl': p.id, hidden: true }));
+            var places = el('div', { class: 'person-places' });
+            renderPlaces(places, p);
+            box.appendChild(places);
             if (focusLast && idx === state.people.length - 1) setTimeout(function () { input.focus(); }, 0);
         });
+        box.appendChild(el('datalist', { id: 'place-names' }, ['Arbeit', 'Familie', 'Freunde', 'Uni', 'Schule', 'Kita'].map(function (x) { return el('option', { value: x }); })));
         box.appendChild(btn('+ Person', 'btn-ghost', function () {
             addPerson();
             renderPeople(box, onList, true);
@@ -1435,7 +1534,7 @@
         });
         var hasWishes = state.wishes.length > 0 && state.people.length > 0;
 
-        var rows = COMPARE;
+        var rows = COMPARE.concat(distanceRows());
         if (hasWishes) {
             rows = rows.concat([{ label: state.people.length > 1 ? 'Passt zu uns (Wünsche)' : 'Passt zu ' + personName(state.people[0]) + ' (Wünsche)', get: function (a) { return a.wish.overall; }, f: function (v, a) { return fmtWish(v, a.wish.ko.length); }, best: 'max', strong: true, sep: true }]);
             if (state.people.length > 1) {
@@ -1495,6 +1594,7 @@
                 '</tbody></table></div>' +
                 (results.length >= 2 ? '<p class="muted small">Markiert = bester Wert der Zeile. „Echte Kosten“ = beim Kauf Zinsen + Nebenkosten + entgangene Rendite aufs Eigenkapital − WG-Einnahmen (Tilgung zählt als Sparen), bei Miete Netto-Wohnkosten + entgangene Rendite auf die Kaution. „ggü. heute“ vergleicht mit deiner aktuellen Warmmiete plus privaten Nebenkosten.' +
                     (results.some(function (a) { return isRent(a) && a.partners.length; }) ? ' „Warmmiete / Netto-Einkommen“ rechnet mit dem Einkommen aller, die dort wohnen und mitzahlen.' : '') +
+                    (state.flats.some(function (f) { return Object.keys(f.distances).length; }) ? ' Entfernungen = Luftlinie, „ca.“ = Lage nur ungefähr bekannt.' : '') +
                     (hasWishes ? ' „Passt zu …“ = wie gut die Wohnung die Wünsche erfüllt, gewichtet nach Wichtigkeit; gemeinsam = Durchschnitt aller Personen.' : '') + '</p>' : '');
         }
         box.innerHTML = cards + table;
@@ -1599,9 +1699,22 @@
                 'Für weitere Untermieter „jemand anderes“ wählen und die Warmmiete eintragen.' +
                 (rent ? ' Als Hauptmieter brauchst du die Erlaubnis des Vermieters zur Untervermietung.' : '') });
 
-        function energySelect(key, label, options, hint) {
+        function choiceField(key, label, options, hint) {
             return fieldWrap(label, selectBox([['', 'unbekannt']].concat(options), f[key], label, function (v) { f[key] = v; changed(); }), hint);
         }
+
+        var flatPlaces = allPlaces();
+        var distanceGroup = group('Lage & Entfernungen', [
+            textField(f, 'station', 'Nächste U-/S-Bahn', { placeholder: 'z. B. U Nordstadt (U2)', cls: 'span-2' }),
+            numField(f, 'stationM', 'Fußweg dorthin', { unit: 'm', dec: 0 })
+        ].concat(flatPlaces.map(function (x) {
+            return numField(f.distances, x.id, 'Entfernung: ' + x.label, { unit: 'km', dec: 1, hint: x.address.trim() || 'Luftlinie' });
+        }), [
+            choiceField('distanceBasis', 'Entfernungen gerechnet ab', OFFER.BASIS)
+        ]));
+        distanceGroup.appendChild(el('p', { class: 'muted small distance-note', text: flatPlaces.length
+            ? 'Orte als Luftlinie. Die KI schätzt diese Werte – bei wichtigen Strecken in einer Karte nachprüfen.'
+            : 'Wichtige Orte (Arbeit, Familie …) trägst du auf der Übersicht unter „Personen“ ein, dann erscheinen hier die Entfernungen.' }));
 
         var objectPanel = panel('Objekt', [
                 group(null, [
@@ -1619,10 +1732,11 @@
                         return e.cls ? 'Entspricht Klasse ' + e.cls + (e.cost !== null ? ', geschätzt ' + eur(e.cost) + ' Heizkosten im Monat.' : '.')
                             : 'Pro Jahr, laut Exposé oder Energieausweis.';
                     } }),
-                    energySelect('energyCert', 'Art des Energieausweises', WK.ENERGY_CERTS, 'Verbrauch = gemessen, hängt von den Bewohnern ab. Bedarf = berechnet.'),
-                    energySelect('energySource', 'Wesentlicher Energieträger', WK.ENERGY_SOURCES),
-                    energySelect('heatingType', 'Heizungsart', WK.HEATING_TYPES, 'Fußbodenheizung sagt nur, wie die Wärme verteilt wird.')
-                ])
+                    choiceField('energyCert', 'Art des Energieausweises', WK.ENERGY_CERTS, 'Verbrauch = gemessen, hängt von den Bewohnern ab. Bedarf = berechnet.'),
+                    choiceField('energySource', 'Wesentlicher Energieträger', WK.ENERGY_SOURCES),
+                    choiceField('heatingType', 'Heizungsart', WK.HEATING_TYPES, 'Fußbodenheizung sagt nur, wie die Wärme verteilt wird.')
+                ]),
+                distanceGroup
             ]);
 
         var rentTypeBox = el('div');
