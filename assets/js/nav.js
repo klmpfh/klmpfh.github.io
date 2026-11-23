@@ -80,7 +80,7 @@
         { key: 'kwidt',         href: 'kwidt/',         label: 'Kwidt',              letter: 'k' },
         { key: 'laserfeelings', href: 'laserfeelings/', label: 'Laser & Feelings',   letter: 'l' },
         { key: 'sport',         href: 'sport/',         label: 'Sport',              letter: 's' },
-        { key: 'wohnung',       href: 'wohnung/',       label: 'Wohnungskauf',       letter: 'w' },
+        { key: 'wohnung',       href: 'wohnung/',       label: 'Wohnung',            letter: 'w' },
         { key: 'zauberkloppen', href: 'zauberkloppen/', label: 'Zaubern & Kloppen',  letter: 'z' },
         { key: 'zeitfresser',   href: 'zeitfresser/',   label: 'Zeitfresser',        letter: 'z' }
     ];

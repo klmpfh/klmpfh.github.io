@@ -29,13 +29,14 @@ function shareTheme() {
     };
 }
 
-/** Füllt eine Fläche (Path2D) mit der grauen "frei"-Schraffur. */
-function fillHatched(ctx, path, t) {
+/** Füllt eine Fläche (Path2D) mit Schraffur: grau für "frei", sonst in der
+ *  übergebenen Themenfarbe (nicht zugeordneter Rest). */
+function fillHatched(ctx, path, t, color) {
     ctx.save();
-    ctx.fillStyle = t.freeBg;
+    ctx.fillStyle = color ? rgbaFromHex(color, 0.16) : t.freeBg;
     ctx.fill(path);
     ctx.clip(path);
-    ctx.strokeStyle = t.freeLine;
+    ctx.strokeStyle = color || t.freeLine;
     ctx.lineWidth = 2;
     ctx.beginPath();
     // Diagonale Linien über die gesamte Zeichenfläche; der Clip begrenzt sie.
@@ -153,8 +154,8 @@ function renderShareCanvas(sc) {
         ctx.fillText(r.short, L, cy);
 
         const span = Math.max(r.total, r.ref);
-        const items = r.segs.map(s => ({ hours: s.hours, color: s.color }));
-        if (r.free > EPS) items.push({ hours: r.free, color: null });
+        const items = r.segs.map(s => ({ hours: s.hours, real: s.real, color: s.color, rest: s.kind === 'rest' }));
+        if (r.free > EPS) items.push({ hours: r.free, real: r.free, color: null, rest: false });
         const segGap = 2;
         const usable = barW - segGap * Math.max(0, items.length - 1);
         let x = barX;
@@ -162,14 +163,16 @@ function renderShareCanvas(sc) {
             const w = usable * it.hours / span;
             if (w <= 0.3) { x += w + segGap; return; }
             const p = roundRectPath(x, y, w, h, 4);
-            if (it.color) {
+            if (it.rest) {
+                fillHatched(ctx, p, t, it.color);
+            } else if (it.color) {
                 ctx.fillStyle = it.color;
                 ctx.fill(p);
                 if (it.hours / span >= 0.09) {
                     ctx.font = font(12, 700);
                     ctx.fillStyle = textOn(it.color);
                     ctx.textAlign = 'left';
-                    ctx.fillText(fmtShort(it.hours), x + 6, cy);
+                    ctx.fillText(fmtShort(it.real), x + 6, cy);
                 }
             } else {
                 fillHatched(ctx, p, t);
@@ -206,7 +209,14 @@ function renderShareCanvas(sc) {
     ctx.scale(k, k);
     sun.arcs.forEach(a => {
         const p = new Path2D(arcPath(SB.C, SB.C, a.r1, a.r2, a.a0, a.a1));
-        if (a.color) {
+        if (a.kind === 'over') {
+            ctx.fillStyle = t.danger;
+            ctx.fill(p);
+            return;
+        }
+        if (a.kind === 'rest') {
+            fillHatched(ctx, p, t, a.color);
+        } else if (a.color) {
             ctx.fillStyle = a.color;
             ctx.fill(p);
         } else {

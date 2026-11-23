@@ -12,11 +12,9 @@
  * (per = 'week') oder der Wert pro gewähltem Wochentag (per = 'day'). Die
  * Bezugsgröße der Woche ist 7 × hoursPerDay.
  *
- * Hat ein Thema Unterpunkte, ist seine Zeit immer die Summe der Unterpunkte
- * (weeklyHours). syncParents() schreibt diese Summe zusätzlich in "amount"
- * zurück – so behält ein Thema seine Zeit, wenn sein letzter Unterpunkt
- * gelöscht wird (Gegenstück zum Anlegen des ersten Unterpunkts, der die Zeit
- * des Themas übernimmt, siehe editor.js).
+ * Ein Thema hat immer seinen eigenen, eingetragenen Wert – unabhängig von
+ * seinen Unterpunkten. Decken die Unterpunkte weniger ab, bleibt ein Rest
+ * "nicht zugeordnet"; ergeben sie mehr, wird das als Fehler markiert.
  */
 'use strict';
 
@@ -143,7 +141,6 @@ function loadStore() {
     if (!scenarios.some(s => s.id === activeId)) activeId = scenarios[0].id;
 
     store = { version: 1, activeId: activeId, scenarios: scenarios };
-    store.scenarios.forEach(syncParents);
 }
 
 function saveStore() {
@@ -199,7 +196,6 @@ function dayCount(node) {
 }
 
 function weeklyHours(node) {
-    if (node.children.length) return sumWeekly(node.children);
     const n = dayCount(node);
     if (!n) return 0;
     return node.per === 'day' ? node.amount * n : node.amount;
@@ -207,16 +203,6 @@ function weeklyHours(node) {
 
 function sumWeekly(nodes) {
     return nodes.reduce((s, n) => s + weeklyHours(n), 0);
-}
-
-/** Themen mit Unterpunkten: "amount" = Summe der Unterpunkte in der Einheit des Themas. */
-function syncParents(sc) {
-    sc.nodes.forEach(n => {
-        if (!n.children.length) return;
-        const sum = sumWeekly(n.children);
-        const d = dayCount(n);
-        n.amount = n.per === 'day' && d ? sum / d : sum;
-    });
 }
 
 function weekRef(sc) {
@@ -253,7 +239,6 @@ function scenariosFromImport(text) {
     out.forEach(sc => {
         sc.id = uid();
         sc.nodes = cloneNodesWithNewIds(sc.nodes);
-        syncParents(sc);
     });
     return out;
 }

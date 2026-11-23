@@ -91,9 +91,10 @@ function updateTracker() {
     // Pausenliste inkl. eines gerade im Formular eingegebenen Entwurfs (Live-Vorschau)
     const effectivePauses = getEffectivePauses(currentMinOfDay);
 
-    // Uhr-Minuten seit Arbeitsbeginn (nach Mitternacht fortlaufend; bis 2h vor Start negativ)
+    // Uhr-Minuten seit Arbeitsbeginn (nach Mitternacht fortlaufend; bis 12h vor Start negativ =
+    // Arbeitsbeginn liegt noch vor uns, z. B. Startzeit schon vorab eingetragen)
     let clockSinceStartMin = currentMinOfDay - startMin;
-    if (clockSinceStartMin < -120) clockSinceStartMin += 1440;
+    if (clockSinceStartMin < -720) clockSinceStartMin += 1440;
     // Vergangene Zeit seit Arbeitsbeginn (Uhr-Minuten)
     const elapsedMin = Math.max(0, clockSinceStartMin);
 
@@ -217,11 +218,8 @@ function updateTracker() {
     renderPauseList(currentMinOfDay, effectivePauses, runningPauseMin);
     renderWarnings(netWorkMin, allPauseMin, warnMarkersAll, maxWorkMin);
     updateSettingsSummaries(targets, effectivePauses, allPauseMin);
-    updateNotifyUi(targets);
-    // "Jetzt" im selben Bezugssystem wie targetEndMin (ab Startzeit, nach Mitternacht über 1440 hinaus)
-    checkNotifications({ nowMin: startMin + clockSinceStartMin, startMin, hasStart, targets, pauses: effectivePauses });
-    drawTimeline(elapsedMin, startMin, currentMinOfDay, runningPauseMin, targetMarkers, warnMarkers, effectivePauses, axisMaxDuration);
-    updateTimelineRangeWarning(startMin, targetEnds, startMin + elapsedMin);
+    drawTimeline(elapsedMin, clockSinceStartMin, startMin, currentMinOfDay, runningPauseMin, targetMarkers, warnMarkers, effectivePauses, axisMaxDuration);
+    updateTimelineRangeWarning(startMin, targetEnds, startMin + clockSinceStartMin);
     updateUrlParams();
 
     dom.lastUpdate.textContent =

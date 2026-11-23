@@ -6,15 +6,19 @@
  * 2. Kreisdiagramm mit Ringen (Sunburst) für die ganze Woche: innen die
  *    Themen, außen ihre Unterpunkte.
  *
- * Ein Thema mit Unterpunkten ist immer genau so groß wie die Summe seiner
- * Unterpunkte (siehe weeklyHours in state.js) – der äußere Ring füllt den
- * inneren also stets vollständig aus.
- * Schraffiert grau = nicht verplante Zeit der Woche/des Tages ("frei").
- * Ist die Woche bzw. ein Tag überbucht, pulsieren die roten Markierungen
- * dauerhaft (CSS-Animationen in style.css), solange der Fehler besteht.
+ * Schraffiert = Zeit, die ein Thema hat, seine Unterpunkte aber nicht
+ * abdecken ("nicht zugeordnet", in der Farbe des Themas), bzw. nicht
+ * verplante Zeit der Woche/des Tages ("frei", grau).
+ * Ergeben Unterpunkte mehr als das Thema selbst, werden sie in der Grafik
+ * auf die Größe des Themas gestaucht und rot markiert. Alle roten
+ * Markierungen pulsieren dauerhaft (CSS-Animationen in style.css), solange
+ * der Fehler besteht.
  *
  * Tages-Logik: Ein Blatt verteilt seinen Wochenwert gleichmäßig auf seine
- * Wochentage.
+ * Wochentage. Ein Thema mit Unterpunkten besteht an einem Tag aus seinen
+ * Unterpunkten plus seinem nicht zugeordneten Rest, der sich gleichmäßig
+ * auf die Tage des Themas verteilt – so bleibt die Wochensumme gleich, auch
+ * wenn ein Unterpunkt nur an einzelnen Tagen stattfindet.
  *
  * Die Berechnung (computeDayRows, computeSunburst) ist von der Darstellung
  * getrennt, damit share.js dieselben Daten für das Bild nutzen kann.
@@ -36,15 +40,23 @@ function nodeLabel(path, node) {
 
 /* ── Tooltip-Texte ── */
 
-function tipNode(label, node, ref) {
+function tipNode(label, node, ref, scaledBy) {
     const w = weeklyHours(node);
     const lines = [
         label,
         fmtHours(w) + ' pro Woche · ' + fmtPercent(w / ref) + ' der Woche',
         fmtHours(w / dayCount(node)) + ' pro Tag · ' + fmtDays(node.days)
     ];
-    if (node.children.length) lines.push('Summe aus ' + node.children.length + ' Unterpunkt' + (node.children.length === 1 ? '' : 'en'));
+    if (scaledBy) lines.push(tipScaled(scaledBy));
     return lines.join('\n');
+}
+
+function tipScaled(scaledBy) {
+    return '⚠ Unterpunkte von „' + scaledBy + '“ ergeben mehr als das Thema selbst – hier gestaucht dargestellt.';
+}
+
+function tipRest(label, hours, ref, unit) {
+    return label + ' – nicht zugeordnet\n' + fmtHours(hours) + ' ' + unit + ' · ' + fmtPercent(hours / ref);
 }
 
 function tipFree(hours, ref, unit) {
@@ -53,18 +65,33 @@ function tipFree(hours, ref, unit) {
 
 /* ── Balken je Tag: Daten ── */
 
-/** Segmente (Blätter) eines Tages (day = 0..6) bzw. der Woche (day = null). */
-function collectSegments(nodes, day, colors, path, out) {
+/** Segmente eines Tages (day = 0..6) bzw. der Woche (day = null): Blätter
+ *  (kind 'node') und nicht zugeordnete Reste von Themen (kind 'rest').
+ *  hours = Breite in der Grafik (ggf. gestaucht), real = tatsächliche Stunden. */
+function collectSegments(nodes, day, colors, path, out, scale, scaledBy) {
+    scale = scale == null ? 1 : scale;
     nodes.forEach(node => {
         const w = weeklyHours(node);
         if (w <= EPS) return;
         const label = nodeLabel(path, node);
-        if (node.children.length) {
-            collectSegments(node.children, day, colors, label, out);
+        const n = dayCount(node);
+        const color = colors.get(node.id);
+
+        if (!node.children.length) {
+            const real = day == null ? w : (node.days[day] ? w / n : 0);
+            if (real > EPS) out.push({ id: node.id, kind: 'node', hours: real * scale, real: real, color: color, label: label, scaledBy: scaledBy || null });
             return;
         }
-        const hours = day == null ? w : (node.days[day] ? w / dayCount(node) : 0);
-        if (hours > EPS) out.push({ id: node.id, hours: hours, color: colors.get(node.id), label: label });
+
+        const cs = sumWeekly(node.children);
+        const over = cs > w + EPS;
+        collectSegments(node.children, day, colors, label, out, over ? scale * w / cs : scale,
+            over ? (node.name.trim() || 'Ohne Namen') : scaledBy);
+        if (w - cs > EPS) {
+            const rest = w - cs;
+            const real = day == null ? rest : (node.days[day] ? rest / n : 0);
+            if (real > EPS) out.push({ id: node.id, kind: 'rest', hours: real * scale, real: real, color: color, label: label });
+        }
     });
     return out;
 }
@@ -111,7 +138,7 @@ function renderDays(el, sc, colors) {
         bar.className = 'day-bar';
         bar.setAttribute('role', 'img');
         bar.setAttribute('aria-label', (r.day == null ? 'Woche' : DAY_LONG[r.day]) + ': ' +
-            r.segs.map(s => s.label + ' ' + fmtHours(s.hours)).join(', ') +
+            r.segs.map(s => s.label + (s.kind === 'rest' ? ' (nicht zugeordnet) ' : ' ') + fmtHours(s.real)).join(', ') +
             (r.free > EPS ? ', frei ' + fmtHours(r.free) : ''));
 
         r.segs.forEach(s => {
@@ -119,14 +146,25 @@ function renderDays(el, sc, colors) {
             seg.className = 'seg day-seg';
             seg.style.flexGrow = s.hours;
             seg.dataset.id = s.id;
-            seg.style.background = s.color;
-            seg.dataset.tip = s.label + '\n' + fmtHours(s.hours) + ' ' + r.long + ' · ' + fmtPercent(s.hours / r.ref);
-            if (s.hours / span >= 0.11) {
-                const t = document.createElement('span');
-                t.className = 'seg-text';
-                t.style.color = textOn(s.color);
-                t.textContent = fmtShort(s.hours);
-                seg.appendChild(t);
+            if (s.kind === 'rest') {
+                seg.classList.add('seg-rest');
+                seg.style.background = 'repeating-linear-gradient(135deg, ' + s.color + ' 0 2px, ' + rgbaFromHex(s.color, 0.16) + ' 2px 7px)';
+                seg.dataset.tip = tipRest(s.label, s.real, r.ref, r.long);
+            } else {
+                seg.style.background = s.color;
+                const tipLines = [s.label, fmtHours(s.real) + ' ' + r.long + ' · ' + fmtPercent(s.real / r.ref)];
+                if (s.scaledBy) {
+                    seg.classList.add('seg-scaled');
+                    tipLines.push(tipScaled(s.scaledBy));
+                }
+                seg.dataset.tip = tipLines.join('\n');
+                if (s.hours / span >= 0.11) {
+                    const t = document.createElement('span');
+                    t.className = 'seg-text';
+                    t.style.color = textOn(s.color);
+                    t.textContent = fmtShort(s.real);
+                    seg.appendChild(t);
+                }
             }
             bar.appendChild(seg);
         });
@@ -176,7 +214,8 @@ function arcPath(cx, cy, r1, r2, a0, a1) {
 }
 
 /** Ringsegmente im Koordinatensystem 0..320 (Mittelpunkt SB.C).
- *  color = null kennzeichnet "frei". */
+ *  kind: 'node' | 'rest' (nicht zugeordnet, schraffiert in color) |
+ *  'over' (rote Kante: Unterpunkte zu groß) | 'free' (color = null). */
 function computeSunburst(sc, colors) {
     const ref = weekRef(sc);
     const total = sumWeekly(sc.nodes);
@@ -185,22 +224,40 @@ function computeSunburst(sc, colors) {
     const perHour = 2 * Math.PI / Math.max(ref, total, EPS);
     const arcs = [];
 
-    function level(list, a, d, path) {
+    function level(list, a, hourAngle, d, path, scaledBy) {
         list.forEach(node => {
             const w = weeklyHours(node);
             if (w <= EPS) return;
             const label = nodeLabel(path, node);
+            const ang = w * hourAngle;
             const r1 = SB.R0 + d * ring;
-            arcs.push({ r1: r1, r2: r1 + ring, a0: a, a1: a + w * perHour, color: colors.get(node.id), id: node.id, tip: tipNode(label, node, ref) });
-            if (node.children.length) level(node.children, a, d + 1, label);
-            a += w * perHour;
+            const color = colors.get(node.id);
+            arcs.push({ kind: 'node', r1: r1, r2: r1 + ring, a0: a, a1: a + ang, color: color, id: node.id, tip: tipNode(label, node, ref, scaledBy) });
+
+            if (node.children.length) {
+                const cs = sumWeekly(node.children);
+                const over = cs > w + EPS;
+                level(node.children, a, over ? hourAngle * w / cs : hourAngle, d + 1, label,
+                    over ? (node.name.trim() || 'Ohne Namen') : scaledBy);
+                if (w - cs > EPS) {
+                    arcs.push({ kind: 'rest', r1: r1 + ring, r2: r1 + 2 * ring, a0: a + cs * hourAngle, a1: a + ang,
+                        color: color, id: node.id, tip: tipRest(label, w - cs, ref, 'pro Woche') });
+                } else if (over) {
+                    // Rote Kante außen am Ring der Unterpunkte: hier passt etwas nicht.
+                    const r = r1 + 2 * ring;
+                    arcs.push({ kind: 'over', r1: r + 1, r2: r + 5, a0: a, a1: a + ang, color: null, id: node.id,
+                        tip: label + ' – Unterpunkte zu groß\n⚠ ' + fmtHours(cs) + ' eingetragen, aber nur ' + fmtHours(w) +
+                            ' verfügbar – ' + fmtHours(cs - w) + ' zu viel' });
+                }
+            }
+            a += ang;
         });
         return a;
     }
 
-    const end = level(sc.nodes, 0, 0, '');
+    const end = level(sc.nodes, 0, perHour, 0, '', null);
     if (ref - total > EPS) {
-        arcs.push({ r1: SB.R0, r2: SB.R0 + ring, a0: end, a1: 2 * Math.PI, color: null, id: null, tip: tipFree(ref - total, ref, 'der Woche') });
+        arcs.push({ kind: 'free', r1: SB.R0, r2: SB.R0 + ring, a0: end, a1: 2 * Math.PI, color: null, id: null, tip: tipFree(ref - total, ref, 'der Woche') });
     }
     return { arcs: arcs.filter(x => x.a1 - x.a0 >= 1e-4), total: total, ref: ref };
 }
@@ -217,11 +274,26 @@ function renderSunburst(svg, sc, colors) {
     defs.appendChild(pat);
     svg.appendChild(defs);
 
+    // Schraffur in Themenfarbe für nicht zugeordnete Reste (eine Vorlage je Farbe)
+    const hatchIds = new Map();
+    function hatch(color) {
+        if (hatchIds.has(color)) return 'url(#' + hatchIds.get(color) + ')';
+        const id = 'zf-hatch-' + hatchIds.size;
+        hatchIds.set(color, id);
+        const p = svgEl('pattern', { id: id, patternUnits: 'userSpaceOnUse', width: 7, height: 7, patternTransform: 'rotate(45)' });
+        p.appendChild(svgEl('rect', { width: 7, height: 7, fill: color, 'fill-opacity': '0.16' }));
+        p.appendChild(svgEl('rect', { width: 2, height: 7, fill: color }));
+        defs.appendChild(p);
+        return 'url(#' + id + ')';
+    }
+
     const g = svgEl('g', { class: 'sunburst-segs' });
     svg.appendChild(g);
     data.arcs.forEach(a => {
-        const path = svgEl('path', { d: arcPath(C, C, a.r1, a.r2, a.a0, a.a1), class: 'seg' });
-        path.setAttribute('fill', a.color || 'url(#zf-hatch-free)');
+        const path = svgEl('path', { d: arcPath(C, C, a.r1, a.r2, a.a0, a.a1), class: 'seg' + (a.kind === 'over' ? ' seg-over' : '') });
+        if (a.kind === 'rest') path.setAttribute('fill', hatch(a.color));
+        else if (a.kind === 'free') path.setAttribute('fill', 'url(#zf-hatch-free)');
+        else if (a.kind === 'node') path.setAttribute('fill', a.color);
         path.dataset.tip = a.tip;
         if (a.id) path.dataset.id = a.id;
         g.appendChild(path);
@@ -280,6 +352,16 @@ function renderLegend(el, sc, colors) {
     });
     if (ref - total > EPS) row(null, 'swatch-free', 'Frei / nicht verplant', ref - total, null);
     el.appendChild(list);
+
+    const hasRest = sc.nodes.some(n => n.children.length && weeklyHours(n) - sumWeekly(n.children) > EPS);
+    if (hasRest) {
+        const key = document.createElement('p');
+        key.className = 'legend-key';
+        const sw = document.createElement('span');
+        sw.className = 'legend-swatch swatch-rest';
+        key.append(sw, document.createTextNode('schraffiert in Themenfarbe: von den Unterpunkten nicht abgedeckt'));
+        el.appendChild(key);
+    }
 
     if (total - ref > EPS) {
         const warn = document.createElement('p');

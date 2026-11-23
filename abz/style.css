@@ -500,58 +500,6 @@ input[type="time"]:focus,
 }
 .pause-delete-btn:hover { color: var(--danger); }
 
-/* ── Benachrichtigungen: Glocke (durchgestrichen = aus) ── */
-.notify-btn {
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    line-height: 0;
-    padding: 0 2px;
-    cursor: pointer;
-}
-.notify-btn:hover,
-.notify-btn.active { color: var(--primary-text); }
-.notify-btn.active .bell-slash { display: none; }
-/* Hauptschalter aus: eingeschaltete Glocken nur angedeutet */
-.notify-off .notify-btn.active { opacity: 0.45; }
-
-.bell-icon {
-    display: block;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-}
-
-/* An der Arbeitszeit-Zeile: auch bei nur einer Zeile sichtbar (anders als ▲▼☆×) */
-.work-time-btn.work-time-notify-btn { padding: 0 2px 12px; }
-.work-time-row:only-child .work-time-notify-btn { display: inline-block; }
-
-/* In der Zielzeit-Kachel oben rechts */
-.stat-card[data-stat="target"] { position: relative; }
-.stat-notify-btn {
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    padding: 2px;
-}
-.stat-notify-btn .bell-icon { width: 15px; height: 15px; }
-
-.pause-notify-btn .bell-icon { width: 13px; height: 13px; }
-
-.notify-option {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-muted);
-    cursor: pointer;
-    white-space: nowrap;
-}
-.notify-option input { width: auto; margin: 0; }
-
 /* ── Warnungen ── */
 .warning-banner {
     background: var(--warning-light);

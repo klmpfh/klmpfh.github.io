@@ -190,7 +190,7 @@ function addPauseFromForm() {
     }
 
     if (editingPauseIndex !== null) {
-        pauses[editingPauseIndex] = { ...pauses[editingPauseIndex], startMin: fromMin, durationMin }; // Glocke bleibt erhalten
+        pauses[editingPauseIndex] = { ...pauses[editingPauseIndex], startMin: fromMin, durationMin };
         editingPauseIndex = null;
     } else {
         pauses.push({ startMin: fromMin, durationMin });
@@ -223,19 +223,9 @@ function renderPauseList(currentMinOfDay, pausesList, runningPauseMin) {
         const cls      = p.isDraft ? 'pause-future' : (isFuture ? 'pause-future' : 'pause-done');
         const tag      = p.isDraft ? ' <em>(Entwurf)</em>' : (p.isAuto ? ' <em>(Pflichtpause)</em>' : (isFuture ? ' <em>(geplant)</em>' : ''));
 
-        // Glocke: je eingetragener Pause einzeln; an Pflichtpausen der gemeinsame Schalter für alle Pflichtpausen
-        const bellOn   = p.isAuto ? notifyAutoPauses : !!p.notify;
-        const bellWhat = p.isAuto ? 'zu Beginn und Ende aller Pflichtpausen' : 'zu Beginn und Ende dieser Pause';
-        const bellText = `Benachrichtigung ${bellWhat}: ${bellOn ? 'an' : 'aus'}`;
-        const bell     = p.isDraft ? '' :
-            ` <button class="notify-btn pause-notify-btn${bellOn ? ' active' : ''}" aria-pressed="${bellOn}"`
-            + ` title="${bellText}" aria-label="${bellText}"`
-            + ` onclick="${p.isAuto ? 'toggleNotifyAutoPauses()' : `toggleNotifyPause(${i})`}">${bellIconSvg()}</button>`;
-
         const actions = (p.isDraft || p.isAuto)
-            ? bell
-            : bell
-            + ` <button class="pause-edit-btn" onclick="editPause(${i})" title="Bearbeiten">✎</button>`
+            ? ''
+            : ` <button class="pause-edit-btn" onclick="editPause(${i})" title="Bearbeiten">✎</button>`
             + ` <button class="pause-delete-btn" onclick="deletePause(${i})" title="Entfernen">×</button>`;
 
         items.push(

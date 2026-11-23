@@ -110,7 +110,6 @@ function updatePanelSummaries() {
  * 'hard' = Struktur geändert (Baum neu aufbauen, optional Fokus setzen).
  */
 function onChange(kind, opts) {
-    syncParents(activeScenario());
     saveStore();
     if (kind === 'hard') {
         renderEditor();

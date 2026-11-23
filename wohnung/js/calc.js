@@ -1,7 +1,8 @@
-/* Wohnungskauf – Rechenlogik ohne DOM-Zugriff.
+/* Wohnung (Kauf oder Miete) – Rechenlogik ohne DOM-Zugriff.
    Alle Beträge in Euro, Prozentwerte als "3.5" (= 3,5 %), Zeiträume in Jahren.
    Leere Eingaben sind null und zählen als 0 (bzw. als Wert aus "Meine Finanzen",
-   wo eine Wohnung ein Feld davon überschreiben kann). */
+   wo eine Wohnung ein Feld davon überschreiben kann).
+   flat.kind = 'rent' → Mietwohnung (analyzeRent), sonst Kaufwohnung (analyzeBuy). */
 var WK = (function () {
     'use strict';
 
@@ -139,11 +140,227 @@ var WK = (function () {
         return rented.length / rooms.length;
     }
 
+    /* ---------- Private Nebenkosten ----------
+       In "Meine Finanzen" gepflegt (Strom, Internet, Rundfunkbeitrag …) und
+       für jede Wohnung gültig. Eine Wohnung kann einzelne Posten abwählen,
+       wenn sie dort schon in Warmmiete oder Hausgeld enthalten sind
+       (flat.coveredCosts = { costId: true }). */
+
+    function privateCosts(p, flat) {
+        var covered = (flat && flat.coveredCosts) || {};
+        var items = (p.privateCosts || []).map(function (c) {
+            return { id: c.id, name: c.name, amount: n(c.amount), covered: !!covered[c.id] };
+        });
+        return {
+            items: items,
+            total: items.reduce(function (s, c) { return s + (c.covered ? 0 : c.amount); }, 0),
+            all: items.reduce(function (s, c) { return s + c.amount; }, 0)
+        };
+    }
+
+    /** Heutige Wohnkosten als Vergleichswert: Warmmiete + alle privaten
+     *  Nebenkosten (die zahlt man heute ja auch). 0 = kein Vergleich möglich. */
+    function currentHousing(p) {
+        return n(p.currentRent) > 0 ? n(p.currentRent) + privateCosts(p, null).all : 0;
+    }
+
+    /* ---------- Mietentwicklung ---------- */
+
+    /** Kaltmiete im Mietjahr y (1 = erstes Jahr) je nach Mietart:
+     *  fest, Staffelmiete (Stufen "ab Mietjahr X: Betrag") oder Indexmiete
+     *  (jährliche Anpassung um die angenommene Inflation). */
+    function coldRentInYear(flat, y) {
+        var base = n(flat.coldRent);
+        if (flat.rentType === 'index') return base * Math.pow(1 + n(flat.indexPct) / 100, Math.max(0, y - 1));
+        if (flat.rentType === 'staffel') {
+            var cur = base, from = 1;
+            (flat.steps || []).forEach(function (s) {
+                var sy = Math.round(n(s.year));
+                if (isSet(s.rent) && sy > 1 && sy <= y && sy >= from) { cur = n(s.rent); from = sy; }
+            });
+            return cur;
+        }
+        return base;
+    }
+
     /* ---------- Gesamtanalyse einer Wohnung ---------- */
 
     function analyze(flat, profile, peers) {
+        return flat && flat.kind === 'rent' ? analyzeRent(flat, profile, peers) : analyzeBuy(flat, profile, peers);
+    }
+
+    /** WG-Einnahmen, Steuer auf Untermiete. costBaseYear = jährliche Kosten der
+     *  Wohnung, von denen der vermietete Anteil absetzbar ist. */
+    function sublet(a, flat, p, costBaseYear) {
+        var wg = flat.wg || {};
+        var rooms = wg.rooms || [];
+        a.roomsRented = rooms.filter(function (r) { return !r.self; }).length;
+        a.persons = rooms.length;
+        a.rentGross = rooms.reduce(function (s, r) { return s + (r.self ? 0 : n(r.rent)); }, 0);
+        a.rentEff = a.rentGross * (1 - Math.min(100, n(wg.vacancyPct)) / 100);
+        a.rentedShare = rentedShare(flat);
+        a.deductible = a.rentedShare * costBaseYear;
+        a.taxableIncome = a.rentEff * 12 - a.deductible;
+        a.rentTax = wg.taxable && a.rentGross > 0 ? a.taxableIncome * n(p.taxRate) / 100 / 12 : 0;
+        a.rentNet = a.rentEff - a.rentTax;
+    }
+
+    function analyzeRent(flat, profile, peers) {
         var p = profile;
-        var a = { flat: flat, warnings: [] };
+        var a = { flat: flat, kind: 'rent', warnings: [] };
+        a.area = n(flat.area);
+        a.coldRent = n(flat.coldRent);
+        a.serviceCharges = n(flat.serviceCharges);
+        a.heating = n(flat.heatingCosts);
+        a.warmRent = a.coldRent + a.serviceCharges + a.heating;
+        a.coldPerSqm = a.area > 0 && a.coldRent > 0 ? a.coldRent / a.area : null;
+        a.warmPerSqm = a.area > 0 && a.warmRent > 0 ? a.warmRent / a.area : null;
+        a.extrasPerSqm = a.area > 0 && a.serviceCharges + a.heating > 0 ? (a.serviceCharges + a.heating) / a.area : null;
+
+        a.privateInfo = privateCosts(p, flat);
+        a.private = a.privateInfo.total;
+        a.utilities = n(flat.utilities);
+        a.runningCosts = a.serviceCharges + a.heating + a.private + a.utilities;
+        a.outflow = a.warmRent + a.private + a.utilities;
+
+        // Einzug
+        a.deposit = n(flat.deposit);
+        a.oneOff = n(flat.otherOneOff);
+        a.moveIn = a.deposit + a.oneOff;
+        a.cashAfter = n(p.cash) - a.moveIn;
+
+        // WG: als Hauptmieter untervermieten – absetzbar ist der vermietete Anteil der Wohnkosten
+        sublet(a, flat, p, a.outflow * 12);
+
+        a.netHousing = a.outflow - a.rentNet;
+        a.currentRent = n(p.currentRent);
+        a.currentHousing = currentHousing(p);
+        a.vsRent = a.currentHousing > 0 ? a.netHousing - a.currentHousing : null;
+        a.wealthBuild = 0;
+        // Kaution bringt keine Rendite (Mietkautionskonto) – entgangene Rendite zählt mit
+        a.opportunity = a.deposit * n(p.altReturn) / 100 / 12;
+        a.trueCost = a.netHousing + a.opportunity;
+        a.trueVsRent = a.currentHousing > 0 ? a.trueCost - a.currentHousing : null;
+
+        a.netIncome = n(p.netIncome);
+        a.available = a.netIncome - n(p.livingCosts) - n(p.otherDebt) - a.netHousing;
+        a.burden = null;
+        a.rentRatio = a.netIncome > 0 ? a.warmRent / a.netIncome : null;
+        a.burdenNet = a.netIncome > 0 ? (a.netHousing + n(p.otherDebt)) / a.netIncome : null;
+
+        // Mietentwicklung über 10 Jahre (Nebenkosten, WG-Mieten und private Kosten konstant)
+        a.rentTimeline = [];
+        var sum = 0;
+        for (var y = 1; y <= 10; y++) {
+            var cold = coldRentInYear(flat, y);
+            var net = a.netHousing + (cold - a.coldRent) * (1 - (flat.wg && flat.wg.taxable && a.rentGross > 0 ? a.rentedShare * n(p.taxRate) / 100 : 0));
+            a.rentTimeline.push({ year: y, cold: cold, warm: cold + a.serviceCharges + a.heating, net: net });
+            sum += net;
+        }
+        a.coldIn5 = coldRentInYear(flat, 6);
+        a.avgNet10 = sum / 10;
+        a.rentIncrease5 = a.coldRent > 0 ? a.coldIn5 / a.coldRent - 1 : null;
+
+        checksRent(a, p, flat);
+        assessRent(a, flat, peers);
+        a.documents = DOCUMENTS_RENT;
+        return a;
+    }
+
+    function checksRent(a, p, flat) {
+        if (a.coldRent <= 0) { warn(a, 'info', 'Kaltmiete eingeben, um die Wohnung durchzurechnen.'); return; }
+        if (a.netIncome > 0) {
+            if (a.rentRatio <= 0.3) warn(a, 'ok', 'Warmmiete bei ' + pct(a.rentRatio) + ' des Nettoeinkommens – im Rahmen der 30-%-Faustregel.');
+            else if (a.rentRatio <= 0.4) warn(a, 'warn', 'Warmmiete bei ' + pct(a.rentRatio) + ' des Nettoeinkommens – über der 30-%-Faustregel' + (a.rentNet > 0 ? ', mit WG-Einnahmen ' + pct(a.burdenNet) + '.' : '.'));
+            else warn(a, a.rentNet > 0 && a.burdenNet <= 0.35 ? 'warn' : 'bad', 'Warmmiete bei ' + pct(a.rentRatio) + ' des Nettoeinkommens' + (a.rentNet > 0 ? ' (mit WG-Einnahmen ' + pct(a.burdenNet) + ')' : '') + ' – Faustregel: max. 30–35 %.');
+            if (a.available < 0) warn(a, 'bad', 'Haushalt geht nicht auf: monatlich fehlen ' + eur(-a.available) + '.');
+            if (a.roomsRented > 0 && a.netIncome - n(p.livingCosts) - n(p.otherDebt) - a.outflow < 0) {
+                warn(a, 'warn', 'Ohne Untermieter geht der Haushalt nicht auf (Leerstand / Auszug einplanen).');
+            }
+        }
+        if (a.deposit > 3 * a.coldRent + 0.5) warn(a, 'bad', 'Kaution über drei Nettokaltmieten (' + eur(3 * a.coldRent) + ') – das ist gesetzlich nicht zulässig (§ 551 BGB).');
+        if (n(p.reserve) > 0 || n(p.cash) > 0) {
+            if (a.cashAfter < n(p.reserve)) warn(a, a.cashAfter < 0 ? 'bad' : 'warn', 'Nach Kaution und Einzug bleiben ' + eur(a.cashAfter) + ' – weniger als deine Notreserve von ' + eur(n(p.reserve)) + '.');
+            else warn(a, 'ok', 'Notreserve bleibt erhalten (' + eur(a.cashAfter) + ' Cash nach dem Einzug).');
+        }
+        if (flat.rentType === 'staffel') {
+            var steps = (flat.steps || []).filter(function (s) { return isSet(s.rent) && Math.round(n(s.year)) > 1; });
+            if (!steps.length) warn(a, 'info', 'Staffelmiete ohne Stufen – „+ Staffel“ ergänzen, sonst rechnet die Seite mit gleichbleibender Miete.');
+            if (a.rentIncrease5 !== null && a.rentIncrease5 > 0) warn(a, a.rentIncrease5 > 0.15 ? 'warn' : 'info', 'Staffelmiete: Kaltmiete steigt in 5 Jahren um ' + pct(a.rentIncrease5) + ' auf ' + eur(a.coldIn5) + '.');
+        } else if (flat.rentType === 'index') {
+            warn(a, 'info', 'Indexmiete: Bei ' + String(n(flat.indexPct)).replace('.', ',') + ' % Inflation pro Jahr liegt die Kaltmiete in 5 Jahren bei ' + eur(a.coldIn5) + '. Die Inflation kann auch deutlich höher ausfallen.');
+        }
+    }
+
+    function assessRent(a, flat, peers) {
+        a.review = [];
+        var area = a.area;
+        if (a.coldRent <= 0) return;
+
+        if (area <= 0) {
+            review(a, 'info', 'Wohnfläche fehlt', 'Ohne Wohnfläche lassen sich Miete und Nebenkosten pro m² nicht einordnen.', []);
+        }
+
+        // Nebenkosten + Heizung pro m²
+        var ncQuestions = [
+            'Letzte Betriebskostenabrechnung zeigen lassen – passen die Vorauszahlungen zum tatsächlichen Verbrauch?',
+            'Was ist in den Nebenkosten enthalten (Wasser, Müll, Hausmeister, Aufzug, Garten …)?',
+            'Wie wird geheizt, und wie alt ist die Heizung? Energieausweis zeigen lassen.'
+        ];
+        if (a.extrasPerSqm !== null) {
+            var q = fmt2(a.extrasPerSqm) + ' €/m²';
+            if (a.extrasPerSqm > 4.5) review(a, 'warn', 'Nebenkosten & Heizung hoch (' + q + ')',
+                'Üblich sind etwa 2,50–4,00 €/m² im Monat inkl. Heizung. Hohe Vorauszahlungen können an teurer Heizung, Aufzug oder Hausmeisterdienst liegen.', ncQuestions);
+            else if (a.extrasPerSqm < 1.8) review(a, 'warn', 'Nebenkosten & Heizung auffällig niedrig (' + q + ')',
+                'Niedrige Vorauszahlungen sehen gut aus, führen aber oft zu hohen Nachzahlungen mit der ersten Abrechnung.', ncQuestions);
+            else review(a, 'ok', 'Nebenkosten & Heizung im üblichen Rahmen (' + q + ')', 'Liegt im typischen Bereich von etwa 2,00–4,00 €/m² inkl. Heizung.', [ncQuestions[0]]);
+        } else if (a.serviceCharges + a.heating <= 0) {
+            review(a, 'info', 'Nebenkosten fehlen', 'Ohne Nebenkosten und Heizung ist die Monatsbilanz zu optimistisch – üblich sind rund 2,50–4,00 €/m².', ncQuestions.slice(0, 2));
+        }
+
+        // Kaltmiete pro m² im Vergleich zu den anderen Mietwohnungen
+        if (a.coldPerSqm && peers && peers.length) {
+            var others = peers.filter(function (f) { return f.id !== flat.id && f.kind === 'rent' && n(f.coldRent) > 0 && n(f.area) > 0; })
+                .map(function (f) { return n(f.coldRent) / n(f.area); });
+            if (others.length) {
+                var avg = others.reduce(function (s, v) { return s + v; }, 0) / others.length;
+                var diff = a.coldPerSqm / avg - 1;
+                if (diff > 0.15) review(a, 'info', 'Kaltmiete pro m² über deinen anderen Mietwohnungen',
+                    fmt2(a.coldPerSqm) + ' €/m² liegt ' + Math.round(diff * 100) + ' % über dem Schnitt deiner anderen Mietwohnungen (' + fmt2(avg) + ' €/m²).', []);
+            }
+        }
+
+        review(a, 'info', 'Mietpreisbremse prüfen',
+            'In vielen Städten darf die Miete bei Wiedervermietung höchstens 10 % über der ortsüblichen Vergleichsmiete liegen (Ausnahmen: Neubau, umfassende Modernisierung, Vormiete).',
+            ['Wie hoch war die Vormiete?', 'Gilt am Ort die Mietpreisbremse, und was sagt der Mietspiegel für die Wohnung?']);
+
+        if (flat.rentType === 'staffel') {
+            review(a, 'info', 'Staffelmiete',
+                'Die Erhöhungen stehen fest im Vertrag – jede Stufe muss mindestens ein Jahr gelten und als Betrag in € angegeben sein. Zusätzliche Erhöhungen auf die Vergleichsmiete sind während der Staffel ausgeschlossen.',
+                ['Sind alle Stufen mit Datum und Betrag im Vertrag genannt?', 'Gibt es einen Kündigungsverzicht, und wie lange (max. 4 Jahre)?']);
+        } else if (flat.rentType === 'index') {
+            review(a, 'warn', 'Indexmiete',
+                'Die Kaltmiete folgt dem Verbraucherpreisindex – höchstens einmal im Jahr, schriftlich angekündigt. Bei hoher Inflation steigt sie deutlich schneller als eine normale Miete.',
+                ['Welcher Basismonat des Verbraucherpreisindex gilt?', 'Gibt es einen Kündigungsverzicht?']);
+        }
+
+        if (a.roomsRented > 0) {
+            if (area > 0 && a.persons && area / a.persons < 15) {
+                review(a, 'info', 'Eng für eine WG (' + fmt1.format(area / a.persons) + ' m² pro Person)',
+                    'Unter etwa 15 m² pro Person wird es schwer, Mitbewohner:innen lange zu halten – das erhöht den Leerstand.', []);
+            }
+            review(a, 'info', 'Untervermietung absichern',
+                'Als Hauptmieter brauchst du die Erlaubnis des Vermieters zur Untervermietung (§ 553 BGB) – bei berechtigtem Interesse muss er sie meist geben.',
+                ['Ist die Untervermietung im Mietvertrag erlaubt oder schriftlich genehmigt?', 'Dürfen Mitbewohner:innen wechseln, ohne dass jedes Mal neu gefragt werden muss?']);
+            if (n((flat.wg || {}).vacancyPct) <= 0) {
+                review(a, 'info', 'Kein Leerstand eingeplant', 'Auch in begehrten Lagen gibt es Wechsel und Suchzeiten – 3–8 % sind realistisch.', []);
+            }
+        }
+    }
+
+    function analyzeBuy(flat, profile, peers) {
+        var p = profile;
+        var a = { flat: flat, kind: 'buy', warnings: [] };
 
         // Kaufkosten
         a.price = n(flat.price);
@@ -196,34 +413,28 @@ var WK = (function () {
         a.propertyTax = n(flat.propertyTax) / 12;
         a.maintenance = n(flat.maintenance);
         a.utilities = n(flat.utilities);
-        a.runningCosts = a.hoa + a.propertyTax + a.maintenance + a.utilities;
+        a.privateInfo = privateCosts(p, flat);
+        a.private = a.privateInfo.total;
+        a.runningCosts = a.hoa + a.propertyTax + a.maintenance + a.utilities + a.private;
         a.outflow = a.payment + a.runningCosts;
 
         // WG-Einnahmen
         var wg = flat.wg || {};
-        var rooms = wg.rooms || [];
-        a.roomsRented = rooms.filter(function (r) { return !r.self; }).length;
-        a.persons = rooms.length;
-        a.rentGross = rooms.reduce(function (s, r) { return s + (r.self ? 0 : n(r.rent)); }, 0);
-        a.rentEff = a.rentGross * (1 - Math.min(100, n(wg.vacancyPct)) / 100);
-        a.rentedShare = rentedShare(flat);
         a.afaBase = Math.max(0, a.price - a.inventory + a.closing) * n(wg.buildingPct) / 100;
         a.afa = a.afaBase * n(wg.afaPct) / 100;
-        a.deductible = a.rentedShare * (a.interestYear1 + (a.hoa + a.maintenance + a.utilities) * 12 + n(flat.propertyTax) + a.afa);
-        a.taxableIncome = a.rentEff * 12 - a.deductible;
-        a.rentTax = wg.taxable && a.rentGross > 0 ? a.taxableIncome * n(p.taxRate) / 100 / 12 : 0;
-        a.rentNet = a.rentEff - a.rentTax;
+        sublet(a, flat, p, a.interestYear1 + (a.hoa + a.maintenance + a.utilities + a.private) * 12 + n(flat.propertyTax) + a.afa);
 
         // Monatsbilanz
         a.netHousing = a.outflow - a.rentNet;
         a.currentRent = n(p.currentRent);
-        a.vsRent = a.netHousing - a.currentRent;
+        a.currentHousing = currentHousing(p);
+        a.vsRent = a.currentHousing > 0 ? a.netHousing - a.currentHousing : null;
         a.wealthBuild = a.principalYear1 / 12;
         a.opportunity = a.equity * n(p.altReturn) / 100 / 12;
         // "Echte Kosten": was wirklich weg ist – Zinsen, Nebenkosten, entgangene
         // Rendite aufs Eigenkapital, abzüglich WG-Einnahmen. Tilgung ist Sparen.
         a.trueCost = a.interestYear1 / 12 + a.runningCosts + a.opportunity - a.rentNet;
-        a.trueVsRent = a.trueCost - a.currentRent;
+        a.trueVsRent = a.currentHousing > 0 ? a.trueCost - a.currentHousing : null;
 
         // Haushalt
         a.netIncome = n(p.netIncome);
@@ -255,6 +466,7 @@ var WK = (function () {
 
         checks(a, p, flat);
         assess(a, flat, peers);
+        a.documents = DOCUMENTS;
         return a;
     }
 
@@ -373,7 +585,7 @@ var WK = (function () {
 
         // Kaufpreis pro m² im Vergleich zu den anderen Wohnungen
         if (a.pricePerSqm && peers && peers.length) {
-            var others = peers.filter(function (f) { return f.id !== flat.id && n(f.price) > 0 && n(f.area) > 0; })
+            var others = peers.filter(function (f) { return f.id !== flat.id && f.kind !== 'rent' && n(f.price) > 0 && n(f.area) > 0; })
                 .map(function (f) { return n(f.price) / n(f.area); });
             if (others.length) {
                 var avg = others.reduce(function (s, v) { return s + v; }, 0) / others.length;
@@ -465,7 +677,7 @@ var WK = (function () {
                     'Nur der Gebäudeanteil wird abgeschrieben. Das Finanzamt rechnet ihn meist über Bodenrichtwert und Grundstücksanteil aus (Arbeitshilfe des Bundesfinanzministeriums).',
                     ['Wie hoch ist der Bodenrichtwert, und wie groß ist der Grundstücksanteil der Wohnung?']);
             }
-            if (a.utilities <= 0) {
+            if (a.utilities <= 0 && a.private <= 0) {
                 review(a, 'info', 'Strom & Internet fehlen', 'In einer WG zahlst du diese meist vor und legst sie über die Warmmiete um – trag sie ein, sonst wirkt die Bilanz zu gut.', []);
             }
         }
@@ -482,6 +694,16 @@ var WK = (function () {
         'Grundriss mit Wohnflächenberechnung',
         'Aktueller Grundsteuerbescheid',
         'Falls vermietet: bestehender Mietvertrag'
+    ];
+
+    /** Unterlagen vor dem Unterschreiben eines Mietvertrags. */
+    var DOCUMENTS_RENT = [
+        'Mietvertrag (Entwurf) – Mietart, Kündigungsverzicht, Schönheitsreparaturen, Kleinreparaturen',
+        'Letzte Betriebs- und Heizkostenabrechnung',
+        'Energieausweis',
+        'Hausordnung',
+        'Übergabeprotokoll mit Zählerständen und Fotos beim Einzug',
+        'Bei WG: schriftliche Erlaubnis zur Untervermietung'
     ];
 
     /* ---------- Wünsche & Bedingungen ----------
@@ -584,6 +806,8 @@ var WK = (function () {
         STATES: STATES,
         DOCUMENTS: DOCUMENTS,
         transferTaxFor: transferTaxFor,
+        privateCosts: privateCosts,
+        coldRentInYear: coldRentInYear,
         analyze: analyze,
         wishScore: wishScore,
         MUST: MUST,

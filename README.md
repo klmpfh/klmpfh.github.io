@@ -48,8 +48,11 @@ relativ, über die eigene `src`-Angabe.
 - `/ical/` – iCal Terminsuche, findet freie Termin-Slots anhand mehrerer iCal-Dateien.
 - `/ical/tools/` – entfernt/anonymisiert persönliche Daten aus iCal-Dateien und
   exportiert sie im gewünschten Zeitraum als .ics oder als maschinenlesbares CSV.
-- `/fileshare/` – Teilt Dateien direkt zwischen zwei Browsern per WebRTC (Peer-to-Peer),
-  ohne Upload auf einen Server. Sitzungslink/QR-Code enthält eine zufällige 128-Bit-ID.
+- `/fileshare/` – Gemeinsamer Datei-Pool für beliebig viele Browser per WebRTC (Peer-to-Peer), ohne Upload auf
+  einen Server. Raumlink/QR-Code enthält eine zufällige 128-Bit-ID. Alle Geräte sind direkt miteinander verbunden
+  (Mesh) und können jederzeit Dateien hinzufügen und laden; geladene Dateien bietet ein Gerät selbst weiter an.
+  Ein Gerät hält den „Eingang“ (feste Peer-ID aus der Raum-ID) für neue Geräte – geht es, übernimmt ein anderes.
+  Der Raum bleibt offen, bis das letzte Gerät ihn verlässt.
 - `/mermaid/` – Live-Editor für Mermaid-Diagramme: geteilter Bildschirm mit Syntax-Highlighting
   links, gerenderter Vorschau rechts und Fehlerkonsole darunter.
 - `/knallbum/` – Berechnet aus Preisen an der Bar die beste Option (ml Alkohol/€).
@@ -61,8 +64,10 @@ relativ, über die eigene `src`-Angabe.
   (Schalter „Von mir“ / „An mich“): was, wann, an wen bzw. von wem, bis wann geplant.
   Status (offen/fällig/überfällig/zurück), Filter und Suche. Daten liegen nur im localStorage des Browsers,
   Backup als JSON-Datei herunterladen und wieder einlesen.
-- `/wohnung/` – Wohnungskauf: persönliche Finanzen (Cash, Eigenkapital, Einkommen, Kreditrahmen der Bank) auf der
-  Übersicht, je Wohnung Kaufpreis, Nebenkosten (Grunderwerbsteuer je Bundesland), Hausgeld, WG-Zimmer mit Untermiete
+- `/wohnung/` – Wohnung kaufen oder mieten: persönliche Finanzen (Cash, Eigenkapital, Einkommen, Kreditrahmen der Bank,
+  private Nebenkosten wie Strom/Internet/Rundfunk – je Wohnung abwählbar, wenn schon in Warmmiete/Hausgeld enthalten) auf der
+  Übersicht. Mietwohnungen mit Kalt-/Warmmiete, Kaution und fester, Staffel- oder Indexmiete (Mietentwicklung über 10 Jahre),
+  im selben Vergleich wie Kaufwohnungen. Je Kaufwohnung Kaufpreis, Nebenkosten (Grunderwerbsteuer je Bundesland), Hausgeld, WG-Zimmer mit Untermiete
   (inkl. grober Steuerschätzung), Annuitätendarlehen mit Zinsbindung/Anschlusszins/Sondertilgung. Monatsbilanz, Checks,
   Tilgungsplan, Diagramm und Vergleichstabelle. Objekt-Bewertung gegen Faustwerte (Hausgeld/m², Baujahr, Grundsteuer,
   Makler, Inventar, WG-Eignung) mit Rückfragen an Makler/Verwaltung zum Kopieren und Unterlagen-Checkliste. Wünsche & Bedingungen:

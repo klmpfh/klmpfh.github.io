@@ -1,4 +1,4 @@
-/* Wohnungskauf – seitenspezifische Styles (Basis: assets/css/reset.css, theme.css) */
+/* Wohnung (Kauf & Miete) – seitenspezifische Styles (Basis: assets/css/reset.css, theme.css) */
 
 :root {
     --surface: var(--theme-surface);
@@ -638,6 +638,89 @@ table {
 .room-self { display: flex; justify-content: center; }
 .room .input-wrap input { padding-right: 30px; }
 .room .unit { right: 8px; }
+
+/* Private Nebenkosten (Meine Finanzen) und Staffelmiete */
+.cost-row,
+.step {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) 32px;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.step { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr) 32px; }
+.cost-row .input-wrap input,
+.step .input-wrap input { padding-right: 30px; }
+.cost-row .unit,
+.step .unit { right: 8px; }
+
+.cost-foot {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.cost-foot .btn-add { width: auto; flex: 1 1 auto; }
+.cost-foot .muted:empty { display: none; }
+
+.group-hint {
+    margin: -4px 0 10px;
+    line-height: 1.45;
+}
+
+.steps-hint { margin-top: 14px; }
+.costs { max-width: 640px; }
+
+/* Private Nebenkosten je Wohnung an-/abwählen */
+.cost-checks {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.cost-check {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+    gap: 2px 10px;
+    align-items: center;
+    padding: 5px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.cost-check:hover { background: var(--theme-surface-muted); }
+.cost-check input { margin: 0; }
+.cost-name { overflow-wrap: anywhere; }
+.cost-amount { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
+.cost-state { grid-column: 2 / -1; }
+.cost-state:empty { display: none; }
+.cost-check.is-covered .cost-name,
+.cost-check.is-covered .cost-amount { color: var(--muted); text-decoration: line-through; }
+.cost-sum { padding: 6px 8px 0; }
+
+/* Art der Wohnung (Kauf / Miete) auf den Karten */
+.kind-tag {
+    display: inline-block;
+    vertical-align: 1px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-right: 2px;
+    color: var(--primary-strong);
+    background: var(--primary-light);
+}
+
+.kind-tag.kind-rent {
+    color: var(--theme-text);
+    background: var(--theme-surface-muted);
+    border: 1px solid var(--border);
+}
+
+.calc.rent-plan td { text-align: right; }
 
 /* Wünsche & Bedingungen */
 .people {

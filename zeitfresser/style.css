@@ -494,19 +494,6 @@ button:focus-visible {
     font-variant-numeric: tabular-nums;
 }
 
-/* Thema mit Unterpunkten: Wert = Summe, nicht editierbar */
-.node-value.is-sum {
-    background: transparent;
-    border-style: dashed;
-    color: var(--text-muted);
-    cursor: default;
-}
-
-.node-value.is-sum:focus {
-    box-shadow: none;
-    border-color: var(--border-color);
-}
-
 .node-per {
     flex: 1 1 auto;
     min-width: 0;
@@ -695,9 +682,26 @@ button:focus-visible {
     font-weight: 600;
 }
 
-.info-sum {
-    color: var(--text-muted);
-    font-style: italic;
+.info-warn {
+    color: var(--danger);
+    font-weight: 600;
+}
+
+.info-ok {
+    color: var(--success);
+}
+
+.info-rest {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.info-hatch {
+    width: 14px;
+    height: 10px;
+    border-radius: 3px;
+    background: repeating-linear-gradient(135deg, var(--node-color) 0 2px, transparent 2px 5px);
 }
 
 .node-children {
@@ -843,6 +847,20 @@ button:focus-visible {
 
 .swatch-free {
     background: repeating-linear-gradient(135deg, var(--zf-free-line) 0 2px, var(--zf-free-bg) 2px 5px);
+}
+
+.swatch-rest {
+    background: repeating-linear-gradient(135deg, var(--text-muted) 0 2px, transparent 2px 5px);
+}
+
+.legend-key {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 0 6px;
+    font-size: 12px;
+    color: var(--text-muted);
 }
 
 .legend-name {
@@ -1030,14 +1048,46 @@ button:focus-visible {
     to { outline-color: transparent; }
 }
 
+@keyframes zf-pulse-border {
+    from { border-color: var(--danger); box-shadow: 0 0 0 3px var(--danger-light); }
+    to { border-color: var(--border-color); box-shadow: 0 0 0 3px transparent; }
+}
+
+@keyframes zf-pulse-underline {
+    from { box-shadow: inset 0 -4px 0 var(--danger); }
+    to { box-shadow: inset 0 -4px 0 transparent; }
+}
+
 @keyframes zf-pulse-bg {
     from { background: var(--danger-light); }
     to { background: transparent; }
 }
 
+.info-warn,
 .sb-center-warn,
 .day-free.is-over {
     animation: zf-pulse 0.9s ease-in-out infinite alternate;
+}
+
+/* Unterpunkte ergeben mehr als ihr Thema: rote Kante außen am Ring */
+#sunburst .seg-over {
+    fill: var(--danger);
+    cursor: default;
+    animation: zf-pulse-svg 0.9s ease-in-out infinite alternate;
+}
+
+#sunburst .sunburst-segs:hover .seg-over {
+    opacity: 1;
+}
+
+/* Auf die Größe des Themas gestauchte Unterpunkte */
+.day-seg.seg-scaled {
+    animation: zf-pulse-underline 0.9s ease-in-out infinite alternate;
+}
+
+.node-value.is-over:not(:focus) {
+    border-color: var(--danger);
+    animation: zf-pulse-border 0.9s ease-in-out infinite alternate;
 }
 
 .sb-over-ring {
@@ -1177,6 +1227,10 @@ button:focus-visible {
 
 @media (prefers-reduced-motion: reduce) {
     .panel-summary .sum-warn,
+    .info-warn,
+    #sunburst .seg-over,
+    .day-seg.seg-scaled,
+    .node-value.is-over:not(:focus),
     .sb-center-warn,
     .day-free.is-over,
     .sb-over-ring,

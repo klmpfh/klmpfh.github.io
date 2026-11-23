@@ -8,19 +8,18 @@
     <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="../assets/css/reset.css">
     <link rel="stylesheet" href="../assets/css/theme.css">
-    <link rel="stylesheet" href="style.css?v=6.21">
+    <link rel="stylesheet" href="style.css?v=6.22">
     <!-- ?v= immer zusammen mit der Versionsnummer unten ändern: Sonst läuft die neue Seite mit alten Dateien aus dem Browser-Cache. -->
     <!-- Klassische Skripte (keine ES-Module), damit die Seite auch per file:// läuft; Reihenfolge ist wichtig, main.js zuletzt. -->
-    <script src="js/utils.js?v=6.21" defer></script>
-    <script src="js/state.js?v=6.21" defer></script>
-    <script src="js/calc.js?v=6.21" defer></script>
-    <script src="js/worktimes.js?v=6.21" defer></script>
-    <script src="js/pauses.js?v=6.21" defer></script>
-    <script src="js/timeline.js?v=6.21" defer></script>
-    <script src="js/url-params.js?v=6.21" defer></script>
-    <script src="js/notify.js?v=6.21" defer></script>
-    <script src="js/tracker.js?v=6.21" defer></script>
-    <script src="js/main.js?v=6.21" defer></script>
+    <script src="js/utils.js?v=6.22" defer></script>
+    <script src="js/state.js?v=6.22" defer></script>
+    <script src="js/calc.js?v=6.22" defer></script>
+    <script src="js/worktimes.js?v=6.22" defer></script>
+    <script src="js/pauses.js?v=6.22" defer></script>
+    <script src="js/timeline.js?v=6.22" defer></script>
+    <script src="js/url-params.js?v=6.22" defer></script>
+    <script src="js/tracker.js?v=6.22" defer></script>
+    <script src="js/main.js?v=6.22" defer></script>
 </head>
 <body>
 <script src="../assets/js/nav.js"></script>
@@ -132,31 +131,6 @@
     </div>
     </details>
 
-    <!-- Benachrichtigungen: Hauptschalter und Pflichtpausen; einzelne Glocken an Arbeitszeiten und Pausen -->
-    <details class="settings-panel" id="notifyPanel" open>
-    <summary>
-        <span class="settings-title">Benachrichtigungen</span>
-        <span class="settings-summary" id="notifySummary"></span>
-    </summary>
-    <div class="pause-section">
-        <div class="pause-controls">
-            <span class="mode-toggle-label" id="notifyLabelOff">Aus</span>
-            <label class="mode-toggle" title="Alle Benachrichtigungen ein- oder ausschalten">
-                <input type="checkbox" id="notifyToggle" onchange="toggleNotifyEnabled()">
-                <span class="mode-toggle-slider"></span>
-            </label>
-            <span class="mode-toggle-label" id="notifyLabelOn">An</span>
-            <label class="notify-option" id="notifyAutoPausesOption" title="Beginn und Ende der automatisch ergänzten Pflichtpausen melden">
-                <input type="checkbox" id="notifyAutoPausesToggle" onchange="toggleNotifyAutoPauses(this.checked)">
-                Pflichtpausen
-            </label>
-            <button type="button" id="notifyPermissionBtn" class="btn-add-pause" onclick="requestNotifyPermission()" style="display:none">Im Browser erlauben</button>
-            <button type="button" id="notifyTestBtn" class="btn-add-pause" onclick="sendTestNotification()">Test</button>
-        </div>
-        <div id="notifyHint" class="auto-pause-hint"></div>
-    </div>
-    </details>
-
     <!-- Timeline -->
     <div class="timeline-container">
         <svg class="timeline-svg" id="timelineSvg"></svg>
@@ -190,7 +164,7 @@
     <!-- Je Arbeitszeit eine Zeile: Arbeitszeit, Zielzeit, Countdown, Rest / Überziehung, Fortschritt (siehe renderTargetStats) -->
     <div class="stats-grid stats-targets" id="targetStats"></div>
 
-    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden. Letzte Aktualisierung: <span id="lastUpdate">–</span> · v<span id="versionNumber">6.21</span></div>
+    <div class="footer-info">Aktualisiert sich automatisch alle 10 Sekunden. Letzte Aktualisierung: <span id="lastUpdate">–</span> · v<span id="versionNumber">6.22</span></div>
 </div>
 
 

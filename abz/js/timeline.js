@@ -60,8 +60,11 @@ function themeColor(varName) {
     return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
 }
 
-/** targetMarkers: [{ endMin, relevant }] – eine Zielzeit je Arbeitszeit */
-function drawTimeline(elapsedMin, startMinOfDay, currentMinOfDay, runningPauseMin, targetMarkers, warnMarkers, pausesList, maxDuration) {
+/**
+ * elapsedMin: verstrichene Arbeitszeit ab Start (≥ 0); nowMin: aktuelle Uhrzeit relativ zur Startzeit –
+ * negativ, solange der Arbeitsbeginn noch bevorsteht. targetMarkers: [{ endMin, relevant }] – eine Zielzeit je Arbeitszeit
+ */
+function drawTimeline(elapsedMin, nowMin, startMinOfDay, currentMinOfDay, runningPauseMin, targetMarkers, warnMarkers, pausesList, maxDuration) {
     const accent       = themeColor('--theme-accent');
     const accentStrong = themeColor('--theme-accent-strong');
     const border       = themeColor('--theme-border');
@@ -76,9 +79,12 @@ function drawTimeline(elapsedMin, startMinOfDay, currentMinOfDay, runningPauseMi
 
     // Sichtbarer Achsenbereich, relativ zur Startzeit (alle Aufrufer von getX rechnen in Minuten ab Start)
     const range      = readTimelineRange();
-    let axisStartMin = (range.from ?? startMinOfDay) - startMinOfDay;
+    // Automatischer Beginn: Startzeit – oder, solange der Arbeitsbeginn noch bevorsteht, die volle
+    // Stunde vor „jetzt“, damit der Jetzt-Zeiger links vom Start sichtbar bleibt
+    const autoStartMin = nowMin < 0 ? Math.floor((startMinOfDay + nowMin) / 60) * 60 - startMinOfDay : 0;
+    let axisStartMin = range.from !== null ? range.from - startMinOfDay : autoStartMin;
     let axisEndMin   = (range.to ?? startMinOfDay + maxDuration) - startMinOfDay;
-    if (axisEndMin <= axisStartMin) { axisStartMin = 0; axisEndMin = maxDuration; } // ungültig → automatisch
+    if (axisEndMin <= axisStartMin) { axisStartMin = autoStartMin; axisEndMin = maxDuration; } // ungültig → automatisch
     const axisSpan     = axisEndMin - axisStartMin;
     const inAxis       = m => m >= axisStartMin && m <= axisEndMin;
 
@@ -141,7 +147,7 @@ function drawTimeline(elapsedMin, startMinOfDay, currentMinOfDay, runningPauseMi
         svg.appendChild(svgEl('line', { x1: tX, y1: barY - 5, x2: tX, y2: barY, stroke: border, 'stroke-width': 1.5 }));
         if (h % labelEvery !== 0) continue;
         const txt = svgEl('text', { x: tX, y: barY - 9, 'text-anchor': 'middle', 'font-size': '11px', fill: textMuted, 'font-weight': 500 });
-        txt.textContent = `${h}:00`;
+        txt.textContent = `${h < 0 ? h + 24 : h}:00`; // Vortag (Jetzt vor einer Startzeit kurz nach Mitternacht)
         svg.appendChild(txt);
     }
 
@@ -214,9 +220,10 @@ function drawTimeline(elapsedMin, startMinOfDay, currentMinOfDay, runningPauseMi
 
     // 7. „Jetzt"-Marker – Label unterhalb des Balkens (unter der Tagesziel-Zeile), damit es die
     //    Warnschwellen-Marker oberhalb des Balkens nicht verdeckt
-    if (elapsedMin >= 0 && inAxis(elapsedMin) && startMinOfDay > 0) {
-        const nowX       = getX(elapsedMin);
-        const nowTimeStr = formatMinutesToTime(startMinOfDay + elapsedMin);
+    //    Vor Arbeitsbeginn steht er links von der Startzeit.
+    if (startTimeInput.value && inAxis(nowMin)) {
+        const nowX       = getX(nowMin);
+        const nowTimeStr = formatMinutesToTime(startMinOfDay + nowMin);
         const nowLabelY  = barY + barHeight + 32;
 
         svg.appendChild(svgEl('line', { x1: nowX, y1: barY - 4, x2: nowX, y2: nowLabelY, stroke: accent, 'stroke-width': 2.5 }));

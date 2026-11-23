@@ -26,7 +26,6 @@ function addWorkTimeRow(daily = '', weekly = '') {
         + `<button type="button" class="work-time-btn work-time-up-btn" title="Nach oben verschieben" aria-label="Nach oben verschieben">▲</button>`
         + `<button type="button" class="work-time-btn work-time-down-btn" title="Nach unten verschieben" aria-label="Nach unten verschieben">▼</button>`
         + `</div>`
-        + `<button type="button" class="work-time-btn notify-btn work-time-notify-btn">${bellIconSvg()}</button>`
         + `<button type="button" class="work-time-btn work-time-relevant-btn" title="Als relevant markieren (Werte im Seitentitel)">☆</button>`
         + `<button type="button" class="work-time-btn work-time-delete-btn" title="Arbeitszeit entfernen">×</button>`;
     dom.workTimeList.appendChild(el);
@@ -36,12 +35,9 @@ function addWorkTimeRow(daily = '', weekly = '') {
         dailyInput:  el.querySelector(`#dailyTime${uid}`),
         weeklyInput: el.querySelector(`#weeklyTime${uid}`),
         relevantBtn: el.querySelector('.work-time-relevant-btn'),
-        notifyBtn:   el.querySelector('.work-time-notify-btn'),
         upBtn:       el.querySelector('.work-time-up-btn'),
-        downBtn:     el.querySelector('.work-time-down-btn'),
-        notify:      false   // Benachrichtigung bei Erreichen der Zielzeit
+        downBtn:     el.querySelector('.work-time-down-btn')
     };
-    setBellState(row.notifyBtn, false, 'bei Erreichen der Zielzeit');
     row.dailyInput.value  = daily;
     row.weeklyInput.value = weekly;
 
@@ -62,7 +58,6 @@ function addWorkTimeRow(daily = '', weekly = '') {
     row.upBtn.addEventListener('click',   () => moveWorkTimeRow(workTimeRows.indexOf(row), -1));
     row.downBtn.addEventListener('click', () => moveWorkTimeRow(workTimeRows.indexOf(row), 1));
     row.relevantBtn.addEventListener('click', () => selectRelevantWorkTime(workTimeRows.indexOf(row)));
-    row.notifyBtn.addEventListener('click', () => toggleNotifyWorkTime(workTimeRows.indexOf(row)));
     el.querySelector('.work-time-delete-btn').addEventListener('click', () => deleteWorkTimeRow(workTimeRows.indexOf(row)));
 
     workTimeRows.push(row);
@@ -139,13 +134,10 @@ function targetStatRowHtml(index) {
           `<div class="stat-card selectable" data-stat="${stat}" onclick="selectTitleStat('${stat}', ${index})" title="Klicken, um diesen Wert im Seitentitel anzuzeigen">`
         + `<div class="stat-label">${label}</div><div class="stat-value muted">–</div>${extra}</div>`;
     // Arbeitszeit-Kachel kann nicht in den Titel; relevant markieren über ☆ oder die übrigen Kacheln der Zeile
-    // Glocke in der Zielzeit-Kachel: gleicher Schalter wie an der Eingabezeile (Klick wählt nicht den Titel-Wert)
-    const bell = index === null ? ''
-        : `<button type="button" class="notify-btn stat-notify-btn" onclick="event.stopPropagation(); toggleNotifyWorkTime(${index})">${bellIconSvg()}</button>`;
     return `<div class="stat-row">`
         + `<div class="stat-card" data-stat="worktime">`
         + `<div class="stat-label">Arbeitszeit</div><div class="stat-value">–</div><div class="stat-hint stat-hint-compact"></div></div>`
-        + card('target', 'Zielzeit', bell)
+        + card('target', 'Zielzeit')
         + card('countdown', 'Countdown bis Ziel')
         + card('diff', 'Rest / Überziehung')
         + card('percent', 'Fortschritt', '<div class="stat-progress-bar"><div class="stat-progress-fill"></div></div>')
@@ -197,8 +189,5 @@ function renderTargetStats(targets, relevantTarget) {
         rowEl.querySelector('.stat-progress-fill').style.width = hasValues ? `${Math.min(100, t.progressUncapped)}%` : '0%';
 
         selectableStats.forEach(stat => card(stat).classList.toggle('selected', isRelevant && titleStat === stat));
-
-        const bellBtn = rowEl.querySelector('.stat-notify-btn');
-        if (bellBtn) setBellState(bellBtn, !!workTimeRows[t.index]?.notify, 'bei Erreichen der Zielzeit');
     });
 }

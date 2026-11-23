@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="Teilt Dateien direkt zwischen zwei Browsern per WebRTC – ohne Upload auf einen Server.">
+<meta name="description" content="Gemeinsamer Datei-Pool für beliebig viele Geräte per WebRTC – alle können Dateien hinzufügen und laden, ohne Upload auf einen Server.">
 <title>Fileshare</title>
 <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../assets/css/reset.css">
@@ -25,6 +25,7 @@
         --accent-glow: rgba(217, 119, 6, 0.35);
         --danger: var(--theme-danger);
         --danger-light: var(--theme-danger-soft);
+        --success: var(--theme-success);
     }
 
     body {
@@ -98,6 +99,22 @@
         margin-bottom: 10px;
     }
 
+    .panel-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .panel-head .field-label { margin-bottom: 10px; }
+
+    .hint {
+        font-size: 12.5px;
+        color: var(--text-muted);
+        line-height: 1.5;
+        margin-top: 10px;
+    }
+
     .dropzone {
         border: 2px dashed var(--border-color);
         border-radius: 12px;
@@ -109,14 +126,20 @@
         font-size: 14px;
     }
 
+    .dropzone.compact {
+        padding: 14px 16px;
+        font-size: 13.5px;
+    }
+
     .dropzone:hover,
+    .dropzone:focus-visible,
     .dropzone.drag {
         border-color: var(--accent);
         box-shadow: 0 0 0 3px var(--accent-light), 0 0 20px var(--accent-glow);
         color: var(--text-color);
+        outline: none;
     }
 
-    .sel-list,
     .file-list {
         list-style: none;
         display: flex;
@@ -125,27 +148,63 @@
         margin-top: 14px;
     }
 
-    .sel-row {
+    .file-list:empty { display: none; }
+
+    .empty-note {
+        font-size: 13px;
+        color: var(--text-muted);
+        text-align: center;
+        margin-top: 14px;
+    }
+
+    .file-row {
         display: flex;
-        align-items: center;
-        gap: 10px;
+        flex-direction: column;
+        gap: 6px;
         background: var(--card-bg);
         border: 1px solid var(--border-color);
         border-radius: 10px;
         padding: 10px 12px;
     }
 
-    .sel-row .file-name {
+    .row-top {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .file-name {
         flex: 1;
+        min-width: 0;
         font-size: 13.5px;
         overflow-wrap: anywhere;
     }
 
-    .sel-row .file-size {
+    .file-size {
         font-size: 11.5px;
         color: var(--text-muted);
         white-space: nowrap;
     }
+
+    .file-meta {
+        font-size: 11.5px;
+        color: var(--text-muted);
+    }
+
+    .file-meta:empty { display: none; }
+
+    .tag {
+        display: inline-block;
+        font-size: 10.5px;
+        font-weight: 700;
+        padding: 1px 7px;
+        border-radius: 999px;
+        white-space: nowrap;
+        border: 1px solid currentColor;
+    }
+
+    .tag-own { color: var(--primary-strong); background: var(--primary-light); }
+    .tag-done { color: var(--success); background: var(--theme-success-soft); }
 
     .remove-btn {
         border: none;
@@ -167,8 +226,7 @@
     }
 
     .primary-btn,
-    .danger-btn,
-    #copyBtn {
+    .danger-btn {
         width: 100%;
         padding: 13px 16px;
         border-radius: 10px;
@@ -206,27 +264,64 @@
         background: var(--danger-light);
     }
 
+    .small-btn,
+    .dl-link {
+        flex-shrink: 0;
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 700;
+        color: #fff;
+        background: linear-gradient(90deg, var(--primary), var(--primary-strong));
+        border: none;
+        padding: 6px 12px;
+        border-radius: 8px;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+    .small-btn:disabled {
+        opacity: 0.55;
+        cursor: default;
+    }
+
+    .ghost-btn {
+        background: transparent;
+        color: var(--accent);
+        border: 2px solid var(--accent);
+        padding: 4px 10px;
+    }
+
+    .ghost-btn:hover { background: var(--accent-light); }
+
     .link-row {
         display: flex;
         gap: 8px;
     }
 
-    .link-row input {
+    .link-row input,
+    .name-row input {
         flex: 1;
         min-width: 0;
         background: var(--card-bg);
         border: 2px solid var(--border-color);
         border-radius: 8px;
         color: var(--text-color);
-        font-family: "SFMono-Regular", Consolas, monospace;
-        font-size: 12.5px;
+        font-size: 13px;
         padding: 10px 12px;
     }
 
+    .link-row input {
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 12.5px;
+    }
+
     #copyBtn {
-        width: auto;
         white-space: nowrap;
-        margin-top: 0;
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
         background: transparent;
         border: 2px solid var(--accent);
         color: var(--accent);
@@ -239,7 +334,7 @@
     .qr-wrap {
         display: flex;
         justify-content: center;
-        margin: 22px 0 18px;
+        margin: 20px 0 6px;
     }
 
     .qr-card {
@@ -250,46 +345,62 @@
         line-height: 0;
     }
 
-    .status-row {
-        text-align: center;
+    .invite summary {
+        cursor: pointer;
         font-size: 13px;
-        color: var(--text-muted);
-        margin-top: 2px;
-        margin-bottom: 4px;
+        font-weight: 700;
+        color: var(--text-color);
+        margin-top: 16px;
     }
 
-    .file-row {
+    .invite[open] summary { margin-bottom: 12px; }
+
+    .status-row {
+        font-size: 13.5px;
+        color: var(--text-color);
+        font-weight: 600;
+    }
+
+    .status-row.muted { color: var(--text-muted); font-weight: 400; }
+
+    .devices {
         display: flex;
-        flex-direction: column;
-        gap: 8px;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
+    }
+
+    .device {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12.5px;
+        padding: 4px 10px;
+        border-radius: 999px;
         background: var(--card-bg);
         border: 1px solid var(--border-color);
-        border-radius: 10px;
-        padding: 10px 12px;
     }
 
-    .row-top {
+    .device::before {
+        content: '';
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--success);
+    }
+
+    .device.me { border-color: var(--primary); }
+    .device.connecting::before { background: var(--accent); }
+
+    .name-row {
         display: flex;
         align-items: center;
         gap: 10px;
-        cursor: pointer;
+        margin-top: 14px;
     }
 
-    .file-check {
-        width: 17px;
-        height: 17px;
-        accent-color: var(--accent);
-        flex-shrink: 0;
-    }
-
-    .file-name {
-        flex: 1;
-        font-size: 13.5px;
-        overflow-wrap: anywhere;
-    }
-
-    .file-size {
-        font-size: 11.5px;
+    .name-row label {
+        font-size: 12.5px;
         color: var(--text-muted);
         white-space: nowrap;
     }
@@ -314,25 +425,7 @@
         transition: width 0.2s;
     }
 
-    .dl-link {
-        display: none;
-        align-self: flex-start;
-        text-decoration: none;
-        font-size: 12px;
-        font-weight: 700;
-        color: #fff;
-        background: linear-gradient(90deg, var(--primary), var(--primary-strong));
-        padding: 7px 12px;
-        border-radius: 8px;
-    }
-
-    .file-row.done .dl-link {
-        display: inline-block;
-    }
-
-    .file-row.done .file-progress {
-        display: none;
-    }
+    .file-row.failed .file-meta { color: var(--danger); }
 
     .info-box {
         background: var(--panel-bg);
@@ -390,46 +483,64 @@
 <div class="container">
     <header>
         <h1><span>Fileshare</span></h1>
-        <p>Peer-to-Peer-Dateitransfer direkt zwischen zwei Browsern (WebRTC) – nichts wird auf einen Server hochgeladen.</p>
+        <p>Gemeinsamer Datei-Pool für beliebig viele Geräte – alle können Dateien hinzufügen und laden.
+            Direkt zwischen den Browsern (WebRTC), nichts wird auf einen Server hochgeladen.</p>
     </header>
 
-    <section class="panel" id="senderPanel">
-        <label class="field-label">Dateien auswählen</label>
-        <div class="dropzone" id="dropzone">
-            <input type="file" id="fileInput" multiple hidden>
-            <div>Tippen oder Dateien hierher ziehen</div>
-        </div>
-        <ul class="sel-list" id="selList"></ul>
-        <button type="button" class="primary-btn" id="startBtn" disabled>Sitzung starten</button>
+    <!-- Start: Raum öffnen (optional schon mit Dateien) -->
+    <section class="panel" id="startPanel" hidden>
+        <label class="field-label">Dateien für den Raum (optional)</label>
+        <div class="dropzone" id="startDrop" tabindex="0" role="button">Tippen oder Dateien hierher ziehen</div>
+        <ul class="file-list" id="startList"></ul>
+        <button type="button" class="primary-btn" id="openBtn">Raum öffnen</button>
+        <p class="hint">Dateien lassen sich auch später noch hinzufügen – von dir und von allen, die dem Raum beitreten.</p>
     </section>
 
-    <section class="panel" id="sharePanel" hidden>
-        <label class="field-label">Link zum Teilen</label>
-        <div class="link-row">
-            <input type="text" id="shareLink" readonly>
-            <button type="button" id="copyBtn">Kopieren</button>
+    <!-- Raum: Status, Geräte, Einladung -->
+    <section class="panel" id="roomPanel" hidden>
+        <div class="panel-head">
+            <label class="field-label">Raum</label>
         </div>
-        <div class="qr-wrap">
-            <div class="qr-card"><div id="qrcode"></div></div>
+        <p class="status-row" id="roomStatus">Verbinde …</p>
+        <div class="devices" id="devices"></div>
+        <div class="name-row">
+            <label for="nameInput">Dein Name im Raum</label>
+            <input type="text" id="nameInput" maxlength="40" autocomplete="off">
         </div>
-        <p class="status-row" id="hostStatus">Warte auf Verbindung …</p>
-        <label class="field-label">Geteilte Dateien</label>
-        <ul class="sel-list" id="sharedFileList"></ul>
-        <button type="button" class="danger-btn" id="endBtn">Sitzung beenden</button>
+        <details class="invite" id="invite" open>
+            <summary>Weitere Geräte einladen</summary>
+            <div class="link-row">
+                <input type="text" id="shareLink" readonly aria-label="Link zum Raum">
+                <button type="button" id="copyBtn">Kopieren</button>
+            </div>
+            <div class="qr-wrap">
+                <div class="qr-card"><div id="qrcode"></div></div>
+            </div>
+        </details>
+        <button type="button" class="danger-btn" id="leaveBtn">Raum verlassen</button>
     </section>
 
-    <section class="panel" id="receiverPanel" hidden>
-        <p class="status-row" id="incomingStatus">Verbinde …</p>
-        <ul class="file-list" id="incomingList"></ul>
-        <button type="button" class="primary-btn" id="requestBtn" hidden>Ausgewählte empfangen</button>
+    <!-- Pool: alle Dateien aller Geräte -->
+    <section class="panel" id="poolPanel" hidden>
+        <div class="panel-head">
+            <label class="field-label">Dateien im Raum</label>
+            <button type="button" class="small-btn ghost-btn" id="getAllBtn" hidden>Alle laden</button>
+        </div>
+        <div class="dropzone compact" id="poolDrop" tabindex="0" role="button">+ Dateien hinzufügen (tippen oder hierher ziehen)</div>
+        <ul class="file-list" id="poolList"></ul>
+        <p class="empty-note" id="poolEmpty">Noch keine Dateien im Raum.</p>
     </section>
+
+    <input type="file" id="fileInput" multiple hidden>
 
     <div class="info-box">
-        <strong>Sicherheit:</strong> Die Dateien werden direkt und verschlüsselt zwischen den beiden Browsern
-        übertragen (WebRTC) – nichts landet zwischengespeichert auf einem Server. Der Link bzw. QR-Code ist
-        gleichzeitig der einzige Schlüssel zur Sitzung: Wer ihn kennt, kann die angebotenen Dateien abrufen. Nur über
-        einen vertrauenswürdigen Kanal teilen und die Sitzung danach beenden. Beide Browser-Tabs müssen während der
-        Übertragung geöffnet bleiben.
+        <strong>So funktioniert der Raum:</strong> Alle Geräte im Raum sind direkt und verschlüsselt miteinander
+        verbunden (WebRTC). Jede Datei bleibt auf dem Gerät, das sie hinzugefügt hat – und auf jedem Gerät, das sie
+        schon geladen hat. Von dort können sie alle anderen laden. Der Raum bleibt offen, bis das letzte Gerät ihn
+        verlässt; Dateien verschwinden, sobald kein Gerät im Raum sie mehr hat.<br>
+        <strong>Sicherheit:</strong> Der Link bzw. QR-Code ist der einzige Schlüssel zum Raum: Wer ihn kennt, kann
+        beitreten, alle Dateien sehen und laden. Nur über einen vertrauenswürdigen Kanal teilen. Der Browser-Tab muss
+        offen bleiben, solange du im Raum bist.
     </div>
 
     <footer>
@@ -442,7 +553,30 @@
 <script src="vendor/qrcode.min.js"></script>
 <script src="../assets/js/escape-html.js"></script>
 <script>
+/*
+ * Fileshare – gemeinsamer Datei-Pool (Mesh über PeerJS/WebRTC).
+ *
+ * Raum: zufällige 128-Bit-ID im Link (?s=…). Jedes Gerät hat eine eigene, zufällige
+ * Peer-ID ("Mitglied") und ist mit allen anderen Mitgliedern direkt verbunden.
+ *
+ * Eingang: Ein Gerät hält zusätzlich die feste Peer-ID PEER_PREFIX + Raum-ID ("Anker").
+ * Wer beitritt, fragt dort nach der Mitgliederliste und verbindet sich dann mit allen.
+ * Verlässt der Anker-Halter den Raum, übernimmt ein anderes Mitglied den Anker
+ * (gestaffelt nach Peer-ID, damit es nicht alle gleichzeitig versuchen). Der Raum
+ * existiert so lange, wie noch ein Gerät drin ist.
+ *
+ * Dateien: Jede Datei hat eine raumweit eindeutige ID (gid). Jedes Gerät meldet allen
+ * die Dateien, die es hat (selbst hinzugefügt oder fertig geladen); der Pool ist die
+ * Vereinigung. Geladen wird von einem verbundenen Gerät, das die Datei hat.
+ *
+ * Nachrichten (JSON-Strings, Dateiinhalte als ArrayBuffer):
+ *   hello {label, anchor, files, peers}  files {files}  label {label}  anchor {}
+ *   get {gid} → start {gid} + Chunks + end {gid}  bzw.  missing {gid}
+ *   Anker: join {} → members {ids}
+ */
 (function () {
+    'use strict';
+
     // ---------- Debug-Konsole ----------
     const debugEl = document.getElementById('debugConsole');
 
@@ -480,17 +614,22 @@
         return;
     }
 
+    // ---------- Konstanten & Helfer ----------
     const CHUNK_SIZE = 16 * 1024;
     const MAX_QUEUED_CHUNKS = 64;
-    const PEER_PREFIX = 'tr-';
+    const PEER_PREFIX = 'tr-';        // Anker eines Raums: PEER_PREFIX + Raum-ID
+    const MEMBER_PREFIX = 'trm-';     // Mitglieder: MEMBER_PREFIX + Zufall
     const ID_REGEX = /^[0-9a-f]{32}$/;
+    const NAME_KEY = 'klmpfh-fileshare-name';
+    const JOIN_ATTEMPTS = 8;          // Anker nicht erreichbar → so oft erneut (alle 3 s) suchen
+    const PEER_OPTS = { debug: 1 };
 
     const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-    function generateSessionId() {
-        const bytes = new Uint8Array(16);
-        crypto.getRandomValues(bytes);
-        return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    function randomHex(bytes) {
+        const a = new Uint8Array(bytes);
+        crypto.getRandomValues(a);
+        return Array.from(a, b => b.toString(16).padStart(2, '0')).join('');
     }
 
     function formatBytes(n) {
@@ -501,161 +640,682 @@
         return n.toFixed(n < 10 ? 1 : 0) + ' ' + units[u];
     }
 
-    // ---------- Sender ----------
-    const senderPanel = document.getElementById('senderPanel');
-    const dropzone = document.getElementById('dropzone');
-    const fileInput = document.getElementById('fileInput');
-    const selList = document.getElementById('selList');
-    const startBtn = document.getElementById('startBtn');
-    const sharePanel = document.getElementById('sharePanel');
-    const shareLinkInput = document.getElementById('shareLink');
-    const copyBtn = document.getElementById('copyBtn');
-    const hostStatus = document.getElementById('hostStatus');
-    const endBtn = document.getElementById('endBtn');
-    const sharedFileList = document.getElementById('sharedFileList');
+    function deviceGuess() {
+        const ua = navigator.userAgent;
+        if (/iPhone/.test(ua)) return 'iPhone';
+        if (/iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'iPad';
+        if (/Android/.test(ua)) return /Mobile/.test(ua) ? 'Android-Handy' : 'Android-Tablet';
+        if (/Macintosh/.test(ua)) return 'Mac';
+        if (/Windows/.test(ua)) return 'Windows-PC';
+        if (/Linux/.test(ua)) return 'Linux-PC';
+        return 'Gerät';
+    }
 
-    let files = [];
-    let peer = null;
-    const conns = new Map(); // connId -> { conn, sending }
+    function storedName() {
+        try { return (localStorage.getItem(NAME_KEY) || '').trim(); } catch (e) { return ''; }
+    }
 
-    function addFiles(list) {
+    // ---------- Zustand ----------
+    const st = {
+        roomId: null,
+        me: null,                 // Peer (Mitglied)
+        myId: null,
+        label: storedName() || deviceGuess() + ' ' + randomHex(2).toUpperCase(),
+        joined: false,            // Mitgliederliste erhalten bzw. Raum selbst geöffnet
+        left: false,
+        anchor: null,             // Peer mit der Anker-ID, solange dieses Gerät sie hält
+        anchorHolder: null,       // Mitglieds-ID des aktuellen Anker-Halters
+        claimTimer: null,
+        claimDelay: 5000,
+        peers: new Map(),         // memberId → Peer-Eintrag (siehe addPeer)
+        local: new Map(),         // gid → { meta, blob, own, url }
+        downloads: new Map(),     // gid → { status: 'pending'|'active'|'failed', from, received }
+        order: [],                // gids in der Reihenfolge, in der sie aufgetaucht sind
+        gidCounter: 0,
+        gidPrefix: randomHex(4)
+    };
+
+    // ---------- DOM ----------
+    const $ = id => document.getElementById(id);
+    const startPanel = $('startPanel'), roomPanel = $('roomPanel'), poolPanel = $('poolPanel');
+    const startList = $('startList'), poolList = $('poolList'), poolEmpty = $('poolEmpty');
+    const fileInput = $('fileInput');
+    const roomStatus = $('roomStatus'), devicesEl = $('devices');
+    const nameInput = $('nameInput'), shareLinkInput = $('shareLink'), copyBtn = $('copyBtn');
+    const getAllBtn = $('getAllBtn');
+
+    // ---------- Lokale Dateien ----------
+    function newGid() {
+        st.gidCounter++;
+        return st.gidPrefix + '-' + st.gidCounter + '-' + randomHex(3);
+    }
+
+    function addLocalFiles(list) {
+        let added = 0;
         for (const f of list) {
-            const dup = files.some(x => x.name === f.name && x.size === f.size && x.lastModified === f.lastModified);
-            if (!dup) files.push(f);
+            const dup = Array.from(st.local.values()).some(x => x.own && x.blob.name === f.name && x.blob.size === f.size && x.blob.lastModified === f.lastModified);
+            if (dup) continue;
+            const gid = newGid();
+            st.local.set(gid, {
+                meta: { gid, name: f.name, size: f.size, type: f.type, by: st.label },
+                blob: f, own: true, url: null
+            });
+            noteGid(gid);
+            added++;
         }
-        renderSelList();
+        if (added) {
+            console.log(added + ' Datei(en) hinzugefügt.');
+            broadcastFiles();
+        }
+        render();
     }
 
-    function renderSelList() {
-        selList.innerHTML = files.map((f, i) => `
-            <li class="sel-row">
-                <span class="file-name">${escapeHtml(f.name)}</span>
-                <span class="file-size">${formatBytes(f.size)}</span>
-                <button type="button" class="remove-btn" data-i="${i}" title="Entfernen">×</button>
-            </li>`).join('');
-        startBtn.disabled = files.length === 0;
+    function removeOwnFile(gid) {
+        const entry = st.local.get(gid);
+        if (!entry || !entry.own) return;
+        if (entry.url) URL.revokeObjectURL(entry.url);
+        st.local.delete(gid);
+        broadcastFiles();
+        render();
     }
 
-    function renderSharedFileList() {
-        sharedFileList.innerHTML = files.map(f => `
-            <li class="sel-row">
-                <span class="file-name">${escapeHtml(f.name)}</span>
-                <span class="file-size">${formatBytes(f.size)}</span>
-            </li>`).join('');
+    function noteGid(gid) {
+        if (st.order.indexOf(gid) === -1) st.order.push(gid);
     }
 
-    dropzone.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', () => { addFiles(fileInput.files); fileInput.value = ''; });
-    dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
-    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
-    dropzone.addEventListener('drop', e => {
-        e.preventDefault();
-        dropzone.classList.remove('drag');
-        if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files);
-    });
-    selList.addEventListener('click', e => {
-        const btn = e.target.closest('.remove-btn');
-        if (!btn) return;
-        files.splice(Number(btn.dataset.i), 1);
-        renderSelList();
-    });
-
-    function updateHostStatus() {
-        const n = conns.size;
-        hostStatus.textContent = n === 0 ? 'Warte auf Verbindung …' : `${n} Empfänger verbunden`;
+    function myManifest() {
+        return Array.from(st.local.values()).map(x => x.meta);
     }
 
-    async function sendFile(conn, file, id) {
-        conn.send(JSON.stringify({ t: 'start', id }));
+    // ---------- Pool (Vereinigung aller Geräte) ----------
+    function pool() {
+        const map = new Map();
+        st.local.forEach((x, gid) => map.set(gid, { meta: x.meta, local: x, holders: [] }));
+        st.peers.forEach((p, id) => {
+            if (!p.ready) return;
+            p.files.forEach((meta, gid) => {
+                if (!map.has(gid)) map.set(gid, { meta, local: null, holders: [] });
+                map.get(gid).holders.push(id);
+            });
+        });
+        return st.order.filter(gid => map.has(gid)).map(gid => map.get(gid));
+    }
+
+    // ---------- Verbindungen ----------
+    function send(p, msg) {
+        if (p && p.conn && p.conn.open) {
+            try { p.conn.send(JSON.stringify(msg)); } catch (e) { console.warn('Senden fehlgeschlagen:', e); }
+        }
+    }
+
+    function broadcast(msg) {
+        st.peers.forEach(p => { if (p.ready) send(p, msg); });
+    }
+
+    function broadcastFiles() {
+        broadcast({ t: 'files', files: myManifest() });
+    }
+
+    function connectTo(id) {
+        if (!st.me || st.left || id === st.myId || st.peers.has(id)) return;
+        console.log('Verbinde mit', id, '…');
+        const conn = st.me.connect(id, { serialization: 'raw', reliable: true, metadata: { kind: 'member' } });
+        addPeer(conn, true);
+    }
+
+    /** Neue Mitglieds-Verbindung (ausgehend oder eingehend). Gibt es zu diesem Gerät
+     *  schon eine, bleibt die erhalten, die das Gerät mit der kleineren ID aufgebaut hat. */
+    function addPeer(conn, outgoing) {
+        const id = conn.peer;
+        const existing = st.peers.get(id);
+        if (existing && existing.conn !== conn) {
+            const keepInitiator = st.myId < id ? st.myId : id;
+            const newInitiator = outgoing ? st.myId : id;
+            const oldInitiator = existing.outgoing ? st.myId : id;
+            if (newInitiator !== keepInitiator || oldInitiator === keepInitiator) {
+                console.log('Doppelte Verbindung zu', id, '– wird verworfen.');
+                conn.on('open', () => conn.close());
+                return;
+            }
+            console.log('Doppelte Verbindung zu', id, '– ersetze die ältere.');
+            const old = existing.conn;
+            st.peers.delete(id);
+            old.close();
+        }
+
+        const p = { id, conn, outgoing, label: '', files: new Map(), ready: false, queue: [], sending: false, rx: null };
+        st.peers.set(id, p);
+        render();
+
+        const onOpen = () => {
+            send(p, {
+                t: 'hello',
+                label: st.label,
+                anchor: st.anchorHolder === st.myId,
+                files: myManifest(),
+                peers: Array.from(st.peers.keys()).filter(x => x !== id)
+            });
+        };
+        if (conn.open) onOpen(); else conn.on('open', onOpen);
+        conn.on('data', data => onPeerData(p, data));
+        conn.on('iceStateChanged', s => console.log('ICE-Status (' + id + '):', s));
+        conn.on('close', () => dropPeer(p, 'beendet'));
+        conn.on('error', err => { console.error('Verbindungsfehler zu', id, err); dropPeer(p, 'Fehler'); });
+    }
+
+    function dropPeer(p, why) {
+        if (st.peers.get(p.id) !== p) return;   // schon ersetzt oder entfernt
+        console.log('Verbindung zu', p.label || p.id, why + '.');
+        st.peers.delete(p.id);
+        try { p.conn.close(); } catch (e) { /* schon zu */ }
+
+        // Laufende Downloads von diesem Gerät auf ein anderes umleiten oder als fehlgeschlagen markieren
+        Array.from(st.downloads.entries()).forEach(([gid, d]) => {
+            if (d.from !== p.id || d.status === 'failed') return;
+            retryElsewhere(gid, d, p.id);
+        });
+
+        if (p.id === st.anchorHolder) {
+            st.anchorHolder = null;
+            console.log('Anker-Gerät hat den Raum verlassen – Übernahme wird vorbereitet.');
+            scheduleClaim(true);
+        }
+        render();
+    }
+
+    function onPeerData(p, data) {
+        if (typeof data !== 'string') { receiveChunk(p, data); return; }
+        let msg;
+        try { msg = JSON.parse(data); } catch (e) { return; }
+        switch (msg.t) {
+            case 'hello':
+                p.label = String(msg.label || 'Gerät').slice(0, 40);
+                setFiles(p, msg.files);
+                p.ready = true;
+                if (msg.anchor) setAnchorHolder(p.id);
+                // Geräte, die gleichzeitig beigetreten sind, kennen sich evtl. noch nicht
+                (Array.isArray(msg.peers) ? msg.peers : []).forEach(id => { if (typeof id === 'string') connectTo(id); });
+                console.log('Im Raum:', p.label);
+                render();
+                break;
+            case 'files':
+                setFiles(p, msg.files);
+                render();
+                break;
+            case 'label':
+                p.label = String(msg.label || 'Gerät').slice(0, 40);
+                render();
+                break;
+            case 'anchor':
+                setAnchorHolder(p.id);
+                break;
+            case 'get':
+                p.queue.push(String(msg.gid));
+                serveQueue(p);
+                break;
+            case 'start':
+                p.rx = { gid: String(msg.gid), chunks: [], received: 0 };
+                markDownload(p.rx.gid, 'active');
+                break;
+            case 'end':
+                finishDownload(p, String(msg.gid));
+                break;
+            case 'missing': {
+                const d = st.downloads.get(String(msg.gid));
+                if (d && d.from === p.id) retryElsewhere(String(msg.gid), d, p.id);
+                render();
+                break;
+            }
+        }
+    }
+
+    function setFiles(p, list) {
+        p.files = new Map();
+        (Array.isArray(list) ? list : []).forEach(m => {
+            if (!m || typeof m.gid !== 'string') return;
+            p.files.set(m.gid, {
+                gid: m.gid,
+                name: String(m.name || 'Datei'),
+                size: Math.max(0, Number(m.size) || 0),
+                type: String(m.type || ''),
+                by: String(m.by || '').slice(0, 40)
+            });
+            noteGid(m.gid);
+        });
+    }
+
+    // ---------- Senden ----------
+    async function serveQueue(p) {
+        if (p.sending) return;
+        p.sending = true;
+        while (p.queue.length && st.peers.get(p.id) === p) {
+            const gid = p.queue.shift();
+            const entry = st.local.get(gid);
+            if (!entry) { send(p, { t: 'missing', gid }); continue; }
+            try {
+                await sendFile(p, entry.blob, gid);
+            } catch (e) {
+                console.warn('Senden von', entry.meta.name, 'abgebrochen:', e.message);
+                break;
+            }
+        }
+        p.sending = false;
+    }
+
+    async function sendFile(p, blob, gid) {
+        const conn = p.conn;
+        send(p, { t: 'start', gid });
         let offset = 0;
-        while (offset < file.size) {
-            if (!conn.open) throw new Error('connection closed');
-            const buf = await file.slice(offset, offset + CHUNK_SIZE).arrayBuffer();
-            while (conn.bufferSize > MAX_QUEUED_CHUNKS) await sleep(15);
+        while (offset < blob.size) {
+            if (!conn.open) throw new Error('Verbindung geschlossen');
+            const buf = await blob.slice(offset, offset + CHUNK_SIZE).arrayBuffer();
+            while (conn.bufferSize > MAX_QUEUED_CHUNKS) {
+                if (!conn.open) throw new Error('Verbindung geschlossen');
+                await sleep(15);
+            }
             conn.send(buf);
             offset += buf.byteLength;
         }
-        conn.send(JSON.stringify({ t: 'end', id }));
+        send(p, { t: 'end', gid });
     }
 
-    async function handleFileRequest(conn, ids) {
-        const entry = conns.get(conn.peer);
-        if (!entry || entry.sending) return;
-        entry.sending = true;
-        for (const id of ids) {
-            const file = files[id];
-            if (!file) continue;
-            try { await sendFile(conn, file, id); } catch (e) { break; }
+    // ---------- Laden ----------
+    /** Fordert eine Datei bei einem verbundenen Gerät an, das sie hat. exclude = Gerät,
+     *  das sie gerade nicht hatte; save = nach dem Laden speichern. Liefert false,
+     *  wenn kein Gerät sie anbietet. */
+    function requestFile(gid, save, exclude) {
+        if (st.local.has(gid)) return true;
+        const d = st.downloads.get(gid);
+        if (d && d.status !== 'failed') return true;
+        const holders = [];
+        st.peers.forEach((p, id) => { if (p.ready && p.files.has(gid) && id !== exclude) holders.push(p); });
+        if (!holders.length) return false;
+        // Gerät mit der kürzesten Warteschlange bevorzugen
+        const load = id => Array.from(st.downloads.values()).filter(x => x.from === id && x.status !== 'failed').length;
+        holders.sort((a, b) => load(a.id) - load(b.id));
+        const from = holders[0];
+        st.downloads.set(gid, { status: 'pending', from: from.id, save: save !== false });
+        send(from, { t: 'get', gid });
+        return true;
+    }
+
+    /** Download bei einem anderen Gerät fortsetzen (von vorn) oder als fehlgeschlagen markieren. */
+    function retryElsewhere(gid, d, badId) {
+        st.downloads.delete(gid);
+        if (!requestFile(gid, d.save, badId)) st.downloads.set(gid, { status: 'failed', from: null, save: d.save });
+    }
+
+    function markDownload(gid, status) {
+        const d = st.downloads.get(gid);
+        if (!d) return;
+        d.status = status;
+        const li = poolList.querySelector(`.file-row[data-gid="${CSS.escape(gid)}"]`);
+        if (li) { li.classList.remove('pending'); li.classList.add('active'); }
+    }
+
+    function metaFor(gid) {
+        const l = st.local.get(gid);
+        if (l) return l.meta;
+        for (const p of st.peers.values()) if (p.files.has(gid)) return p.files.get(gid);
+        return null;
+    }
+
+    function receiveChunk(p, buf) {
+        if (!p.rx) return;
+        p.rx.chunks.push(buf);
+        p.rx.received += buf.byteLength !== undefined ? buf.byteLength : buf.size;
+        const meta = metaFor(p.rx.gid);
+        const li = poolList.querySelector(`.file-row[data-gid="${CSS.escape(p.rx.gid)}"]`);
+        if (meta && li) {
+            const pct = meta.size ? Math.min(100, Math.round(p.rx.received / meta.size * 100)) : 100;
+            li.querySelector('.bar-fill').style.width = pct + '%';
+            const btn = li.querySelector('.get-btn');
+            if (btn) btn.textContent = pct + ' %';
         }
-        entry.sending = false;
     }
 
-    function handleIncomingConnection(conn) {
-        console.log('Eingehende Verbindungsanfrage von', conn.peer);
-        conns.set(conn.peer, { conn, sending: false });
-        updateHostStatus();
+    function finishDownload(p, gid) {
+        if (!p.rx || p.rx.gid !== gid) return;
+        const meta = metaFor(gid) || { gid, name: 'download', size: p.rx.received, type: '', by: '' };
+        const blob = new Blob(p.rx.chunks, { type: meta.type || 'application/octet-stream' });
+        p.rx = null;
+        const url = URL.createObjectURL(blob);
+        const d = st.downloads.get(gid);
+        st.downloads.delete(gid);
+        st.local.set(gid, { meta: Object.assign({}, meta), blob, own: false, url });
+        console.log('Geladen:', meta.name);
+        if (!d || d.save !== false) saveBlob(url, meta.name);
+        broadcastFiles();   // ab jetzt kann dieses Gerät die Datei auch anbieten
+        render();
+    }
 
-        conn.on('open', () => {
-            console.log('Datenkanal zu', conn.peer, 'geöffnet.');
-            conn.send(JSON.stringify({
-                t: 'manifest',
-                files: files.map((f, i) => ({ id: i, name: f.name, size: f.size, type: f.type }))
-            }));
+    function saveBlob(url, name) {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name || 'download';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    }
+
+    // ---------- Anker (Eingang für neue Geräte) ----------
+    function setAnchorHolder(id) {
+        st.anchorHolder = id;
+        clearTimeout(st.claimTimer);
+        st.claimDelay = 5000;
+        render();
+    }
+
+    /** Übernahme gestaffelt: Rang nach Mitglieds-ID, damit nicht alle gleichzeitig versuchen. */
+    function scheduleClaim(first) {
+        clearTimeout(st.claimTimer);
+        if (st.left || st.anchor) return;
+        const ids = [st.myId].concat(Array.from(st.peers.keys())).sort();
+        const delay = first ? 300 + ids.indexOf(st.myId) * 1500 : st.claimDelay;
+        st.claimTimer = setTimeout(() => {
+            if (!st.anchorHolder && !st.left) claimAnchor();
+        }, delay);
+    }
+
+    function claimAnchor(onFail) {
+        if (st.anchor || st.left) return;
+        console.log('Versuche, den Raum-Eingang zu übernehmen …');
+        const a = new Peer(PEER_PREFIX + st.roomId, PEER_OPTS);
+        let opened = false;
+        a.on('open', () => {
+            opened = true;
+            if (st.left) { a.destroy(); return; }
+            st.anchor = a;
+            console.log('Dieses Gerät ist jetzt der Eingang zum Raum.');
+            setAnchorHolder(st.myId);
+            broadcast({ t: 'anchor' });
         });
+        a.on('connection', handleLobby);
+        a.on('error', err => {
+            if (err.type === 'unavailable-id' && !opened) {
+                a.destroy();
+                if (onFail) { onFail(); return; }
+                console.log('Eingang noch belegt – neuer Versuch später.');
+                st.claimDelay = Math.min(30000, st.claimDelay * 1.5);
+                scheduleClaim(false);
+                return;
+            }
+            console.error('Eingang-Fehler:', err.type, err);
+        });
+        a.on('disconnected', () => {
+            if (st.left || st.anchor !== a) return;
+            console.warn('Eingang vom Signaling-Server getrennt – verbinde neu …');
+            setTimeout(() => { if (!st.left && st.anchor === a && !a.destroyed) a.reconnect(); }, 1500);
+        });
+        a.on('close', () => {
+            if (st.anchor !== a) return;
+            st.anchor = null;
+            if (st.anchorHolder === st.myId) st.anchorHolder = null;
+            scheduleClaim(false);
+        });
+    }
 
-        conn.on('iceStateChanged', state => console.log('ICE-Status (' + conn.peer + '):', state));
-
+    /** Neues Gerät fragt am Eingang nach der Mitgliederliste. */
+    function handleLobby(conn) {
         conn.on('data', data => {
-            if (typeof data !== 'string') return;
             let msg;
             try { msg = JSON.parse(data); } catch (e) { return; }
-            if (msg.t === 'request' && Array.isArray(msg.ids)) handleFileRequest(conn, msg.ids);
+            if (msg.t !== 'join') return;
+            conn.send(JSON.stringify({ t: 'members', ids: [st.myId].concat(Array.from(st.peers.keys())) }));
         });
-
-        conn.on('close', () => { console.log('Verbindung zu', conn.peer, 'beendet.'); conns.delete(conn.peer); updateHostStatus(); });
-        conn.on('error', err => { console.error('Verbindungsfehler zu', conn.peer, err); conns.delete(conn.peer); updateHostStatus(); });
+        setTimeout(() => conn.close(), 15000);
     }
 
-    function startSession() {
-        console.log('Sitzung wird gestartet …');
-        const sessionId = generateSessionId();
-        peer = new Peer(PEER_PREFIX + sessionId, { debug: 2 });
-
-        peer.on('open', id => {
-            console.log('Signaling-Verbindung hergestellt, Peer-ID:', id);
-            senderPanel.hidden = true;
-            sharePanel.hidden = false;
-            renderSharedFileList();
-
-            const link = `${location.origin}${location.pathname}?s=${sessionId}`;
-            shareLinkInput.value = link;
-
-            const qrEl = document.getElementById('qrcode');
-            qrEl.innerHTML = '';
-            new QRCode(qrEl, {
-                text: link,
-                width: 200,
-                height: 200,
-                colorDark: '#14121a',
-                colorLight: '#ffffff',
-                correctLevel: QRCode.CorrectLevel.M
-            });
-
-            updateHostStatus();
+    // ---------- Mitglied werden ----------
+    function startMember(onReady) {
+        const me = new Peer(MEMBER_PREFIX + randomHex(12), PEER_OPTS);
+        st.me = me;
+        me.on('open', id => {
+            if (st.myId) return;   // reconnect
+            st.myId = id;
+            console.log('Eigene Peer-ID:', id);
+            onReady();
         });
-
-        peer.on('connection', handleIncomingConnection);
-
-        peer.on('error', err => {
+        me.on('connection', conn => {
+            if (conn.metadata && conn.metadata.kind === 'member') addPeer(conn, false);
+            else conn.close();
+        });
+        me.on('error', err => {
+            if (err.type === 'peer-unavailable') {
+                const target = String(err.message || '').replace(/^.*peer\s+/, '');
+                if (target === PEER_PREFIX + st.roomId) { onAnchorUnavailable(); return; }
+                console.warn('Gerät nicht mehr erreichbar:', target);
+                const p = st.peers.get(target);
+                if (p) dropPeer(p, 'nicht erreichbar');
+                return;
+            }
             console.error('Peer-Fehler:', err.type, err);
-            if (err.type === 'unavailable-id') { startSession(); return; }
-            hostStatus.textContent = 'Verbindungsfehler: ' + err.type;
+            if (!st.joined) setStatus('Verbindung fehlgeschlagen: ' + err.type, true);
         });
-
-        peer.on('disconnected', () => console.warn('Von Signaling-Server getrennt.'));
+        me.on('disconnected', () => {
+            if (st.left) return;
+            console.warn('Vom Signaling-Server getrennt – verbinde neu …');
+            setTimeout(() => { if (!st.left && !me.destroyed) me.reconnect(); }, 1500);
+        });
     }
 
-    startBtn.addEventListener('click', startSession);
+    let joinAttempts = 0;
+    let lobbyConn = null;
+
+    function joinRoom() {
+        joinAttempts++;
+        setStatus(joinAttempts === 1 ? 'Suche Raum …' : 'Suche Raum … (Versuch ' + joinAttempts + ' von ' + JOIN_ATTEMPTS + ')', true);
+        lobbyConn = st.me.connect(PEER_PREFIX + st.roomId, { serialization: 'raw', metadata: { kind: 'lobby' } });
+        const conn = lobbyConn;
+        conn.on('open', () => conn.send(JSON.stringify({ t: 'join' })));
+        conn.on('data', data => {
+            let msg;
+            try { msg = JSON.parse(data); } catch (e) { return; }
+            if (msg.t !== 'members' || !Array.isArray(msg.ids)) return;
+            conn.close();
+            if (st.joined) return;
+            st.joined = true;
+            console.log('Raum gefunden,', msg.ids.length, 'Gerät(e) drin.');
+            st.anchorHolder = typeof msg.ids[0] === 'string' ? msg.ids[0] : null;
+            msg.ids.forEach(id => { if (typeof id === 'string') connectTo(id); });
+            render();
+        });
+    }
+
+    function onAnchorUnavailable() {
+        if (st.joined) {
+            // Eingang gerade verwaist (z. B. Übernahme läuft) – betrifft Mitglieder nicht
+            return;
+        }
+        if (joinAttempts >= JOIN_ATTEMPTS) {
+            setStatus('Raum nicht gefunden – alle Geräte haben ihn verlassen, oder der Link ist ungültig.', true);
+            roomPanel.querySelector('#leaveBtn').textContent = 'Neuen Raum öffnen';
+            return;
+        }
+        setTimeout(() => { if (!st.joined && !st.left) joinRoom(); }, 3000);
+    }
+
+    function openRoom() {
+        st.roomId = randomHex(16);
+        history.replaceState(null, '', location.pathname + '?s=' + st.roomId);
+        showRoom();
+        startMember(() => {
+            claimAnchor(() => {
+                // Raum-ID schon vergeben (extrem unwahrscheinlich) → neue würfeln
+                st.roomId = randomHex(16);
+                history.replaceState(null, '', location.pathname + '?s=' + st.roomId);
+                renderInvite();
+                claimAnchor();
+            });
+            st.joined = true;
+            render();
+        });
+    }
+
+    function enterRoom(roomId) {
+        st.roomId = roomId;
+        $('invite').open = false;   // Beitretende brauchen den QR-Code meist nicht sofort
+        showRoom();
+        startMember(joinRoom);
+    }
+
+    function leaveRoom() {
+        st.left = true;
+        clearTimeout(st.claimTimer);
+        if (st.anchor) st.anchor.destroy();
+        if (st.me) st.me.destroy();
+        location.href = location.pathname;
+    }
+
+    // ---------- Oberfläche ----------
+    function setStatus(text, muted) {
+        roomStatus.textContent = text;
+        roomStatus.classList.toggle('muted', !!muted);
+    }
+
+    function showRoom() {
+        startPanel.hidden = true;
+        roomPanel.hidden = false;
+        nameInput.value = st.label;
+        renderInvite();
+        render();
+    }
+
+    function renderInvite() {
+        const link = `${location.origin}${location.pathname}?s=${st.roomId}`;
+        shareLinkInput.value = link;
+        const qrEl = $('qrcode');
+        qrEl.innerHTML = '';
+        new QRCode(qrEl, { text: link, width: 200, height: 200, colorDark: '#14121a', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+    }
+
+    function render() {
+        if (!st.roomId) { renderStartList(); return; }
+        poolPanel.hidden = !st.joined;
+
+        // Status & Geräte
+        const others = Array.from(st.peers.values());
+        const ready = others.filter(p => p.ready);
+        if (st.joined) {
+            setStatus(ready.length === 0
+                ? 'Du bist allein im Raum – lade weitere Geräte über Link oder QR-Code ein.'
+                : (ready.length + 1) + ' Geräte im Raum', ready.length === 0);
+        }
+        devicesEl.innerHTML = [`<span class="device me" title="Dieses Gerät">${escapeHtml(st.label)} (du)</span>`]
+            .concat(others.map(p => `<span class="device${p.ready ? '' : ' connecting'}" title="${p.ready ? 'verbunden' : 'verbindet …'}">${escapeHtml(p.label || 'verbindet …')}</span>`))
+            .join('');
+
+        renderPool();
+    }
+
+    function renderStartList() {
+        startList.innerHTML = Array.from(st.local.values()).map(x => `
+            <li class="file-row">
+                <div class="row-top">
+                    <span class="file-name">${escapeHtml(x.meta.name)}</span>
+                    <span class="file-size">${formatBytes(x.meta.size)}</span>
+                    <button type="button" class="remove-btn" data-remove="${escapeHtml(x.meta.gid)}" title="Entfernen" aria-label="Entfernen">×</button>
+                </div>
+            </li>`).join('');
+    }
+
+    function renderPool() {
+        const items = pool();
+        poolEmpty.hidden = items.length > 0;
+        let loadable = 0;
+        const pctById = {};
+        poolList.innerHTML = items.map(item => {
+            const m = item.meta;
+            const d = st.downloads.get(m.gid);
+            const devices = item.holders.length + (item.local ? 1 : 0);
+            let cls = '', action = '', meta = [];
+            if (m.by) meta.push(item.local && item.local.own ? 'von dir' : 'von ' + escapeHtml(m.by));
+            if (devices > 1) meta.push('auf ' + devices + ' Geräten');
+
+            if (item.local && item.local.own) {
+                action = `<span class="tag tag-own">deine</span>
+                    <button type="button" class="remove-btn" data-remove="${escapeHtml(m.gid)}" title="Nicht mehr anbieten" aria-label="Nicht mehr anbieten">×</button>`;
+            } else if (item.local) {
+                action = `<a class="dl-link" href="${item.local.url}" download="${escapeHtml(m.name)}">Speichern</a>`;
+                meta.push('<span class="tag tag-done">geladen</span>');
+            } else if (d && d.status !== 'failed') {
+                cls = d.status === 'active' ? 'active' : 'pending';
+                const src = st.peers.get(d.from);
+                pctById[m.gid] = src && src.rx && src.rx.gid === m.gid && m.size ? Math.min(100, Math.round(src.rx.received / m.size * 100)) : 0;
+                action = `<button type="button" class="small-btn get-btn" disabled>${d.status === 'active' ? pctById[m.gid] + ' %' : 'wartet …'}</button>`;
+                if (src && src.label) meta.push('lädt von ' + escapeHtml(src.label));
+            } else {
+                if (d && d.status === 'failed') { cls = 'failed'; meta.push('Laden fehlgeschlagen'); }
+                action = `<button type="button" class="small-btn get-btn" data-get="${escapeHtml(m.gid)}">${d ? 'Erneut' : 'Laden'}</button>`;
+                loadable++;
+            }
+            return `<li class="file-row ${cls}" data-gid="${escapeHtml(m.gid)}">
+                <div class="row-top">
+                    <span class="file-name">${escapeHtml(m.name)}</span>
+                    <span class="file-size">${formatBytes(m.size)}</span>
+                    ${action}
+                </div>
+                <div class="file-meta">${meta.join(' · ')}</div>
+                <div class="file-progress"><div class="bar-fill" style="width:${pctById[m.gid] || 0}%"></div></div>
+            </li>`;
+        }).join('');
+        getAllBtn.hidden = loadable < 2;
+        getAllBtn.textContent = `Alle laden (${loadable})`;
+    }
+
+    // ---------- Ereignisse ----------
+    let dropTarget = null;
+    function wireDrop(zone) {
+        zone.addEventListener('click', () => fileInput.click());
+        zone.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+        zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
+        zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
+        zone.addEventListener('drop', e => {
+            e.preventDefault();
+            zone.classList.remove('drag');
+            if (e.dataTransfer && e.dataTransfer.files) addLocalFiles(e.dataTransfer.files);
+        });
+    }
+    wireDrop($('startDrop'));
+    wireDrop($('poolDrop'));
+    fileInput.addEventListener('change', () => { addLocalFiles(fileInput.files); fileInput.value = ''; });
+
+    [startList, poolList].forEach(list => list.addEventListener('click', e => {
+        const rm = e.target.closest('[data-remove]');
+        if (rm) { removeOwnFile(rm.dataset.remove); return; }
+        const get = e.target.closest('[data-get]');
+        if (get) {
+            const gid = get.dataset.get;
+            st.downloads.delete(gid);
+            requestFile(gid, true);
+            render();
+        }
+    }));
+
+    getAllBtn.addEventListener('click', () => {
+        pool().forEach(item => {
+            const d = st.downloads.get(item.meta.gid);
+            if (item.local || (d && d.status !== 'failed')) return;
+            st.downloads.delete(item.meta.gid);
+            requestFile(item.meta.gid, true);
+        });
+        render();
+    });
+
+    $('openBtn').addEventListener('click', openRoom);
+    $('leaveBtn').addEventListener('click', leaveRoom);
+
+    nameInput.addEventListener('change', () => {
+        const v = nameInput.value.trim().slice(0, 40);
+        if (!v) { nameInput.value = st.label; return; }
+        st.label = v;
+        try { localStorage.setItem(NAME_KEY, v); } catch (e) { /* privat */ }
+        // eigene Dateien tragen den neuen Namen
+        st.local.forEach(x => { if (x.own) x.meta.by = v; });
+        broadcast({ t: 'label', label: v });
+        broadcastFiles();
+        render();
+    });
 
     copyBtn.addEventListener('click', async () => {
         try {
@@ -668,148 +1328,23 @@
         setTimeout(() => { copyBtn.textContent = 'Kopieren'; }, 1500);
     });
 
-    endBtn.addEventListener('click', () => {
-        if (peer) peer.destroy();
-        location.href = location.pathname;
+    window.addEventListener('beforeunload', e => {
+        // Eigene Dateien verschwinden für die anderen, wenn nur dieses Gerät sie hat
+        if (st.joined && !st.left && st.peers.size > 0) { e.preventDefault(); e.returnValue = ''; }
+    });
+    window.addEventListener('pagehide', () => {
+        if (st.anchor) st.anchor.destroy();
+        if (st.me) st.me.destroy();
     });
 
-    window.addEventListener('beforeunload', () => { if (peer) peer.destroy(); });
-
-    // ---------- Receiver ----------
-    const receiverPanel = document.getElementById('receiverPanel');
-    const incomingStatus = document.getElementById('incomingStatus');
-    const incomingList = document.getElementById('incomingList');
-    const requestBtn = document.getElementById('requestBtn');
-
-    function initReceiver(sessionId) {
-        console.log('Öffne Empfänger-Ansicht für Sitzung', sessionId);
-        senderPanel.hidden = true;
-        receiverPanel.hidden = false;
-
-        let conn = null;
-        let manifestFiles = [];
-        let activeId = null;
-        const buffers = new Map(); // id -> { chunks:[], received }
-
-        function rowFor(id) { return incomingList.querySelector(`.file-row[data-id="${id}"]`); }
-
-        function renderManifest(list) {
-            manifestFiles = list;
-            incomingList.innerHTML = list.map(f => `
-                <li class="file-row" data-id="${f.id}">
-                    <label class="row-top">
-                        <input type="checkbox" class="file-check" checked>
-                        <span class="file-name">${escapeHtml(f.name)}</span>
-                        <span class="file-size">${formatBytes(f.size)}</span>
-                    </label>
-                    <div class="file-progress"><div class="bar-fill"></div></div>
-                    <a class="dl-link" hidden>Speichern</a>
-                </li>`).join('');
-            requestBtn.hidden = false;
-            incomingStatus.textContent = `${list.length} Datei(en) angeboten – auswählen und empfangen.`;
-        }
-
-        requestBtn.addEventListener('click', () => {
-            const ids = Array.from(incomingList.querySelectorAll('.file-row'))
-                .filter(li => li.querySelector('.file-check').checked)
-                .map(li => Number(li.dataset.id));
-            if (ids.length === 0 || !conn) return;
-            conn.send(JSON.stringify({ t: 'request', ids }));
-            requestBtn.disabled = true;
-            ids.forEach(id => {
-                const li = rowFor(id);
-                li.querySelector('.file-check').disabled = true;
-                li.classList.add('pending');
-            });
-            incomingStatus.textContent = 'Empfange Dateien …';
-        });
-
-        function beginFile(id) {
-            activeId = id;
-            buffers.set(id, { chunks: [], received: 0 });
-            const li = rowFor(id);
-            if (li) li.classList.add('active');
-        }
-
-        function appendChunk(buf) {
-            if (activeId === null) return;
-            const entry = buffers.get(activeId);
-            if (!entry) return;
-            entry.chunks.push(buf);
-            entry.received += buf.byteLength;
-            const meta = manifestFiles.find(f => f.id === activeId);
-            const li = rowFor(activeId);
-            if (meta && li) {
-                const pct = meta.size ? Math.min(100, Math.round(entry.received / meta.size * 100)) : 100;
-                li.querySelector('.bar-fill').style.width = pct + '%';
-            }
-        }
-
-        function finishFile(id) {
-            const entry = buffers.get(id);
-            if (!entry) return;
-            const meta = manifestFiles.find(f => f.id === id);
-            const blob = new Blob(entry.chunks, { type: (meta && meta.type) || 'application/octet-stream' });
-            const url = URL.createObjectURL(blob);
-            const li = rowFor(id);
-            if (li) {
-                li.classList.remove('active', 'pending');
-                li.classList.add('done');
-                li.querySelector('.bar-fill').style.width = '100%';
-                const a = li.querySelector('.dl-link');
-                a.href = url;
-                a.download = (meta && meta.name) || 'download';
-                a.hidden = false;
-                a.click();
-            }
-            buffers.delete(id);
-            if (activeId === id) activeId = null;
-        }
-
-        function onData(data) {
-            if (typeof data === 'string') {
-                let msg;
-                try { msg = JSON.parse(data); } catch (e) { return; }
-                if (msg.t === 'manifest') renderManifest(msg.files);
-                else if (msg.t === 'start') beginFile(msg.id);
-                else if (msg.t === 'end') finishFile(msg.id);
-            } else {
-                appendChunk(data);
-            }
-        }
-
-        const peerR = new Peer(undefined, { debug: 2 });
-
-        peerR.on('open', id => {
-            console.log('Eigene Peer-ID:', id, '– verbinde zum Host …');
-            conn = peerR.connect(PEER_PREFIX + sessionId, { serialization: 'raw' });
-            conn.on('open', () => { console.log('Datenkanal zum Host geöffnet.'); incomingStatus.textContent = 'Verbunden – warte auf Dateiliste …'; });
-            conn.on('iceStateChanged', state => console.log('ICE-Status:', state));
-            conn.on('data', onData);
-            conn.on('close', () => { console.log('Verbindung zum Host beendet.'); incomingStatus.textContent = 'Verbindung beendet.'; });
-            conn.on('error', err => { console.error('Verbindungsfehler:', err); incomingStatus.textContent = 'Verbindungsfehler.'; });
-        });
-
-        peerR.on('error', err => {
-            console.error('Peer-Fehler:', err.type, err);
-            incomingStatus.textContent = err.type === 'peer-unavailable'
-                ? 'Sitzung nicht gefunden – Link abgelaufen oder ungültig.'
-                : 'Verbindung fehlgeschlagen: ' + err.type;
-        });
-
-        peerR.on('disconnected', () => console.warn('Von Signaling-Server getrennt.'));
-
-        window.addEventListener('beforeunload', () => peerR.destroy());
-    }
-
-    // ---------- Mode detection ----------
+    // ---------- Start ----------
     const sParam = new URLSearchParams(location.search).get('s');
     if (sParam && ID_REGEX.test(sParam)) {
-        console.log('Modus: Empfänger');
-        initReceiver(sParam);
+        console.log('Trete Raum bei …');
+        enterRoom(sParam);
     } else {
-        console.log('Modus: Sender');
-        renderSelList();
+        startPanel.hidden = false;
+        renderStartList();
     }
 })();
 </script>
