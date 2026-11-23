@@ -6,7 +6,7 @@
     'use strict';
 
     var KEY = 'klmpfh-wohnung';
-    var n = WK.n, eur = WK.eur, pct = WK.pct;
+    var n = WK.n, eur = WK.eur, eurRange = WK.eurRange, pct = WK.pct;
 
     var PROFILE_DEFAULTS = {
         cash: null, equity: null, reserve: null,
@@ -215,6 +215,7 @@
 
     function changed() {
         scheduleSave();
+        updateHints();
         if (currentUpdate) currentUpdate();
     }
 
@@ -234,12 +235,27 @@
         return new Intl.NumberFormat('de-DE', { maximumFractionDigits: dec, useGrouping: !noGroup }).format(Number(v));
     }
 
+    /** hint: Text oder Funktion, die den Text liefert (z. B. mit dem Ergebnis
+     *  einer Faustregel) – die wird bei jeder Änderung neu ausgewertet. */
     function fieldWrap(label, control, hint, cls) {
+        var live = typeof hint === 'function';
+        var small = hint ? el('small', { class: 'field-hint', text: live ? hint() : hint }) : null;
+        if (live) small._hint = hint;
         return el('label', { class: 'field' + (cls ? ' ' + cls : '') }, [
             el('span', { class: 'field-label', text: label }),
             control,
-            hint ? el('small', { class: 'field-hint', text: hint }) : null
+            small
         ]);
+    }
+
+    function updateHints() {
+        app.querySelectorAll('.field-hint').forEach(function (e) { if (e._hint) e.textContent = e._hint(); });
+    }
+
+    /** Ergebnis einer Faustregel in Klammern – nur, wenn die Angabe, aus der
+     *  es sich ergibt (base), schon eingetragen ist. */
+    function result(base, text) {
+        return n(base) > 0 ? ' (' + text + ')' : '';
     }
 
     function numField(obj, key, label, o) {
@@ -605,7 +621,9 @@
             group('Vermögen', [
                 numField(p, 'cash', 'Cash (liquide Ersparnisse)', { unit: '€', dec: 0 }),
                 numField(p, 'equity', 'Davon als Eigenkapital einsetzen', { unit: '€', dec: 0, hint: 'Standard für jede Wohnung, dort überschreibbar.' }),
-                numField(p, 'reserve', 'Notreserve, die bleiben soll', { unit: '€', dec: 0, hint: 'Faustregel: 3–6 Netto-Monatsgehälter.' })
+                numField(p, 'reserve', 'Notreserve, die bleiben soll', { unit: '€', dec: 0, hint: function () {
+                    return 'Faustregel: 3–6 Netto-Monatsgehälter' + result(p.netIncome, eurRange(3 * n(p.netIncome), 6 * n(p.netIncome))) + '.';
+                } })
             ]),
             group('Einkommen & Ausgaben (monatlich)', [
                 numField(p, 'netIncome', 'Nettoeinkommen', { unit: '€' }),
@@ -626,7 +644,9 @@
             ]),
             group('Kreditwürdigkeit (laut Bank)', [
                 numField(p, 'bankMaxLoan', 'Max. Darlehen', { unit: '€', dec: 0, hint: 'Was die Bank dir maximal leihen würde.' }),
-                numField(p, 'bankMaxRate', 'Max. Monatsrate', { unit: '€', hint: 'Leer = Faustregel 35 % vom Netto minus andere Kredite.' })
+                numField(p, 'bankMaxRate', 'Max. Monatsrate', { unit: '€', hint: function () {
+                    return 'Leer = Faustregel 35 % vom Netto minus andere Kredite' + result(p.netIncome, eur(WK.budget(p).ruleRate)) + '.';
+                } })
             ]),
             group('Annahmen', [
                 numField(p, 'altReturn', 'Alternative Rendite fürs Eigenkapital', { unit: '%', hint: 'Was das Geld sonst bringen würde (Tagesgeld, ETF) – fließt in die „echten Kosten“.' }),
@@ -773,6 +793,19 @@
             '<div class="tile-value">' + esc(value) + '</div>' + (sub ? '<div class="tile-sub">' + esc(sub) + '</div>' : '') + '</div>';
     }
 
+    /** Wie viel Eigenkapital drin ist, ohne die Notreserve anzutasten – mit
+     *  Rechenweg und Vergleich zum geplanten Eigenkapital. */
+    function equityTile(p) {
+        if (!WK.isSet(p.cash)) return tile('Max. Eigenkapital', '–', 'Cash fehlt');
+        var free = n(p.cash) - n(p.reserve);
+        var max = Math.max(0, free);
+        var sub = ['Cash ' + eur(n(p.cash)) + ' − Notreserve ' + eur(n(p.reserve))];
+        if (free < 0) sub.push('für die Notreserve fehlen ' + eur(-free));
+        var diff = Math.round(max - n(p.equity));
+        if (n(p.equity) > 0) sub.push(diff === 0 ? 'genau wie geplant' : eur(Math.abs(diff)) + (diff > 0 ? ' mehr' : ' weniger') + ' als geplant');
+        return tile('Max. Eigenkapital', eur(max), sub.join(' · '), free < 0 || diff < 0 ? 'tile-warn' : '');
+    }
+
     function renderBudget(box) {
         var p = state.profile;
         var b = WK.budget(p);
@@ -782,9 +815,9 @@
         }
         box.innerHTML =
             tile('Max. Darlehen', eur(b.maxLoan), n(p.bankMaxLoan) > 0 ? (b.loanFromRate < n(p.bankMaxLoan) ? 'begrenzt durch die Rate' : 'laut Bank') : 'aus der Rate bei ' + fmtInput(n(p.defRate) + n(p.defRepay), 2) + ' % Zins + Tilgung') +
-            tile('Max. Monatsrate', eur(b.maxRate), n(p.bankMaxRate) > 0 ? 'laut Bank' : 'Faustregel 35 % vom Netto') +
+            tile('Max. Monatsrate', eur(b.maxRate), n(p.bankMaxRate) > 0 ? 'laut Bank' : 'Faustregel 35 % vom Netto' + (n(p.otherDebt) > 0 ? ' minus andere Kredite' : '')) +
             tile('Kaufpreis-Budget', eur(b.maxPrice), 'Eigenkapital + Darlehen, abzgl. ~' + fmtInput(b.closingPct, 1) + ' % Nebenkosten') +
-            tile('Cash über Notreserve', eur(n(p.cash) - n(p.reserve)), n(p.equity) > n(p.cash) - n(p.reserve) ? 'weniger als dein geplantes Eigenkapital' : 'Puffer fürs Eigenkapital', n(p.equity) > n(p.cash) - n(p.reserve) ? 'tile-warn' : '');
+            equityTile(p);
     }
 
     /* ---------- Wünsche & Bedingungen ---------- */
@@ -1210,14 +1243,19 @@
                 group(null, [
                     numField(f, 'hoa', 'Hausgeld', { unit: '€', hint: 'Gesamt laut Wirtschaftsplan, inkl. Heizung & Erhaltungsrücklage.' }),
                     numField(f, 'propertyTax', 'Grundsteuer pro Jahr', { unit: '€' }),
-                    numField(f, 'maintenance', 'Eigene Rücklage für die Wohnung', { unit: '€', hint: 'Reparaturen im Sondereigentum (Bad, Böden, Geräte). Faustregel ~0,5–1 €/m².' }),
+                    numField(f, 'maintenance', 'Eigene Rücklage für die Wohnung', { unit: '€', hint: function () {
+                        return 'Reparaturen im Sondereigentum (Bad, Böden, Geräte). Faustregel ~0,5–1 €/m²' + result(f.area, eurRange(0.5 * n(f.area), n(f.area))) + '.';
+                    } }),
                     numField(f, 'utilities', 'Weitere laufende Kosten', { unit: '€', hint: 'Nur für diese Wohnung, z. B. Stellplatz-Miete. Strom, Internet & Co. stehen unter „Meine Finanzen“.' })
                 ]),
                 costsPanel
             ]);
 
         var wgAssumptions = [
-            numField(f.wg, 'vacancyPct', 'Leerstand / Mietausfall', { unit: '%', hint: 'Wechsel, Suche, Ausfälle – 5 % ≈ 2–3 Wochen pro Jahr.' })
+            numField(f.wg, 'vacancyPct', 'Leerstand / Mietausfall', { unit: '%', hint: function () {
+                var gross = f.wg.rooms.reduce(function (s, r) { return s + (r.self ? 0 : n(r.rent)); }, 0);
+                return 'Wechsel, Suche, Ausfälle – 5 % ≈ 2–3 Wochen pro Jahr' + result(gross, eur(0.05 * gross) + ' im Monat') + '.';
+            } })
         ];
         var wgPanel = panel('WG & Untermieter', [roomsBox, group('Annahmen', wgAssumptions)],
             { hint: 'Zimmer mit Warmmiete. Dein eigenes Zimmer als „Ich“ markieren – es bringt keine Miete ein.' +
@@ -1248,7 +1286,9 @@
             ]),
             panel('Einzug', [
                 group(null, [
-                    numField(f, 'deposit', 'Kaution', { unit: '€', dec: 0, hint: 'Höchstens 3 Nettokaltmieten, zahlbar in 3 Raten.' }),
+                    numField(f, 'deposit', 'Kaution', { unit: '€', dec: 0, hint: function () {
+                        return 'Höchstens 3 Nettokaltmieten' + result(f.coldRent, eur(3 * n(f.coldRent))) + ', zahlbar in 3 Raten.';
+                    } }),
                     numField(f, 'otherOneOff', 'Umzug & Einrichtung', { unit: '€', dec: 0, hint: 'Umzug, Möbel, Küche, Renovierung beim Einzug …' })
                 ])
             ]),
@@ -1270,8 +1310,12 @@
                         }
                     }),
                     taxField,
-                    numField(f, 'notaryPct', 'Notar & Grundbuch', { unit: '%', hint: 'Üblich ca. 1,5–2 %.' }),
-                    numField(f, 'brokerPct', 'Makler (Käuferanteil)', { unit: '%', hint: 'Meist 3,57 % inkl. MwSt., 0 ohne Makler.' }),
+                    numField(f, 'notaryPct', 'Notar & Grundbuch', { unit: '%', hint: function () {
+                        return 'Üblich ca. 1,5–2 %' + result(f.price, eurRange(0.015 * n(f.price), 0.02 * n(f.price))) + '.';
+                    } }),
+                    numField(f, 'brokerPct', 'Makler (Käuferanteil)', { unit: '%', hint: function () {
+                        return 'Meist 3,57 % inkl. MwSt.' + result(f.price, eur(0.0357 * n(f.price))) + ', 0 ohne Makler.';
+                    } }),
                     numField(f, 'renovation', 'Renovierung / Modernisierung', { unit: '€', dec: 0 }),
                     numField(f, 'otherOneOff', 'Sonstiges einmalig', { unit: '€', dec: 0, hint: 'Umzug, Möbel, Gutachter, Bereitstellungszinsen …' })
                 ])
@@ -1621,7 +1665,10 @@
         var list = el('div', { class: 'cost-checks' });
         var title = el('h3', { class: 'group-title', text: 'Private Nebenkosten' });
         var hint = el('p', { class: 'muted small group-hint' });
-        var personsField = numField(f, 'persons', 'Personen in dieser Wohnung', { dec: 0, hint: 'Teilen sich die Kosten. Leer = du + vermietete Zimmer.' });
+        var personsField = numField(f, 'persons', 'Personen in dieser Wohnung', { dec: 0, hint: function () {
+            return 'Teilen sich die Kosten. Leer = ' + (f.wg.rooms.length ? 'du + vermietete Zimmer' : '„Personen heute“ aus „Meine Finanzen“') +
+                ' (' + WK.personCount(state.profile, Object.assign({}, f, { persons: null })) + ').';
+        } });
         var personsRow = el('div', { class: 'grid cost-persons' }, [personsField]);
         box.append(title, hint, personsRow, list);
 

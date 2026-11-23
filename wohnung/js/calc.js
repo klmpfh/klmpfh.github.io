@@ -287,9 +287,9 @@ var WK = (function () {
     function checksRent(a, p, flat) {
         if (a.coldRent <= 0) { warn(a, 'info', 'Kaltmiete eingeben, um die Wohnung durchzurechnen.'); return; }
         if (a.netIncome > 0) {
-            if (a.rentRatio <= 0.3) warn(a, 'ok', 'Warmmiete bei ' + pct(a.rentRatio) + ' des Nettoeinkommens – im Rahmen der 30-%-Faustregel.');
-            else if (a.rentRatio <= 0.4) warn(a, 'warn', 'Warmmiete bei ' + pct(a.rentRatio) + ' des Nettoeinkommens – über der 30-%-Faustregel' + (a.rentEff > 0 ? ', mit WG-Einnahmen ' + pct(a.burdenNet) + '.' : '.'));
-            else warn(a, a.rentEff > 0 && a.burdenNet <= 0.35 ? 'warn' : 'bad', 'Warmmiete bei ' + pct(a.rentRatio) + ' des Nettoeinkommens' + (a.rentEff > 0 ? ' (mit WG-Einnahmen ' + pct(a.burdenNet) + ')' : '') + ' – Faustregel: max. 30–35 %.');
+            if (a.rentRatio <= 0.3) warn(a, 'ok', 'Warmmiete bei ' + pct(a.rentRatio) + ' des Nettoeinkommens – im Rahmen der 30-%-Faustregel (max. ' + eur(0.3 * a.netIncome) + ').');
+            else if (a.rentRatio <= 0.4) warn(a, 'warn', 'Warmmiete bei ' + pct(a.rentRatio) + ' des Nettoeinkommens – über der 30-%-Faustregel (max. ' + eur(0.3 * a.netIncome) + ')' + (a.rentEff > 0 ? ', mit WG-Einnahmen ' + pct(a.burdenNet) + '.' : '.'));
+            else warn(a, a.rentEff > 0 && a.burdenNet <= 0.35 ? 'warn' : 'bad', 'Warmmiete bei ' + pct(a.rentRatio) + ' des Nettoeinkommens' + (a.rentEff > 0 ? ' (mit WG-Einnahmen ' + pct(a.burdenNet) + ')' : '') + ' – Faustregel: max. 30–35 % (' + eurRange(0.3 * a.netIncome, 0.35 * a.netIncome) + ').');
             if (a.available < 0) warn(a, 'bad', 'Haushalt geht nicht auf: monatlich fehlen ' + eur(-a.available) + '.');
             if (a.roomsRented > 0 && a.netIncome - n(p.livingCosts) - n(p.otherDebt) - a.outflow < 0) {
                 warn(a, 'warn', 'Ohne Untermieter geht der Haushalt nicht auf (Leerstand / Auszug einplanen).');
@@ -327,12 +327,12 @@ var WK = (function () {
         if (a.extrasPerSqm !== null) {
             var q = fmt2(a.extrasPerSqm) + ' €/m²';
             if (a.extrasPerSqm > 4.5) review(a, 'warn', 'Nebenkosten & Heizung hoch (' + q + ')',
-                'Üblich sind etwa 2,50–4,00 €/m² im Monat inkl. Heizung. Hohe Vorauszahlungen können an teurer Heizung, Aufzug oder Hausmeisterdienst liegen.', ncQuestions);
+                'Üblich sind etwa 2,50–4,00 €/m² im Monat inkl. Heizung' + forArea(a, 2.5, 4) + '. Hohe Vorauszahlungen können an teurer Heizung, Aufzug oder Hausmeisterdienst liegen.', ncQuestions);
             else if (a.extrasPerSqm < 1.8) review(a, 'warn', 'Nebenkosten & Heizung auffällig niedrig (' + q + ')',
                 'Niedrige Vorauszahlungen sehen gut aus, führen aber oft zu hohen Nachzahlungen mit der ersten Abrechnung.', ncQuestions);
-            else review(a, 'ok', 'Nebenkosten & Heizung im üblichen Rahmen (' + q + ')', 'Liegt im typischen Bereich von etwa 2,00–4,00 €/m² inkl. Heizung.', [ncQuestions[0]]);
+            else review(a, 'ok', 'Nebenkosten & Heizung im üblichen Rahmen (' + q + ')', 'Liegt im typischen Bereich von etwa 2,00–4,00 €/m² inkl. Heizung' + forArea(a, 2, 4) + '.', [ncQuestions[0]]);
         } else if (a.serviceCharges + a.heating <= 0) {
-            review(a, 'info', 'Nebenkosten fehlen', 'Ohne Nebenkosten und Heizung ist die Monatsbilanz zu optimistisch – üblich sind rund 2,50–4,00 €/m².', ncQuestions.slice(0, 2));
+            review(a, 'info', 'Nebenkosten fehlen', 'Ohne Nebenkosten und Heizung ist die Monatsbilanz zu optimistisch – üblich sind rund 2,50–4,00 €/m²' + forArea(a, 2.5, 4) + '.', ncQuestions.slice(0, 2));
         }
 
         // Kaltmiete pro m² im Vergleich zu den anderen Mietwohnungen
@@ -364,13 +364,13 @@ var WK = (function () {
         if (a.roomsRented > 0) {
             if (area > 0 && a.persons && area / a.persons < 15) {
                 review(a, 'info', 'Eng für eine WG (' + fmt1.format(area / a.persons) + ' m² pro Person)',
-                    'Unter etwa 15 m² pro Person wird es schwer, Mitbewohner:innen lange zu halten – das erhöht den Leerstand.', []);
+                    'Unter etwa 15 m² pro Person (' + 15 * a.persons + ' m² bei ' + a.persons + (a.persons === 1 ? ' Person' : ' Personen') + ') wird es schwer, Mitbewohner:innen lange zu halten – das erhöht den Leerstand.', []);
             }
             review(a, 'info', 'Untervermietung absichern',
                 'Als Hauptmieter brauchst du die Erlaubnis des Vermieters zur Untervermietung (§ 553 BGB) – bei berechtigtem Interesse muss er sie meist geben.',
                 ['Ist die Untervermietung im Mietvertrag erlaubt oder schriftlich genehmigt?', 'Dürfen Mitbewohner:innen wechseln, ohne dass jedes Mal neu gefragt werden muss?']);
             if (n((flat.wg || {}).vacancyPct) <= 0) {
-                review(a, 'info', 'Kein Leerstand eingeplant', 'Auch in begehrten Lagen gibt es Wechsel und Suchzeiten – 3–8 % sind realistisch.', []);
+                review(a, 'info', 'Kein Leerstand eingeplant', 'Auch in begehrten Lagen gibt es Wechsel und Suchzeiten – 3–8 % sind realistisch' + (a.rentGross > 0 ? ' (' + eurRange(0.03 * a.rentGross, 0.08 * a.rentGross) + ' im Monat)' : '') + '.', []);
             }
         }
     }
@@ -504,17 +504,21 @@ var WK = (function () {
             if (a.cashAfter < n(p.reserve)) warn(a, a.cashAfter < 0 ? 'bad' : 'warn', 'Nach dem Kauf bleiben ' + eur(a.cashAfter) + ' – weniger als deine Notreserve von ' + eur(n(p.reserve)) + '.');
             else warn(a, 'ok', 'Notreserve bleibt erhalten (' + eur(a.cashAfter) + ' Cash nach dem Kauf).');
         }
-        if (a.equity < a.closing) warn(a, 'warn', 'Eigenkapital deckt die Kaufnebenkosten nicht – viele Banken erwarten das, sonst Zinsaufschlag oder Absage.');
+        if (a.equity < a.closing) warn(a, 'warn', 'Eigenkapital (' + eur(a.equity) + ') deckt die Kaufnebenkosten (' + eur(a.closing) + ') nicht – viele Banken erwarten das, sonst Zinsaufschlag oder Absage.');
         if (a.ltv !== null && a.ltv > 1) warn(a, 'warn', 'Beleihung über 100 % des Kaufpreises – nur mit Aufschlag üblich.');
-        else if (a.ltv !== null && a.ltv > 0.8) warn(a, 'info', 'Beleihung über 80 % – Banken verlangen ab hier oft höhere Zinsen; Konditionen prüfen.');
+        else if (a.ltv !== null && a.ltv > 0.8) warn(a, 'info', 'Beleihung über 80 % (mehr als ' + eur(0.8 * a.price) + ' Darlehen) – Banken verlangen ab hier oft höhere Zinsen; Konditionen prüfen.');
         if (a.overFinanced > 1) warn(a, 'warn', 'Zusätzliche Darlehen übersteigen den Bedarf um ' + eur(a.overFinanced) + '.');
         if (a.netIncome > 0) {
             // Banken rechnen Mieteinnahmen meist nur zu ~60–80 % an; hier 70 %.
-            var burdenWg = (a.payment + n(p.otherDebt)) / (a.netIncome + 0.7 * a.rentEff);
+            var incomeWg = a.netIncome + 0.7 * a.rentEff;
+            var burdenWg = (a.payment + n(p.otherDebt)) / incomeWg;
+            // Was die Faustregel für diese Wohnung als Rate übrig lässt
+            var ruleRate = function (share) { return Math.max(0, share * incomeWg - n(p.otherDebt)); };
+            var besides = n(p.otherDebt) > 0 ? ' neben deinen anderen Krediten' : '';
             if (a.burden <= 0.35) warn(a, 'ok', 'Kreditraten bei ' + pct(a.burden) + ' des Nettoeinkommens – schon ohne WG-Einnahmen.');
             else if (burdenWg <= 0.35) warn(a, 'warn', 'Kreditraten bei ' + pct(a.burden) + ' des Nettoeinkommens; erst mit 70 % der WG-Miete angerechnet ' + pct(burdenWg) + ' – hängt an den Untermietern.');
-            else if (burdenWg <= 0.4) warn(a, 'warn', 'Kreditraten bei ' + pct(burdenWg) + ' von Netto + 70 % WG-Miete – knapp über der 35-%-Faustregel.');
-            else warn(a, 'bad', 'Kreditraten bei ' + pct(burdenWg) + ' von Netto + 70 % WG-Miete (ohne WG ' + pct(a.burden) + ') – Faustregel: max. 35–40 %.');
+            else if (burdenWg <= 0.4) warn(a, 'warn', 'Kreditraten bei ' + pct(burdenWg) + ' von Netto + 70 % WG-Miete – knapp über der 35-%-Faustregel (max. ' + eur(ruleRate(0.35)) + ' Rate' + besides + ').');
+            else warn(a, 'bad', 'Kreditraten bei ' + pct(burdenWg) + ' von Netto + 70 % WG-Miete (ohne WG ' + pct(a.burden) + ') – Faustregel: max. 35–40 % (' + eurRange(ruleRate(0.35), ruleRate(0.4)) + ' Rate' + besides + ').');
             if (a.available < 0) warn(a, 'bad', 'Haushalt geht nicht auf: monatlich fehlen ' + eur(-a.available) + '.');
         }
         if (a.roomsRented > 0 && a.netIncome > 0 && a.netIncome - n(p.livingCosts) - n(p.otherDebt) - a.outflow < 0) {
@@ -539,6 +543,13 @@ var WK = (function () {
         a.review.push({ level: level, title: title, text: text, questions: questions || [] });
     }
 
+    /** Faustwert pro m² auf die Wohnfläche umgerechnet, z. B. " (bei 80 m²: 200–320 €)". */
+    function forArea(a, lo, hi) {
+        if (!(a.area > 0)) return '';
+        return ' (bei ' + fmtArea.format(a.area) + ' m²: ' + (hi === undefined ? eur(lo * a.area) : eurRange(lo * a.area, hi * a.area)) + ')';
+    }
+    var fmtArea = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 });
+
     function fmt2(v) { return fmt2f.format(v); }
     var fmt2f = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -561,21 +572,21 @@ var WK = (function () {
             'Gibt es Hausgeldrückstände anderer Eigentümer?'
         ];
         if (a.hoa <= 0) {
-            if (a.price > 0) review(a, 'info', 'Hausgeld fehlt', 'Ohne Hausgeld ist die Monatsbilanz zu optimistisch. Üblich sind rund 2,50–4,00 €/m² im Monat inkl. Heizung.', hoaQuestions.slice(0, 3));
+            if (a.price > 0) review(a, 'info', 'Hausgeld fehlt', 'Ohne Hausgeld ist die Monatsbilanz zu optimistisch. Üblich sind rund 2,50–4,00 €/m² im Monat inkl. Heizung' + forArea(a, 2.5, 4) + '.', hoaQuestions.slice(0, 3));
         } else if (a.hoaPerSqm !== null) {
             var hq = fmt2(a.hoaPerSqm) + ' €/m²';
             if (a.hoaPerSqm > 5.5) {
                 review(a, 'bad', 'Hausgeld sehr hoch (' + hq + ')',
-                    'Deutlich über dem üblichen Rahmen von etwa 2,50–4,00 €/m² inkl. Heizung. Typische Ursachen: hohe Rücklagenzuführung wegen anstehender Sanierung, teure Heizung (z. B. Fernwärme, alte Anlage), Aufzug/Concierge, oder Hausgeld wurde wegen Rückständen erhöht. Hohe Rücklage kann gut sein – teure Betriebskosten sind dagegen dauerhaft verloren.', hoaQuestions);
+                    'Deutlich über dem üblichen Rahmen von etwa 2,50–4,00 €/m² inkl. Heizung' + forArea(a, 2.5, 4) + '. Typische Ursachen: hohe Rücklagenzuführung wegen anstehender Sanierung, teure Heizung (z. B. Fernwärme, alte Anlage), Aufzug/Concierge, oder Hausgeld wurde wegen Rückständen erhöht. Hohe Rücklage kann gut sein – teure Betriebskosten sind dagegen dauerhaft verloren.', hoaQuestions);
             } else if (a.hoaPerSqm > 4.0) {
                 review(a, 'warn', 'Hausgeld eher hoch (' + hq + ')',
-                    'Über dem üblichen Rahmen von etwa 2,50–4,00 €/m² inkl. Heizung. Entscheidend ist, wofür: Ein hoher Anteil Erhaltungsrücklage ist Vorsorge, hohe Betriebs- und Verwaltungskosten nicht.', hoaQuestions);
+                    'Über dem üblichen Rahmen von etwa 2,50–4,00 €/m² inkl. Heizung' + forArea(a, 2.5, 4) + '. Entscheidend ist, wofür: Ein hoher Anteil Erhaltungsrücklage ist Vorsorge, hohe Betriebs- und Verwaltungskosten nicht.', hoaQuestions);
             } else if (a.hoaPerSqm < 2.0) {
                 review(a, 'warn', 'Hausgeld auffällig niedrig (' + hq + ')',
-                    'Unter etwa 2 €/m² ist oft die Heizung nicht enthalten oder die Erhaltungsrücklage zu knapp – dann drohen später Sonderumlagen.', hoaQuestions.slice(0, 3).concat([hoaQuestions[5]]));
+                    'Unter etwa 2 €/m²' + forArea(a, 2) + ' ist oft die Heizung nicht enthalten oder die Erhaltungsrücklage zu knapp – dann drohen später Sonderumlagen.', hoaQuestions.slice(0, 3).concat([hoaQuestions[5]]));
             } else {
                 review(a, 'ok', 'Hausgeld im üblichen Rahmen (' + hq + ')',
-                    'Liegt im typischen Bereich von etwa 2,00–4,00 €/m². Trotzdem lohnt der Blick, wie viel davon in die Rücklage fließt.', [hoaQuestions[2], hoaQuestions[5]]);
+                    'Liegt im typischen Bereich von etwa 2,00–4,00 €/m²' + forArea(a, 2, 4) + '. Trotzdem lohnt der Blick, wie viel davon in die Rücklage fließt.', [hoaQuestions[2], hoaQuestions[5]]);
             }
         } else if (a.price > 0) {
             review(a, 'info', 'Wohnfläche fehlt', 'Ohne Wohnfläche lassen sich Hausgeld und Kaufpreis pro m² nicht einordnen.', []);
@@ -636,7 +647,7 @@ var WK = (function () {
         var ownReserve = area > 0 ? a.maintenance / area : null;
         if (a.price > 0 && area > 0 && ownReserve < 0.5 && (age === null || age > 15)) {
             review(a, 'info', 'Wenig eigene Rücklage für die Wohnung',
-                'Die Rücklage im Hausgeld deckt nur das Gemeinschaftseigentum. Bad, Küche, Böden, Innentüren und Fenster-Innenseiten zahlst du selbst – Faustregel 0,50–1,00 €/m² im Monat, bei älteren Wohnungen eher mehr.',
+                'Die Rücklage im Hausgeld deckt nur das Gemeinschaftseigentum. Bad, Küche, Böden, Innentüren und Fenster-Innenseiten zahlst du selbst – Faustregel 0,50–1,00 €/m² im Monat' + forArea(a, 0.5, 1) + ', bei älteren Wohnungen eher mehr.',
                 ['Wie alt sind Bad, Küche und Böden?', 'Was gehört laut Teilungserklärung zum Sondereigentum (z. B. Fenster, Balkon)?']);
         }
 
@@ -651,11 +662,11 @@ var WK = (function () {
         // Kaufnebenkosten
         if (n(flat.brokerPct) > 3.57) {
             review(a, 'warn', 'Maklerprovision über 3,57 %',
-                'Seit Ende 2020 zahlt der Käufer höchstens die Hälfte der Provision, und nur, wenn der Verkäufer mindestens gleich viel zahlt. Mehr als 3,57 % inkl. MwSt. ist unüblich.',
+                'Seit Ende 2020 zahlt der Käufer höchstens die Hälfte der Provision, und nur, wenn der Verkäufer mindestens gleich viel zahlt. Mehr als 3,57 % inkl. MwSt.' + (a.price > 0 ? ' (' + eur(0.0357 * a.price) + ')' : '') + ' ist unüblich.',
                 ['Wie ist die Provision zwischen Verkäufer und Käufer aufgeteilt?']);
         }
         if (a.price > 0 && n(flat.notaryPct) < 1.5) {
-            review(a, 'info', 'Notar & Grundbuch knapp angesetzt', 'Realistisch sind etwa 1,5–2 % des Kaufpreises (inkl. Grundschuld-Eintragung).', []);
+            review(a, 'info', 'Notar & Grundbuch knapp angesetzt', 'Realistisch sind etwa 1,5–2 % des Kaufpreises (' + eurRange(0.015 * a.price, 0.02 * a.price) + ', inkl. Grundschuld-Eintragung).', []);
         }
         if (a.price > 0 && a.inventory > a.price * 0.1) {
             review(a, 'warn', 'Hoher Inventaranteil (' + Math.round(a.inventory / a.price * 100) + ' % des Kaufpreises)',
@@ -668,7 +679,7 @@ var WK = (function () {
         if (a.roomsRented > 0) {
             if (area > 0 && rooms.length && area / rooms.length < 15) {
                 review(a, 'info', 'Eng für eine WG (' + fmt1.format(area / rooms.length) + ' m² pro Person)',
-                    'Unter etwa 15 m² pro Person wird es schwer, Mitbewohner:innen lange zu halten – das erhöht den Leerstand.', []);
+                    'Unter etwa 15 m² pro Person (' + 15 * a.persons + ' m² bei ' + a.persons + (a.persons === 1 ? ' Person' : ' Personen') + ') wird es schwer, Mitbewohner:innen lange zu halten – das erhöht den Leerstand.', []);
             }
             review(a, 'info', 'Untervermietung absichern',
                 'Für die WG-Rechnung sollte klar sein, dass Vermietung erlaubt ist und welche Miete realistisch ist.',
@@ -676,7 +687,7 @@ var WK = (function () {
                  'Gilt am Ort die Mietpreisbremse? Sie gilt auch für WG-Zimmer (möbliert: Zuschlag begründen).',
                  'Welcher Anteil des Hausgelds lässt sich als Nebenkosten in die Warmmiete einrechnen?']);
             if (n(wg.vacancyPct) <= 0) {
-                review(a, 'info', 'Kein Leerstand eingeplant', 'Auch in begehrten Lagen gibt es Wechsel und Suchzeiten – 3–8 % sind realistisch.', []);
+                review(a, 'info', 'Kein Leerstand eingeplant', 'Auch in begehrten Lagen gibt es Wechsel und Suchzeiten – 3–8 % sind realistisch' + (a.rentGross > 0 ? ' (' + eurRange(0.03 * a.rentGross, 0.08 * a.rentGross) + ' im Monat)' : '') + '.', []);
             }
             if (a.utilities <= 0 && a.private <= 0) {
                 review(a, 'info', 'Strom & Internet fehlen', 'In einer WG zahlst du diese meist vor und legst sie über die Warmmiete um oder teilst sie auf – trag sie ein, sonst wirkt die Bilanz zu gut.', []);
@@ -785,6 +796,11 @@ var WK = (function () {
         var r = Math.round(v);
         return (r === 0 ? '0' : fmt0.format(r)) + ' €';
     }
+    /** Spanne, z. B. "200–320 €". */
+    function eurRange(lo, hi) {
+        var a = Math.round(lo), b = Math.round(hi);
+        return a === b ? eur(b) : fmt0.format(a) + '–' + eur(b);
+    }
     function pct(v) {
         if (v === null || v === undefined || !isFinite(v)) return '–';
         return fmt1.format(v * 100) + ' %';
@@ -821,6 +837,7 @@ var WK = (function () {
         n: n,
         isSet: isSet,
         eur: eur,
+        eurRange: eurRange,
         pct: pct,
         years: years,
         short: short

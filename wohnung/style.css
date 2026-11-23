@@ -145,6 +145,32 @@ body {
     line-height: 1.35;
 }
 
+/* Felder einer Zeile teilen sich drei Rasterzeilen (Überschrift, Feld, Hinweis).
+   So bleiben alle Eingaben auf einer Höhe, auch wenn eine Überschrift umbricht.
+   Die Abstände stecken in den Feldern, weil leere Hinweiszeilen sonst doppelte
+   Lücken ergäben; der negative Rand gleicht den Abstand der letzten Zeile aus. */
+@supports (grid-template-rows: subgrid) {
+    .grid:has(> .field) {
+        row-gap: 0;
+        margin-bottom: -12px;
+    }
+    .grid.cost-persons { margin-bottom: 0; }
+    .grid > .field {
+        display: grid;
+        grid-template-rows: subgrid;
+        grid-template-columns: minmax(0, 1fr);
+        grid-row: span 3;
+        align-items: start;
+        gap: 0;
+        margin-bottom: 12px;
+    }
+    .grid > .field > .field-label {
+        align-self: end;
+        margin-bottom: 5px;
+    }
+    .grid > .field > .field-hint { margin-top: 5px; }
+}
+
 .input-wrap {
     position: relative;
     display: flex;
