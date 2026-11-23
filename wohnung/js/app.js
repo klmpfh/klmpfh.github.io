@@ -1936,7 +1936,9 @@
         var planBox = el('div');
 
         app.appendChild(el('div', { class: 'detail-layout' }, [inputs, el('aside', { class: 'detail-aside' }, [results])]));
-        if (!rent) app.appendChild(panel('Schulden & Vermögen über die Zeit', [chartPanel, planBox], { cls: 'panel-wide' }));
+        if (!rent) app.appendChild(panel('Schulden & Vermögen über die Zeit', [chartPanel, planBox], {
+            cls: 'panel-wide', hint: 'Gezahlt gesamt = Eigenkapital + alle Raten (Zins und Tilgung) und Sondertilgungen, ohne Hausgeld und andere laufende Kosten.'
+        }));
 
         /** Mietart (fest / Staffel / Index) mit den jeweils passenden Feldern. */
         function renderRentType() {
@@ -2504,19 +2506,20 @@
         if (last !== -1) rows = rows.slice(0, last + 1);
         var open = box.querySelector('details') && box.querySelector('details').open;
         box.innerHTML = '<details' + (open ? ' open' : '') + '><summary>Tilgungsplan (jährlich, alle Darlehen)</summary><div class="table-scroll"><table class="plan"><thead><tr>' +
-            '<th>Jahr</th><th>Zinsen</th><th>Tilgung</th><th>Sondertilgung</th><th>Restschuld</th><th>Netto-Vermögen</th></tr></thead><tbody>' +
+            '<th>Jahr</th><th>Zinsen</th><th>Tilgung</th><th>Sondertilgung</th><th>Gezahlt gesamt</th><th>Restschuld</th><th>Netto-Vermögen</th></tr></thead><tbody>' +
             rows.map(function (r) {
                 return '<tr' + (r.year === a.fixedYears ? ' class="mark"' : '') + '><td>' + r.year + '</td><td>' + eur(r.interest) + '</td><td>' + eur(r.principal) + '</td><td>' +
-                    (r.extra ? eur(r.extra) : '–') + '</td><td>' + eur(r.balance) + '</td><td>' + eur(r.net) + '</td></tr>';
+                    (r.extra ? eur(r.extra) : '–') + '</td><td>' + eur(r.paid) + '</td><td>' + eur(r.balance) + '</td><td>' + eur(r.net) + '</td></tr>';
             }).join('') + '</tbody></table></div></details>';
     }
 
     /* ---------- Diagramm ---------- */
 
     var SERIES = [
-        { key: 'value', label: 'Kaufpreis', cls: 's1' },
+        { key: 'paid', label: 'Gezahlt gesamt', cls: 's1' },
         { key: 'balance', label: 'Restschuld', cls: 's2' },
-        { key: 'cumInterest', label: 'Gezahlte Zinsen', cls: 's3' }
+        { key: 'cumInterest', label: 'Gezahlte Zinsen', cls: 's3' },
+        { key: 'value', label: 'Kaufpreis', cls: 'ref' }   // fester Wert, nur zum Vergleich
     ];
 
     function niceStep(raw) {
@@ -2549,7 +2552,7 @@
         var x = function (yr) { return m.l + iw * yr / N; };
         var y = function (v) { return m.t + ih * (1 - v / ymax); };
 
-        var svg = '<svg width="' + W + '" height="' + H + '" role="img" aria-label="Kaufpreis, Restschuld und gezahlte Zinsen über ' + N + ' Jahre">';
+        var svg = '<svg width="' + W + '" height="' + H + '" role="img" aria-label="Gezahltes Geld, Restschuld, gezahlte Zinsen und Kaufpreis über ' + N + ' Jahre">';
         for (var v = 0; v <= ymax + 1e-6; v += step) {
             svg += '<line class="grid" x1="' + m.l + '" x2="' + (m.l + iw) + '" y1="' + y(v) + '" y2="' + y(v) + '"/>' +
                 '<text class="axis" x="' + (m.l - 8) + '" y="' + (y(v) + 4) + '" text-anchor="end">' + WK.short(v) + '</text>';
@@ -2572,8 +2575,7 @@
         var lastRow = rows[rows.length - 1];
         var labels = SERIES.map(function (s) { return { s: s, y: y(lastRow[s.key]) }; }).sort(function (p, q) { return p.y - q.y; });
         for (var i = 1; i < labels.length; i++) if (labels[i].y - labels[i - 1].y < 15) labels[i].y = labels[i - 1].y + 15;
-        var overflow = labels[labels.length - 1].y - (m.t + ih);
-        if (overflow > 0) labels.forEach(function (l) { l.y -= overflow; });
+        for (var k = labels.length - 1, low = m.t + ih; k >= 0 && labels[k].y > low; k--, low -= 15) labels[k].y = low;
         labels.forEach(function (l) {
             svg += '<text class="end-label" x="' + (m.l + iw + 8) + '" y="' + (l.y + 4) + '">' + l.s.label + '</text>';
         });

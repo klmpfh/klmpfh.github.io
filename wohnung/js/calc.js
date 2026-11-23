@@ -700,7 +700,7 @@ var WK = (function () {
         var horizon = a.payoffYears === null ? 30 : Math.ceil(a.payoffYears);
         horizon = Math.max(10, Math.min(50, Math.max(horizon, a.fixedYears)));
         a.timeline = [];
-        var cumInterest = 0;
+        var cumInterest = 0, paid = a.equity;   // paid: Eigenkapital + alle Raten und Sondertilgungen
         for (var y = 0; y <= horizon; y++) {
             var yi = 0, yp = 0, ye = 0, bal = 0;
             a.sims.forEach(function (s) {
@@ -710,7 +710,8 @@ var WK = (function () {
                 bal += balanceInYear(s, y);
             });
             cumInterest += yi;
-            a.timeline.push({ year: y, interest: yi, principal: yp, extra: ye, balance: bal, value: a.price, net: a.price - bal, cumInterest: cumInterest });
+            paid += yi + yp + ye;
+            a.timeline.push({ year: y, interest: yi, principal: yp, extra: ye, balance: bal, value: a.price, net: a.price - bal, cumInterest: cumInterest, paid: paid });
         }
         a.netAtFixed = a.price - a.balanceAtFixed;
 
