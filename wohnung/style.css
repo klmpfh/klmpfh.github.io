@@ -531,7 +531,7 @@ table {
 .calc th { text-align: left; font-weight: 400; color: var(--muted); padding-right: 10px; }
 .calc td { text-align: right; white-space: nowrap; }
 .calc tr.sum th,
-.calc tr.sum td { border-top: 2px solid var(--theme-gray-300); color: var(--text); }
+.calc tr.sum td { border-top: 2px solid var(--theme-gray-300); color: var(--text); font-weight: 600; }
 .calc tr.strong th,
 .calc tr.strong td { font-weight: 800; color: var(--theme-text-strong); }
 .calc tr.muted-row td { color: var(--muted); }
@@ -699,6 +699,9 @@ table {
 .explain dl { max-width: 75ch; }
 .explain dt { font-weight: 700; margin-top: 8px; }
 .explain dd { margin: 0; color: var(--muted); }
+.explain dd + dd { margin-top: 3px; }
+.explain dd.formula { color: var(--text); font-weight: 600; }
+.results-panel .explain { margin: 12px 0 16px; }
 .fair-missing {
     margin: 4px 0 12px;
     padding: 8px 10px;

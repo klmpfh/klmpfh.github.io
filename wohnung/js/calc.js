@@ -491,7 +491,6 @@ var WK = (function () {
         sublet(a, flat, p);
 
         a.netHousing = a.outflow - a.rentEff;
-        a.wealthBuild = 0;
         a.trueCost = a.netHousing;
 
         // Mietentwicklung über 10 Jahre (Nebenkosten, WG-Mieten und private Kosten konstant)
@@ -686,15 +685,17 @@ var WK = (function () {
             if (x.years[0]) return s + x.years[0].interest;
             return s + (x.stuck ? x.amount * n(loans[idx].rate) / 100 : 0);
         }, 0);
-        a.principalYear1 = a.sims.reduce(function (s, x) { return s + (x.years[0] ? x.years[0].principal + x.years[0].extra : 0); }, 0);
+        // Kreditrate = Zinsen + Tilgung, Durchschnitt des ersten Jahres. Sondertilgung kommt dazu.
+        a.interestMonth = a.interestYear1 / 12;
+        a.repayMonth = a.payment - a.interestMonth;
+        a.extraYear1 = a.sims.reduce(function (s, x) { return s + (x.years[0] ? x.years[0].extra : 0); }, 0);
 
         // Monatsbilanz
         a.outflow = a.payment + a.runningCosts;
         a.netHousing = a.outflow - a.rentEff;
-        a.wealthBuild = a.principalYear1 / 12;
         // "Echte Kosten": was wirklich weg ist – Zinsen und laufende Kosten abzüglich
-        // WG-Einnahmen. Tilgung ist Sparen.
-        a.trueCost = a.interestYear1 / 12 + a.runningCosts - a.rentEff;
+        // WG-Einnahmen, also die Netto-Wohnkosten ohne Tilgung (die ist Sparen).
+        a.trueCost = a.netHousing - a.repayMonth;
 
         // Schulden und Vermögen über die Zeit, ohne Wertsteigerung
         var horizon = a.payoffYears === null ? 30 : Math.ceil(a.payoffYears);

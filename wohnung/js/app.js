@@ -928,7 +928,9 @@
         { label: 'Beleihung', get: buyOnly(function (a) { return a.ltv; }), f: pct, best: 'min' },
         { label: 'Kaution & Einzug', get: rentOnly(function (a) { return a.moveIn; }), f: eur, best: 'min' },
         { label: 'Kreditrate / Monat', get: buyOnly(function (a) { return a.payment; }), f: eur, sep: true },
-        { label: 'Nebenkosten / Monat', get: function (a) { return a.runningCosts; }, f: eur, best: 'min', sep: true },
+        { label: 'davon Zinsen (Ø 1. Jahr)', get: buyOnly(function (a) { return a.interestMonth; }), f: eur, best: 'min' },
+        { label: 'davon Tilgung (Ø 1. Jahr)', get: buyOnly(function (a) { return a.repayMonth; }), f: eur, best: 'max' },
+        { label: 'Laufende Kosten / Monat', get: function (a) { return a.runningCosts; }, f: eur, best: 'min', sep: true },
         { label: 'davon feste Kosten (mein Anteil)', get: function (a) { return a.privateInfo.fixed; }, f: eur, best: 'min' },
         { label: 'davon Heizung (mein Anteil)', get: function (a) { return started(a) ? a.privateInfo.heat : null; }, f: heatText },
         { label: 'Hausgeld pro m²', get: buyOnly(function (a) { return a.hoaPerSqm; }), f: perSqm, best: 'min' },
@@ -937,7 +939,6 @@
         { label: 'Echte Kosten', get: function (a) { return a.trueCost; }, f: eur, best: 'min', strong: true },
         { label: 'Kaltmiete in 5 Jahren', get: rentOnly(function (a) { return a.coldIn5; }), f: eur, best: 'min' },
         { label: 'Netto-Wohnkosten Ø 10 Jahre', get: rentOnly(function (a) { return a.avgNet10; }), f: eur, best: 'min' },
-        { label: 'Vermögensaufbau (Tilgung)', get: function (a) { return a.wealthBuild; }, f: eur, best: 'max' },
         { label: 'Restschuld nach Zinsbindung', get: withRate(function (a) { return a.balanceAtFixed; }), f: eur, best: 'min', sep: true },
         { label: 'Schuldenfrei nach', get: withRate(function (a) { return a.payoffYears; }), f: payoffText, best: 'min', strong: true },
         { label: 'Zinsen gesamt', get: withRate(function (a) { return a.totalInterest; }), f: eur, best: 'min', strong: true },
@@ -1691,7 +1692,7 @@
 
         var table = '';
         if (results.length) {
-            table = '<h3 class="group-title">Vergleich</h3><div class="table-scroll"><table class="compare"><thead><tr><th></th>' +
+            table = '<h3 class="group-title">Vergleich</h3>' + terms(box, 'Was bedeuten Kreditrate, Netto-Wohnkosten und echte Kosten?', TERMS_COMPARE) + '<div class="table-scroll"><table class="compare"><thead><tr><th></th>' +
                 results.map(function (a) { return '<th><a href="#w=' + encodeURIComponent(a.flat.id) + '">' + esc(a.flat.name || 'Ohne Namen') + '</a></th>'; }).join('') +
                 '</tr></thead><tbody>' +
                 rows.map(function (row) {
@@ -1715,7 +1716,7 @@
                     return '<td><span class="badge badge-' + w + '">' + ICON[w] + ' ' + TIER_LABEL[w] + '</span></td>';
                 }).join('') + '</tr>' +
                 '</tbody></table></div>' +
-                (results.length >= 2 ? '<p class="muted small">Markiert = bester Wert der Zeile. „Echte Kosten“ = beim Kauf Zinsen + laufende Kosten − WG-Einnahmen (Tilgung zählt als Sparen), bei Miete die Netto-Wohnkosten.' +
+                (results.length >= 2 ? '<p class="muted small">Markiert = bester Wert der Zeile.' +
                     (state.flats.some(function (f) { return Object.keys(f.distances).length; }) ? ' Entfernungen = Luftlinie, „ca.“ = Lage nur ungefähr bekannt.' : '') +
                     (hasWishes ? ' „Passt zu …“ = wie gut die Wohnung die Wünsche erfüllt, gewichtet nach Wichtigkeit; gemeinsam = Durchschnitt aller Personen.' : '') + '</p>' : '');
         }
@@ -1796,9 +1797,9 @@
                     numField(f, 'hoaApport', 'Davon auf Mitbewohner umlegbar', { unit: '€', hint: function () {
                         return 'Betriebskosten und Heizung, ohne Rücklage und Verwaltung. Leer = 65 %' + result(f.hoa, eur(0.65 * n(f.hoa))) + '.';
                     } }),
-                    numField(f, 'propertyTax', 'Grundsteuer pro Jahr', { unit: '€' }),
+                    numField(f, 'propertyTax', 'Grundsteuer pro Jahr', { unit: '€', hint: 'Geht direkt an die Gemeinde, steckt nicht im Hausgeld.' }),
                     numField(f, 'maintenance', 'Eigene Rücklage für die Wohnung', { unit: '€', hint: function () {
-                        return 'Reparaturen im Sondereigentum (Bad, Böden, Geräte). Faustregel ~0,5–1 €/m²' + result(f.area, eurRange(0.5 * n(f.area), n(f.area))) + '.';
+                        return 'Reparaturen im Sondereigentum (Bad, Böden, Geräte). Die Rücklage der Gemeinschaft steckt schon im Hausgeld. Faustregel ~0,5–1 €/m²' + result(f.area, eurRange(0.5 * n(f.area), n(f.area))) + '.';
                     } }),
                     numField(f, 'utilities', 'Weitere laufende Kosten', { unit: '€', hint: 'Nur für diese Wohnung, z. B. Stellplatz-Miete. Ohne Heizung, Strom, Internet & Co.' })
                 ]),
@@ -2183,8 +2184,100 @@
         if (!(a.rentGross > 0)) return line('WG-Mieten', 'keine eingetragen', 'muted-row');
         return line('WG-Mieten (' + a.roomsRented + ' Zi., ' + fmtInput(n(a.flat.wg.vacancyPct), 1) + ' % Leerstand)', '− ' + eur(a.rentCash)) +
             (a.rentPrivate > 0 ? line('darin enthalten: ' + esc(a.rentPrivateNames.join(', ')) + ' der anderen', '+ ' + eur(a.rentPrivate)) : '') +
-            (a.rentExtra > 0 ? line('zusätzlich zur Miete: ' + esc(runningLabel(a)), '− ' + eur(a.rentExtra)) : '');
+            (a.rentExtra > 0 ? line('zusätzlich zur Miete: ' + esc(runningLabel(a)), '− ' + eur(a.rentExtra)) : '') +
+            (a.rentPrivate + a.rentExtra > 0 ? line('WG-Einnahmen', minus(a.rentEff), 'sum') : '');
     }
+
+    /** Betrag, der abgezogen wird. */
+    function minus(v) {
+        return (v < -0.5 ? '+ ' : '− ') + eur(Math.abs(v));
+    }
+
+    /** Aufklappbare Erklärung der Auswertung, items wie bei explain. Bleibt offen,
+     *  obwohl die Auswertung (box) bei jeder Eingabe neu gezeichnet wird. */
+    function terms(box, title, items) {
+        var old = box.querySelector('[data-terms]');
+        return '<details class="explain" data-terms' + (old && old.open ? ' open' : '') + '><summary>' + esc(title) + '</summary><dl>' +
+            items.map(function (x) { return '<dt>' + esc(x[0]) + '</dt>' + x.slice(1).map(function (t) { return t ? '<dd' + (t.charAt(0) === '=' ? ' class="formula"' : '') + '>' + esc(t) + '</dd>' : ''; }).join(''); }).join('') +
+            '</dl></details>';
+    }
+
+    /** Summanden, z. B. "250 € Hausgeld + 39 € Grundsteuer"; ohne die, die 0 sind. */
+    function addends(list) {
+        return list.filter(function (x) { return x[0] > 0.5; }).map(function (x) { return eur(x[0]) + ' ' + x[1]; }).join(' + ') || '0 €';
+    }
+
+    /** Wie die Heizung zählt, als Satz. */
+    function heatTerm(a) {
+        var h = a.privateInfo.heating, rent = isRent(a);
+        if (h.pay === 'incl') return 'Heizung: steckt hier ' + (rent ? 'in der Warmmiete' : 'im Hausgeld') + ' und zählt deshalb nicht noch einmal.';
+        return 'Heizung: kommt hier extra dazu' + (h.source === null ? ', der Betrag fehlt aber noch.' : ', dein Anteil sind ' + eur(a.privateInfo.heat) + '.') +
+            ' Steckt sie doch ' + (rent ? 'in der Warmmiete' : 'im Hausgeld') + ', stell sie unter „Laufende Kosten“ auf „schon enthalten“.';
+    }
+
+    /** Rechenweg der WG-Einnahmen, leer ohne Mieten. */
+    function rentTerm(a) {
+        if (!(a.rentGross > 0)) return '';
+        return 'WG-Einnahmen: ' + eur(a.rentCash) + ' Mieten nach Leerstand' +
+            (a.rentPrivate > 0 ? ' − ' + eur(a.rentPrivate) + ' für den Anteil der anderen an ' + a.rentPrivateNames.join(', ') : '') +
+            (a.rentExtra > 0 ? ' + ' + eur(a.rentExtra) + ' für ihren Anteil an ' + runningLabel(a) : '') + ' = ' + eur(a.rentEff) + '.';
+    }
+
+    /** Woraus die Kreditrate besteht. */
+    function rateParts(a) {
+        return a.repayMonth < -0.5 ? eur(a.interestMonth) + ' Zinsen − ' + eur(-a.repayMonth) + ', die offen bleiben'
+            : eur(a.interestMonth) + ' Zinsen + ' + eur(a.repayMonth) + ' Tilgung';
+    }
+
+    var FIXED_TERM = 'Feste Kosten und extra bezahlte Heizung: nur dein Anteil. Was die anderen davon mit der Miete an dich zahlen, reichst du weiter – das wird von den Mieten abgezogen.';
+
+    function termsBuy(a) {
+        var info = a.privateInfo;
+        return [
+            ['Vorweg', 'Alle drei Zahlen sind Beträge pro Monat und bauen aufeinander auf. Die Kreditrate steckt schon in den Netto-Wohnkosten – also nicht zusammenzählen.'],
+            ['1. Kreditrate: ' + eur(a.payment), 'Was du der Bank überweist, nur für den Kredit.',
+                '= ' + rateParts(a),
+                'Die Zinsen behält die Bank, die Tilgung verkleinert deine Schulden. Die Rate bleibt gleich, aber der Zinsanteil sinkt mit der Zeit. Gezeigt ist der Durchschnitt des ersten Jahres.',
+                a.extraYear1 > 0 ? 'Deine Sondertilgung (' + eur(a.extraYear1) + ' im ersten Jahr) kommt noch dazu und steckt in keiner der drei Zahlen.' : ''],
+            ['2. Netto-Wohnkosten: ' + eur(a.netHousing), 'Was im Monat unterm Strich von deinem Konto abgeht.',
+                '= ' + eur(a.payment) + ' Kreditrate + ' + eur(a.runningCosts) + ' laufende Kosten' + (a.rentGross > 0 ? ' − ' + eur(a.rentEff) + ' WG-Einnahmen' : ''),
+                'Laufende Kosten: ' + addends([[a.hoa, 'Hausgeld'], [a.propertyTax, 'Grundsteuer'], [a.maintenance, 'eigene Rücklage'], [info.fixed, 'feste Kosten'], [info.heat, 'Heizung'], [a.utilities, 'weitere']]) + '.',
+                rentTerm(a)],
+            ['3. Echte Kosten: ' + eur(a.trueCost), 'Was davon wirklich weg ist.',
+                '= ' + eur(a.netHousing) + ' Netto-Wohnkosten ' + (a.repayMonth < -0.5 ? minus(a.repayMonth) + ' Zinsen, die offen bleiben' : minus(a.repayMonth) + ' Tilgung'),
+                'Die Tilgung ist nicht ausgegeben: Um diesen Betrag sinken deine Schulden, die Wohnung gehört dir also ein Stück mehr. Deshalb ist das die richtige Zahl für den Vergleich mit einer Miete.' +
+                    (a.trueCost < -0.5 ? ' Negativ heißt: Die WG-Einnahmen decken mehr als Zinsen und laufende Kosten.' : ''),
+                'Nicht enthalten sind einmalige Kosten: ' + eur(a.closing) + ' Kaufnebenkosten' + (a.oneOff > 0 ? ' und ' + eur(a.oneOff) + ' Renovierung & Sonstiges' : '') + '.'],
+            ['Zählt etwas doppelt?', 'Nein, jeder Betrag zählt genau einmal:',
+                'Hausgeld: zählt ganz, auch der Teil für Mitbewohner. Deren Anteil kommt über die WG-Einnahmen zurück.',
+                'Grundsteuer und eigene Rücklage: stehen nicht im Hausgeld. Die Rücklage der Eigentümergemeinschaft dagegen schon – trag sie nicht noch einmal als eigene Rücklage ein.',
+                heatTerm(a), FIXED_TERM,
+                'Weitere laufende Kosten: hier nur eintragen, was in keinem anderen Feld steht.'],
+            ['Wann schaue ich worauf?', 'Kreditrate: Macht die Bank das mit? Netto-Wohnkosten: Passt es jeden Monat in mein Budget? Echte Kosten: Welche Wohnung ist günstiger, und lohnt sich Kaufen gegenüber Mieten?']
+        ];
+    }
+
+    function termsRent(a) {
+        var info = a.privateInfo;
+        return [
+            ['Warmmiete: ' + eur(a.warmRent), 'Was du dem Vermieter überweist, für die ganze Wohnung.',
+                '= ' + addends([[a.coldRent, 'Kaltmiete'], [a.serviceCharges, 'Nebenkosten'], [a.heating, 'Heizkosten']])],
+            ['Netto-Wohnkosten: ' + eur(a.netHousing), 'Was im Monat unterm Strich von deinem Konto abgeht.',
+                '= ' + addends([[a.warmRent, 'Warmmiete'], [info.fixed, 'feste Kosten'], [info.heat, 'Heizung'], [a.utilities, 'weitere laufende Kosten']]) + (a.rentGross > 0 ? ' − ' + eur(a.rentEff) + ' WG-Einnahmen' : ''),
+                rentTerm(a)],
+            ['Echte Kosten (im Vergleich)', 'Bei Miete dasselbe wie die Netto-Wohnkosten, weil nichts davon zurückkommt. Bei einer Kaufwohnung ist die Tilgung abgezogen.'],
+            ['Zählt etwas doppelt?', 'Nein, jeder Betrag zählt genau einmal:', heatTerm(a), FIXED_TERM,
+                'Weitere laufende Kosten: hier nur eintragen, was in keinem anderen Feld steht.']
+        ];
+    }
+
+    var TERMS_COMPARE = [
+        ['Kreditrate', 'Nur Kauf: was du der Bank überweist = Zinsen + Tilgung.'],
+        ['Laufende Kosten', 'Beim Kauf Hausgeld, Grundsteuer, eigene Rücklage, feste Kosten und Heizung (wenn sie extra kommt). Bei Miete Nebenkosten, Heizung und feste Kosten, ohne Kaltmiete.'],
+        ['Netto-Wohnkosten', 'Was im Monat unterm Strich von deinem Konto abgeht. Kauf: Kreditrate + laufende Kosten − WG-Einnahmen. Miete: Kaltmiete + laufende Kosten − WG-Einnahmen.'],
+        ['Echte Kosten', 'Was davon wirklich weg ist. Kauf: Netto-Wohnkosten − Tilgung, denn die Tilgung gehört dir. Miete: gleich den Netto-Wohnkosten. Damit vergleichst du Kauf und Miete fair.'],
+        ['Nicht zusammenzählen', 'Die Kreditrate steckt schon in den Netto-Wohnkosten, und die echten Kosten sind ein Teil davon. Den Rechenweg mit deinen Zahlen findest du auf der Seite jeder Wohnung.']
+    ];
 
     function runningLabel(a) {
         return isRent(a) ? 'Nebenkosten & Heizung' : 'umlegbares Hausgeld & Grundsteuer';
@@ -2211,12 +2304,12 @@
         var html = '<div class="panel results-panel">';
 
         html += '<div class="tiles tiles-2">' +
-            tile('Netto-Wohnkosten', eur(a.netHousing), 'pro Monat, nach WG-Einnahmen') +
-            tile('Kreditrate', eur(a.payment), a.rateMissing ? 'vorläufig, nur Mindesttilgung' : n(p.bankMaxRate) > 0 && a.payment > n(p.bankMaxRate) + 0.5 ? 'laut Bank höchstens ' + eur(n(p.bankMaxRate)) : a.fromBank ? 'laut Bank' : 'Zins + Tilgung', a.payment > n(p.bankMaxRate) + 0.5 && n(p.bankMaxRate) > 0 ? 'tile-bad' : '') +
-            tile('Echte Kosten', eur(a.trueCost), 'pro Monat, ohne Tilgung') +
+            tile('Kreditrate', eur(a.payment), a.rateMissing ? 'vorläufig, nur Mindesttilgung' : n(p.bankMaxRate) > 0 && a.payment > n(p.bankMaxRate) + 0.5 ? 'laut Bank höchstens ' + eur(n(p.bankMaxRate)) : rateParts(a), a.payment > n(p.bankMaxRate) + 0.5 && n(p.bankMaxRate) > 0 ? 'tile-bad' : '') +
+            tile('Netto-Wohnkosten', eur(a.netHousing), 'Kreditrate + laufende Kosten' + (a.rentEff > 0.5 ? ' − WG-Einnahmen' : '')) +
+            tile('Echte Kosten', eur(a.trueCost), 'Netto-Wohnkosten − Tilgung') +
             (a.rateMissing ? tile('Schuldenfrei nach', '–', 'Rate der Bank fehlt', 'tile-warn')
                 : tile('Schuldenfrei nach', WK.years(a.payoffYears), 'Zinsen gesamt ' + eur(a.totalInterest))) +
-            '</div>';
+            '</div>' + terms(box, 'Wie werden diese Zahlen gerechnet?', termsBuy(a));
 
         html += '<h3>Checks</h3><ul class="checks">' + a.warnings.slice().sort(function (x, y) { return TIER[y.level] - TIER[x.level]; }).map(function (w) {
             return '<li class="check-' + w.level + '"><span class="check-icon" aria-label="' + TIER_LABEL[w.level] + '">' + ICON[w.level] + '</span><span>' + esc(w.text) + '</span></li>';
@@ -2225,21 +2318,20 @@
         html += renderReview(box, a);
 
         html += '<h3>Monatsbilanz</h3><table class="calc">' +
-            line('Kreditrate (Zins + Tilgung)', eur(a.payment)) +
+            line('Zinsen (Ø 1. Jahr)', eur(a.interestMonth)) +
+            line(a.repayMonth < -0.5 ? 'Davon offen: Die Rate deckt die Zinsen nicht' : 'Tilgung (Ø 1. Jahr)', a.repayMonth < -0.5 ? '− ' + eur(-a.repayMonth) : eur(a.repayMonth)) +
+            line('Kreditrate', eur(a.payment), 'sum') +
             line('Hausgeld', eur(a.hoa)) +
             line('Grundsteuer (anteilig)', eur(a.propertyTax)) +
             line('Eigene Rücklage', eur(a.maintenance)) +
             privateLines(a) +
             (a.utilities > 0 ? line('Weitere laufende Kosten', eur(a.utilities)) : '') +
-            line('Ausgaben', eur(a.outflow), 'sum') +
+            line('Laufende Kosten', eur(a.runningCosts), 'sum') +
             rentLines(a) +
             line('Netto-Wohnkosten', eur(a.netHousing), 'sum strong') +
-            '</table>';
-
-        html += '<table class="calc calc-split">' +
-            line('davon Vermögensaufbau (Tilgung)', eur(a.wealthBuild)) +
+            line(a.repayMonth < -0.5 ? 'Zinsen, die offen bleiben' : 'Tilgung, die dir bleibt', minus(a.repayMonth)) +
             line('Echte Kosten', eur(a.trueCost), 'sum strong') +
-            '</table><p class="muted small">Echte Kosten = Zinsen + laufende Kosten − WG-Einnahmen. Die Tilgung ist kein Verlust, sondern landet in der Wohnung.</p>';
+            '</table>' + (a.extraYear1 > 0 ? '<p class="muted small">Dazu kommen im ersten Jahr ' + eur(a.extraYear1) + ' Sondertilgung. Sie stecken in keiner dieser Zahlen.</p>' : '');
 
         html += rentLeftTable(a);
 
@@ -2277,11 +2369,11 @@
         var html = '<div class="panel results-panel">';
 
         html += '<div class="tiles tiles-2">' +
-            tile('Netto-Wohnkosten', eur(a.netHousing), 'pro Monat, nach WG-Einnahmen') +
+            tile('Netto-Wohnkosten', eur(a.netHousing), 'Warmmiete + weitere Kosten' + (a.rentEff > 0.5 ? ' − WG-Einnahmen' : '')) +
             tile('Warmmiete', eur(a.warmRent), WK.isSet(p.ownMax) ? 'dein Maximum: ' + eur(n(p.ownMax)) : 'pro Monat, für die ganze Wohnung', WK.isSet(p.ownMax) && a.netHousing > n(p.ownMax) + 0.5 ? 'tile-bad' : '') +
             tile('Kaltmiete in 5 Jahren', eur(a.coldIn5), f.rentType === 'fixed' ? 'feste Miete, ohne Erhöhungen' : (a.rentIncrease5 > 0 ? '+ ' + pct(a.rentIncrease5) + ' (' + RENT_TYPE[f.rentType] + ')' : RENT_TYPE[f.rentType])) +
             tile('Kaution & Einzug', eur(a.moveIn), 'einmalig') +
-            '</div>';
+            '</div>' + terms(box, 'Wie werden diese Zahlen gerechnet?', termsRent(a));
 
         html += '<h3>Checks</h3><ul class="checks">' + a.warnings.slice().sort(function (x, y) { return TIER[y.level] - TIER[x.level]; }).map(function (w) {
             return '<li class="check-' + w.level + '"><span class="check-icon" aria-label="' + TIER_LABEL[w.level] + '">' + ICON[w.level] + '</span><span>' + esc(w.text) + '</span></li>';
