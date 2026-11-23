@@ -44,14 +44,43 @@ var WK = (function () {
 
     /* ---------- Darlehen ---------- */
 
+    var MAX_YEARS = 60;
+
+    /** Faktor, mit dem eine Zahlung im Monat m auf heute abgezinst wird: bis zum
+     *  Ende der Zinsbindung mit dem Sollzins, danach mit dem Anschlusszins. */
+    function discount(loan, m) {
+        var fixed = Math.max(0, Math.round(n(loan.fixedYears))) * 12;
+        var first = fixed > 0 ? Math.min(m, fixed) : m;
+        var follow = isSet(loan.followRate) ? n(loan.followRate) : n(loan.rate);
+        return Math.pow(1 + n(loan.rate) / 1200, -first) * Math.pow(1 + follow / 1200, first - m);
+    }
+
+    /** Darlehen, das 1 € Rate im Monat in so vielen Jahren abzahlt. */
+    function loanPerRate(loan, term) {
+        var months = Math.max(1, Math.round(term * 12)), s = 0;
+        for (var m = 1; m <= months; m++) s += discount(loan, m);
+        return s;
+    }
+
+    /** Darlehen, das 1 € Sondertilgung an jedem Jahresende abzahlt. */
+    function loanPerExtra(loan, term) {
+        var s = 0;
+        for (var y = 1; y <= term + 1e-9; y++) s += discount(loan, y * 12);
+        return s;
+    }
+
+    /** Monatsrate, mit der das Darlehen nach so vielen Jahren getilgt ist –
+     *  mit Anschlusszins nach der Zinsbindung. */
+    function rateForTerm(loan, amount, term, extra) {
+        var rate = (amount - n(extra) * loanPerExtra(loan, term)) / loanPerRate(loan, term);
+        // Etwas über dem Zins, sonst würde nie getilgt (Anschlusszins deutlich niedriger, hohe Sondertilgung)
+        return Math.max(rate, amount * n(loan.rate) / 1200 * 1.001 + 0.01);
+    }
+
     /** Monatliche Anfangsrate (Zins + Tilgung) eines Annuitätendarlehens. */
     function loanPayment(loan, amount) {
         var r = n(loan.rate) / 100;
-        var i = r / 12;
-        if (loan.mode === 'term') {
-            var months = Math.max(1, Math.round(n(loan.term) * 12));
-            return i > 0 ? amount * i / (1 - Math.pow(1 + i, -months)) : amount / months;
-        }
+        if (loan.mode === 'term') return rateForTerm(loan, amount, n(loan.term));
         if (loan.mode === 'payment') return n(loan.payment);
         return amount * (r + n(loan.repay) / 100) / 12;
     }
@@ -117,6 +146,50 @@ var WK = (function () {
         if (sim.stuck) return sim.amount;
         if (y <= sim.years.length) return sim.years[y - 1].balance;
         return sim.payoffYears === null ? sim.years.length ? sim.years[sim.years.length - 1].balance : sim.amount : 0;
+    }
+
+    /* ---------- Wunschlaufzeit ----------
+       "Meine Finanzen": in so vielen Jahren schuldenfrei. Vergleicht nur und
+       schlägt vor – an den Darlehen ändert sich von selbst nichts. */
+
+    function targetYears(p) {
+        return n(p.targetYears) > 0 ? Math.min(MAX_YEARS, n(p.targetYears)) : null;
+    }
+
+    /** Anfangstilgung in %, die zur Wunschlaufzeit passt (Standards für neue Wohnungen). */
+    function targetRepay(p) {
+        var t = targetYears(p);
+        return t === null ? null : 1200 / loanPerRate(defaultLoan(p), t) - n(p.defRate);
+    }
+
+    function defaultLoan(p) {
+        return { rate: p.defRate, fixedYears: p.defFixed, followRate: p.defFollowRate };
+    }
+
+    /** Abgleich mit der Wunschlaufzeit, null ohne Wunsch.
+     *    gap      Jahre über (+) oder unter (−) dem Ziel, null = nie schuldenfrei
+     *    loans    je Darlehen: Rate, die genau zum Ziel führt
+     *    missing  was bei den zu langsamen Darlehen im Monat fehlt
+     *    extra    stattdessen: deren Sondertilgung im Jahr (null = geht so nicht)
+     *    extraNow davon schon eingetragen; slow: Summe dieser Darlehen */
+    function targetCheck(a, loans, p) {
+        var t = targetYears(p);
+        if (t === null) return null;
+        var res = { years: t, gap: a.payoffYears === null ? null : a.payoffYears - t, loans: [], missing: 0, extra: 0, extraNow: 0, slow: 0 };
+        loans.forEach(function (l, idx) {
+            var amount = a.loanAmounts[idx], s = a.sims[idx];
+            if (!(amount > 0.005)) { res.loans.push(null); return; }
+            var need = rateForTerm(l, amount, t, l.extra);
+            res.loans.push({ rate: need });
+            if (s.payoffYears !== null && s.payoffYears <= t + 1 / 12 + 1e-9) return;
+            res.missing += Math.max(0, need - s.payment);
+            res.slow += amount;
+            res.extraNow += n(l.extra);
+            var per = loanPerExtra(l, t);
+            res.extra = res.extra === null || s.stuck || !(per > 0) ? null
+                : res.extra + Math.max(0, amount - s.payment * loanPerRate(l, t)) / per;
+        });
+        return res;
     }
 
     /* ---------- WG / Untervermietung ---------- */
@@ -681,11 +754,13 @@ var WK = (function () {
         a.ltv = a.price > 0 ? a.loanTotal / a.price : null;
         a.equityRatio = a.total > 0 ? a.equity / a.total : null;
 
-        var MAX_YEARS = 60;
         a.sims = loans.map(function (l, idx) { return simulateLoan(l, a.loanAmounts[idx], MAX_YEARS); });
         a.payment = a.sims.reduce(function (s, x) { return s + x.payment; }, 0);
         a.anyStuck = a.sims.some(function (x) { return x.stuck; });
-        a.payoffYears = a.anyStuck ? null : a.sims.reduce(function (m, x) { return Math.max(m, x.payoffYears || 0); }, 0);
+        // null = nie (oder erst nach über MAX_YEARS Jahren)
+        a.payoffYears = a.sims.some(function (x) { return x.payoffYears === null; }) ? null
+            : a.sims.reduce(function (m, x) { return Math.max(m, x.payoffYears); }, 0);
+        a.target = targetCheck(a, loans, p);
         a.totalInterest = a.sims.reduce(function (s, x) { return s + x.totalInterest; }, 0);
         a.fixedYears = loans.length ? Math.round(n(loans[0].fixedYears)) : 0;
         a.balanceAtFixed = a.sims.reduce(function (s, x, idx) {
@@ -734,7 +809,7 @@ var WK = (function () {
         // Vermögensentwicklung
         a.appreciation = isSet(flat.appreciation) ? n(flat.appreciation) : n(p.appreciation);
         var horizon = a.payoffYears === null ? 30 : Math.ceil(a.payoffYears);
-        horizon = Math.max(10, Math.min(50, Math.max(horizon, a.fixedYears)));
+        horizon = Math.max(10, Math.min(50, Math.max(horizon, a.fixedYears, a.target ? Math.ceil(a.target.years) : 0)));
         a.timeline = [];
         var cumInterest = 0;
         for (var y = 0; y <= horizon; y++) {
@@ -811,6 +886,34 @@ var WK = (function () {
             warn(a, 'info', 'Nach ' + a.fixedYears + ' Jahren Zinsbindung sind noch ' + eur(a.balanceAtFixed) + ' offen – Zinsänderungsrisiko für die Anschlussfinanzierung.');
         }
         if (a.payoffYears !== null && a.payoffYears > 40) warn(a, 'warn', 'Volltilgung erst nach ' + years(a.payoffYears) + ' – höhere Tilgung erwägen.');
+        checksTarget(a, p);
+    }
+
+    /** Wunschlaufzeit: passt sie, was fehlt, und passt das in den Haushalt? */
+    function checksTarget(a, p) {
+        var t = a.target;
+        if (!t || a.loanTotal <= 0) return;
+        var wish = fmtArea.format(t.years) + (t.years === 1 ? ' Jahr' : ' Jahre');
+        if (t.gap !== null && t.gap <= 1 / 12 + 1e-9) {
+            warn(a, 'ok', 'Wunschlaufzeit passt: schuldenfrei nach ' + years(a.payoffYears) + ', gewünscht sind ' + wish + '.');
+            return;
+        }
+        var rate = a.payment + t.missing;
+        var text = (t.gap === null ? 'Mit dieser Rate in absehbarer Zeit nicht schuldenfrei, gewünscht sind ' + wish
+            : 'Schuldenfrei nach ' + years(a.payoffYears) + ' statt der gewünschten ' + wish) +
+            ': Dafür fehlen ' + eur(t.missing) + ' im Monat (Rate ' + eur(rate) + ').';
+        if (a.affordRate !== null) {
+            if (rate <= a.affordRate) text += ' Das passt in deinen Haushalt: Tragbar sind hier ' + eur(a.affordRate) + affordTail(p) + '.';
+            else if (a.available >= t.missing) text += ' Das geht sich nur ohne ' + (n(p.keepSaving) > 0 ? 'volles Sparen und ' : '') + '10 % Luft aus, tragbar sind hier ' + eur(a.affordRate) + '.';
+            else text += ' Das passt nicht in deinen Haushalt: Monatlich würden ' + eur(t.missing - a.available) + ' fehlen.';
+        }
+        if (n(p.bankMaxRate) > 0 && rate > n(p.bankMaxRate)) text += ' Die Rate läge über dem Maximum laut Bank (' + eur(n(p.bankMaxRate)) + ').';
+        if (t.extra !== null && t.extra > 0.5) {
+            var extra = Math.ceil(t.extra / 100) * 100;
+            text += ' Ohne höhere Rate ginge es mit rund ' + eur(extra) + ' Sondertilgung im Jahr' + (t.extraNow > 0 ? ' statt bisher ' + eur(t.extraNow) : '') +
+                (extra > 0.05 * t.slow ? ' – mehr als die oft erlaubten 5 % der Darlehenssumme (' + eur(0.05 * t.slow) + ').' : '.');
+        }
+        warn(a, t.gap === null || t.gap > 1 ? 'warn' : 'info', text);
     }
 
     /* ---------- Objekt-Bewertung & Rückfragen ----------
@@ -1196,11 +1299,16 @@ var WK = (function () {
         b.limit = b.affordRate !== null && (b.bankRate === null || b.affordRate <= b.bankRate) ? 'own' : 'bank';
         b.maxWarmRent = 0.3 * n(p.netIncome) + b.rentsWarm;
         var annuity = (n(p.defRate) + n(p.defRepay)) / 100;
-        b.loanFromRate = b.maxRate !== null && annuity > 0 ? b.maxRate * 12 / annuity : null;
-        b.maxLoan = n(p.bankMaxLoan) > 0 ? Math.min(n(p.bankMaxLoan), b.loanFromRate === null ? Infinity : b.loanFromRate) : n(b.loanFromRate);
+        var fromRepay = b.maxRate !== null && annuity > 0 ? b.maxRate * 12 / annuity : null;
+        b.target = targetYears(p);
+        b.loanFromRate = b.target !== null && b.maxRate !== null ? b.maxRate * loanPerRate(defaultLoan(p), b.target) : fromRepay;
+        function capped(loan) { return n(p.bankMaxLoan) > 0 ? Math.min(n(p.bankMaxLoan), loan === null ? Infinity : loan) : n(loan); }
+        function price(loan) { return (n(p.equity) + loan) / (1 + b.closingPct / 100); }
+        b.maxLoan = capped(b.loanFromRate);
         if (n(p.bankMaxLoan) > 0 && (b.loanFromRate === null || b.loanFromRate >= n(p.bankMaxLoan))) b.limit = 'loan';
         b.closingPct = transferTaxFor(p.state) + n(p.notaryPct) + n(p.brokerPct);
-        b.maxPrice = (n(p.equity) + b.maxLoan) / (1 + b.closingPct / 100);
+        b.maxPrice = price(b.maxLoan);
+        b.maxPriceRepay = price(capped(fromRepay));   // mit der Standard-Tilgung statt der Wunschlaufzeit
         return b;
     }
 
@@ -1264,6 +1372,8 @@ var WK = (function () {
         runningEstimate: runningEstimate,
         currentHousing: currentHousing,
         loanPayment: loanPayment,
+        targetYears: targetYears,
+        targetRepay: targetRepay,
         n: n,
         isSet: isSet,
         eur: eur,

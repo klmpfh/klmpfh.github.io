@@ -1017,6 +1017,7 @@ table {
 }
 
 .loan-out b { color: var(--text); }
+.loan-target { margin-top: 10px; }
 
 /* Diagramm */
 .chart-box { margin-top: 8px; }
@@ -1055,6 +1056,8 @@ table {
 .chart-area .axis { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .chart-area .end-label { fill: var(--text); font-size: 11.5px; font-weight: 600; }
 .chart-area .fixed { stroke: var(--theme-gray-400); stroke-dasharray: 4 4; }
+.chart-area .target { stroke: var(--primary); stroke-dasharray: 2 3; }
+.chart-area .target-label { fill: var(--primary-strong); font-weight: 700; }
 .chart-area .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .chart-area .line.s1 { stroke: var(--series-1); }
 .chart-area .line.s2 { stroke: var(--series-2); }

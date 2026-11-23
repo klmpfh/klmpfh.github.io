@@ -69,7 +69,7 @@ relativ, über die eigene `src`-Angabe.
   komplett), je Wohnung abwählbar, wenn schon in Warmmiete/Hausgeld enthalten) auf der
   Übersicht. Mietwohnungen mit Kalt-/Warmmiete, Kaution und fester, Staffel- oder Indexmiete (Mietentwicklung über 10 Jahre),
   im selben Vergleich wie Kaufwohnungen. Je Kaufwohnung Kaufpreis, Nebenkosten (Grunderwerbsteuer je Bundesland), Hausgeld, WG-Zimmer mit Untermiete
-  (ohne Steuer), Annuitätendarlehen mit Zinsbindung/Anschlusszins/Sondertilgung. Monatsbilanz, Checks,
+  (ohne Steuer), Annuitätendarlehen mit Zinsbindung/Anschlusszins/Sondertilgung, Abgleich mit einer Wunschlaufzeit. Monatsbilanz, Checks,
   Tilgungsplan, Diagramm und Vergleichstabelle. Objekt-Bewertung gegen Faustwerte (Hausgeld/m², Baujahr, Energieverbrauch und Heizung mit geschätzten Heizkosten, Grundsteuer,
   Makler, Inventar, WG-Eignung) mit Rückfragen an Makler/Verwaltung zum Kopieren und Unterlagen-Checkliste. Wünsche & Bedingungen:
   gemeinsame Liste frei formulierter Wünsche, jede Person gewichtet jeden Wunsch (0–100 %) und bewertet ihn in jeder Wohnung;

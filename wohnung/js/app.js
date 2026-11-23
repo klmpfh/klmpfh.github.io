@@ -13,6 +13,7 @@
         netIncome: null, livingCosts: null, otherDebt: null, keepSaving: null, currentRent: null,
         estRunning: null,   // laufende Kosten einer Kaufwohnung, leer = geschätzt (runningEstimate in calc.js)
         bankMaxLoan: null, bankMaxRate: null,
+        targetYears: null,  // Wunschlaufzeit: in so vielen Jahren schuldenfrei
         altReturn: 2, appreciation: 1.5,
         state: '', notaryPct: 2, brokerPct: 3.57,
         defRate: 3.6, defRepay: 2, defFixed: 10, defFollowRate: 4.5
@@ -694,10 +695,17 @@
         { label: 'Warmmiete / Netto-Einkommen', get: rentOnly(function (a) { return a.rentRatio; }), f: pct, best: 'min' },
         { label: 'Restschuld nach Zinsbindung', get: buyOnly(function (a) { return a.balanceAtFixed; }), f: eur, best: 'min', sep: true },
         { label: 'Schuldenfrei nach', get: buyOnly(function (a) { return a.payoffYears; }), f: WK.years, best: 'min' },
+        { label: 'Abweichung von der Wunschlaufzeit', get: buyOnly(function (a) { return a.target ? a.target.gap : null; }), f: targetGap, best: 'min' },
         { label: 'Zinsen gesamt', get: buyOnly(function (a) { return a.totalInterest; }), f: eur, best: 'min' },
         { label: 'Cash nach Kauf / Einzug', get: function (a) { return a.cashAfter; }, f: eur, best: 'max', sep: true },
         { label: 'Auffälligkeiten am Objekt', get: function (a) { return started(a) ? a.review.filter(function (r) { return r.level === 'warn' || r.level === 'bad'; }).length : null; }, f: function (v) { return v === null ? '–' : String(v); }, best: 'min' }
     ];
+
+    function targetGap(v) {
+        if (v === null) return '–';
+        if (Math.abs(v) < 1 / 24) return 'genau';
+        return (v > 0 ? '+ ' : '− ') + WK.years(Math.abs(v));
+    }
 
     /** Wie eur(), aber mit Cent – für kleine Beträge. */
     function euro2(v) {
@@ -782,6 +790,15 @@
                 numField(p, 'bankMaxRate', 'Max. Monatsrate', { unit: '€', hint: function () {
                     var b = WK.budget(p, state.flats);
                     return 'Leer = übliche Grenze: 40 % vom Netto' + rentsText(b) + ' minus andere Kredite' + result(p.netIncome, eur(b.bankRule)) + '.';
+                } })
+            ]),
+            group('Kreditziel', [
+                numField(p, 'targetYears', 'Schuldenfrei in', { unit: 'Jahren', dec: 1, hint: function () {
+                    var t = WK.targetYears(p);
+                    if (t === null) return 'Wunschlaufzeit, z. B. bis zur Rente. Wird bei jeder Kaufwohnung verglichen; an den Darlehen ändert sich nichts von selbst.';
+                    var repay = WK.targetRepay(p);
+                    return 'Also bis etwa ' + (new Date().getFullYear() + Math.round(t)) + '. Mit den Standards unten rund ' + fmtInput(Math.max(0, repay), 1) + ' % Anfangstilgung.' +
+                        (repay < 1 ? ' Das ist sehr wenig, Banken verlangen meist mindestens 1–2 %.' : '');
                 } })
             ]),
             group('Annahmen', [
@@ -1012,8 +1029,9 @@
         box.innerHTML =
             tile('Rate, die du tragen kannst', eur(b.affordRate), b.affordRate === null ? 'Lebenshaltung oder Nettoeinkommen fehlt' : 'nach allen Kosten' + (b.saving > 0 ? ', Sparen' : '') + ' und 10 % Luft' + (b.rentsWarm > 0 ? ', mit max. ' + eur(b.rentsWarm) + ' der anderen' : '')) +
             tile('Rate, die die Bank mitmacht', eur(b.bankRate), b.bankRate === null ? 'Nettoeinkommen fehlt' : n(p.bankMaxRate) > 0 ? 'laut Bank' : 'üblich: 40 % vom Netto' + rentsText(b) + (n(p.otherDebt) > 0 ? ' minus andere Kredite' : '')) +
-            tile('Max. Darlehen', eur(b.maxLoan), b.limit === 'loan' ? 'Kreditrahmen laut Bank' : 'aus ' + eur(b.maxRate) + ' Rate bei ' + fmtInput(n(p.defRate) + n(p.defRepay), 2) + ' % Zins + Tilgung') +
-            tile('Kaufpreis-Budget', eur(b.maxPrice), 'Eigenkapital + Darlehen, abzgl. ~' + fmtInput(b.closingPct, 1) + ' % Nebenkosten · ' + LIMIT_TEXT[b.limit]) +
+            tile('Max. Darlehen', eur(b.maxLoan), b.limit === 'loan' ? 'Kreditrahmen laut Bank' : 'aus ' + eur(b.maxRate) + ' Rate' + (b.target !== null ? ', schuldenfrei in ' + WK.years(b.target) : ' bei ' + fmtInput(n(p.defRate) + n(p.defRepay), 2) + ' % Zins + Tilgung')) +
+            tile('Kaufpreis-Budget', eur(b.maxPrice), 'Eigenkapital + Darlehen, abzgl. ~' + fmtInput(b.closingPct, 1) + ' % Nebenkosten · ' + LIMIT_TEXT[b.limit] +
+                (b.target !== null && Math.abs(b.maxPrice - b.maxPriceRepay) > 1 ? ' · ohne Wunschlaufzeit (' + fmtInput(p.defRepay, 2) + ' % Tilgung): ' + eur(b.maxPriceRepay) : '')) +
             (n(p.netIncome) > 0 ? tile('Max. Warmmiete', eur(b.maxWarmRent), 'Faustregel 30 % vom Netto' + (b.rentsWarm > 0 ? ' + max. ' + eur(b.rentsWarm) + ' der anderen' : '') + (b.affordWarm !== null ? ' · tragen ' + (state.people.length > 1 ? 'könntet ihr' : 'könntest du') + ' bis ' + eur(b.affordWarm) : '')) : '') +
             equityTile(p);
     }
@@ -1807,7 +1825,7 @@
                 modeSel.value = l.mode || 'repay';
                 modeSel.addEventListener('change', function () { l.mode = modeSel.value; renderLoans(); changed(); });
 
-                var modeField = l.mode === 'term' ? numField(l, 'term', 'Laufzeit', { unit: 'Jahre', dec: 1 })
+                var modeField = l.mode === 'term' ? numField(l, 'term', 'Laufzeit', { unit: 'Jahre', dec: 1, hint: 'Mit Anschlusszins gerechnet, ohne Sondertilgung.' })
                     : l.mode === 'payment' ? numField(l, 'payment', 'Monatsrate', { unit: '€' })
                     : numField(l, 'repay', 'Anfängliche Tilgung', { unit: '%' });
 
@@ -1831,9 +1849,23 @@
                         numField(l, 'followRate', 'Anschlusszins (Annahme)', { unit: '%', hint: 'Gilt nach der Zinsbindung, bei gleicher Rate.' }),
                         numField(l, 'extra', 'Sondertilgung pro Jahr', { unit: '€', dec: 0 })
                     ]),
-                    el('div', { class: 'loan-out', 'data-loan-out': String(idx) })
+                    el('div', { class: 'loan-out', 'data-loan-out': String(idx) }),
+                    el('div', { class: 'loan-target', 'data-loan-target': String(idx), hidden: true }, [
+                        btn('', 'btn-ghost', function () { fitTarget(l, idx); }, 'Wunschlaufzeit aus „Meine Finanzen“ – ändert nur dieses Darlehen')
+                    ])
                 ]));
             });
+        }
+
+        /** Rate so setzen, dass die Wunschlaufzeit erreicht wird. Mit Sondertilgung
+         *  als feste Rate, sonst über die Laufzeit (folgt dann dem Betrag). */
+        function fitTarget(l, idx) {
+            var t = WK.analyze(f, state.profile, state.flats).target;
+            if (!t || !t.loans[idx]) return;
+            if (n(l.extra) > 0) { l.mode = 'payment'; l.payment = Math.ceil(t.loans[idx].rate); }
+            else { l.mode = 'term'; l.term = t.years; }
+            renderLoans();
+            changed();
         }
 
         /** Faire Mieten, fehlende Angaben und was in leeren Mietfeldern gilt. */
@@ -1894,7 +1926,13 @@
                     (n(l.fixedYears) > 0 ? '<span>Restschuld nach ' + Math.round(n(l.fixedYears)) + ' J.: <b>' + eur(s.balanceAtFixed) + '</b></span>' : '') +
                     '<span>' + (s.stuck ? '<b class="bad-text">Rate deckt die Zinsen nicht</b>' : 'schuldenfrei nach ' + WK.years(s.payoffYears)) + '</span>';
             });
-            drawChart(chartPanel, a.timeline, a.fixedYears);
+            loansBox.querySelectorAll('[data-loan-target]').forEach(function (e) {
+                var i = Number(e.getAttribute('data-loan-target'));
+                var t = a.target && a.target.loans[i];
+                e.hidden = !t || !a.sims[i] || Math.abs(t.rate - a.sims[i].payment) < 1.5;
+                if (!e.hidden) e.querySelector('button').textContent = 'Rate ans Ziel anpassen: ' + eur(t.rate) + ' für ' + WK.years(a.target.years);
+            });
+            drawChart(chartPanel, a.timeline, a.fixedYears, a.target ? a.target.years : 0);
             renderPlan(planBox, a);
         };
         currentUpdate();
@@ -1946,7 +1984,7 @@
             tile('Netto-Wohnkosten', eur(a.netHousing), a.vsRent !== null ? signed(a.vsRent) + ' ggü. heute' : 'pro Monat, nach WG-Einnahmen') +
             tile('Frei verfügbar', a.netIncome > 0 ? eur(a.available) : '–', a.netIncome > 0 ? 'pro Monat, nach allen Fixkosten' : 'Nettoeinkommen fehlt', a.netIncome > 0 && a.available < 0 ? 'tile-bad' : '') +
             tile('Echte Kosten', eur(a.trueCost), 'ohne Tilgung, inkl. entgangener Rendite') +
-            tile('Schuldenfrei nach', WK.years(a.payoffYears), 'Zinsen gesamt ' + eur(a.totalInterest)) +
+            tile('Schuldenfrei nach', WK.years(a.payoffYears), 'Zinsen gesamt ' + eur(a.totalInterest) + (a.target ? ' · Ziel ' + WK.years(a.target.years) : '')) +
             '</div>';
 
         html += '<h3>Checks</h3><ul class="checks">' + a.warnings.slice().sort(function (x, y) { return TIER[y.level] - TIER[x.level]; }).map(function (w) {
@@ -2261,14 +2299,15 @@
         return (r <= 1 ? 1 : r <= 2 ? 2 : r <= 2.5 ? 2.5 : r <= 5 ? 5 : 10) * mag;
     }
 
-    function drawChart(box, rows, fixedYears) {
+    function drawChart(box, rows, fixedYears, targetYears) {
         box._rows = rows;
         box._fixed = fixedYears;
+        box._target = targetYears;
         if (!box._observed && window.ResizeObserver) {
             box._observed = true;
             var lastW = 0;
             new ResizeObserver(function () {
-                if (Math.abs(box.clientWidth - lastW) > 4 && box._rows) { lastW = box.clientWidth; drawChart(box, box._rows, box._fixed); }
+                if (Math.abs(box.clientWidth - lastW) > 4 && box._rows) { lastW = box.clientWidth; drawChart(box, box._rows, box._fixed, box._target); }
             }).observe(box);
         }
         if (!rows.length || !(rows[0].value > 0)) { box.innerHTML = ''; return; }
@@ -2297,6 +2336,12 @@
         if (fixedYears > 0 && fixedYears < N) {
             svg += '<line class="fixed" x1="' + x(fixedYears) + '" x2="' + x(fixedYears) + '" y1="' + m.t + '" y2="' + (m.t + ih) + '"/>' +
                 '<text class="axis" x="' + (x(fixedYears) + 4) + '" y="' + (m.t + 10) + '">Zinsbindung</text>';
+        }
+        if (targetYears > 0 && targetYears <= N) {
+            // Zweite Zeile, damit sich die Beschriftung nicht mit „Zinsbindung“ überlagert
+            var late = targetYears > 0.85 * N;
+            svg += '<line class="target" x1="' + x(targetYears) + '" x2="' + x(targetYears) + '" y1="' + m.t + '" y2="' + (m.t + ih) + '"/>' +
+                '<text class="axis target-label" x="' + (x(targetYears) + (late ? -4 : 4)) + '" y="' + (m.t + 24) + '"' + (late ? ' text-anchor="end"' : '') + '>Ziel</text>';
         }
 
         SERIES.forEach(function (s) {
