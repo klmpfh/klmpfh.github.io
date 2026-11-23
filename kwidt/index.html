@@ -414,7 +414,25 @@
     .fact-list.pro li::before { content: "+"; color: var(--pos); }
     .fact-list.con li::before { content: "–"; color: var(--neg); }
     .fact-list.feature li::before { content: "✓"; color: var(--primary); }
-    .kind-seg { margin-bottom: 14px; }
+    .kind-seg, .period-seg { margin-bottom: 14px; }
+
+    /* Neu seit dem letzten Besuch */
+    .news-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+    .panel .news-head h2 { margin-bottom: 4px; color: var(--primary-strong); }
+    .news-head .link-btn { flex: none; }
+    .news .month { padding-top: 14px; }
+    .new-tag {
+        display: inline-block;
+        margin-left: 6px;
+        padding: 1px 7px;
+        border-radius: 999px;
+        background: var(--primary-soft);
+        color: var(--primary-strong);
+        font-size: 11px;
+        font-weight: 700;
+        vertical-align: 1px;
+        white-space: nowrap;
+    }
 
     .my-balance { text-align: center; font-size: 16px; font-weight: 600; line-height: 1.5; }
     .kwidt-banner {
@@ -585,15 +603,14 @@
 <div class="container">
     <main id="app"></main>
     <noscript>Kwidt braucht JavaScript.</noscript>
-    <div class="footer-info">v<span id="versionNumber">1.45</span></div>
+    <div class="footer-info">v<span id="versionNumber">1.46</span></div>
 </div>
 <div id="toast" role="status" hidden></div>
 
 <script src="../fileshare/vendor/peerjs.min.js"></script>
 <script src="../fileshare/vendor/qrcode.min.js"></script>
 <!-- ?v= immer zusammen mit der Versionsnummer oben ändern: Sonst läuft die neue Seite mit alten Skripten aus dem Browser-Cache. -->
-<script src="core.js?v=1.45"></script>
-<script src="kv.js?v=1.45"></script>
-<script src="app.js?v=1.45"></script>
+<script src="core.js?v=1.46"></script>
+<script src="app.js?v=1.46"></script>
 </body>
 </html>

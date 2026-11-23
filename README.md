@@ -59,7 +59,7 @@ relativ, über die eigene `src`-Angabe.
 - `/laserfeelings/` – Szenario-Generator für Laser & Feelings.
 - `/kwidt/` – Kwidt: Teilt gemeinsame Ausgaben in Gruppen auf (gleich, Beträge, Prozent, Anteile, Korrektur).
   Ohne Server: Daten liegen im Browser, Abgleich per Link oder live per WebRTC (`core.js` ist die Rechenlogik,
-  `app.js` Oberfläche und Sync; PeerJS und QR-Code kommen aus `fileshare/vendor/`). `sw.js` hält die App offline bereit. Beim Anlegen einer Gruppe lässt sich ein Excel-Export aus Splid (.xls) übernehmen.
+  `app.js` Oberfläche und Sync; PeerJS und QR-Code kommen aus `fileshare/vendor/`). Beim Öffnen einer Gruppe steht oben, was seit dem letzten Besuch neu ist (gebuchte Wiederholungen, Änderungen anderer). Beim Anlegen einer Gruppe lässt sich ein Excel-Export aus Splid (.xls) übernehmen.
 - `/gone/` – gone: Verleih-Liste in beide Richtungen
   (Schalter „Von mir“ / „An mich“): was, wann, an wen bzw. von wem, bis wann geplant.
   Status (offen/fällig/überfällig/zurück), Filter und Suche. Daten liegen nur im localStorage des Browsers,

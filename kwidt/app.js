@@ -28,8 +28,8 @@
     const app = document.getElementById('app');
     const toastEl = document.getElementById('toast');
 
-    let store = { groups: {}, me: {}, last: null, seen: {}, contacts: {}, offsets: {}, notify: {} };
-    const state = { formActive: false, pendingRender: false, unsaved: false, search: '', filter: emptyFilter(), filterOpen: false, statsCur: null, statsCategory: '', statsOpen: {}, lastPath: null };
+    let store = { groups: {}, me: {}, last: null, seen: {}, contacts: {}, offsets: {}, news: {} };
+    const state = { formActive: false, pendingRender: false, unsaved: false, search: '', filter: emptyFilter(), filterOpen: false, statsCur: null, statsCategory: '', statsPeriod: 'month', statsOpen: {}, lastPath: null };
 
     function emptyFilter() {
         return { payer: '', member: '', category: '', min: '', max: '' };
@@ -164,7 +164,7 @@
     /* ---------- Speicher ---------- */
 
     function readStored() {
-        const out = { groups: {}, me: {}, last: null, seen: {}, contacts: {}, offsets: {}, notify: {} };
+        const out = { groups: {}, me: {}, last: null, seen: {}, contacts: {}, offsets: {}, news: {} };
         try {
             const raw = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
             if (raw && raw.groups) {
@@ -181,14 +181,7 @@
                 });
                 out.contacts = cleanContacts(raw.contacts);
                 out.offsets = cleanOffsets(raw.offsets);
-                Object.keys(raw.notify || {}).forEach(function (gid) {
-                    // Ein früherer Stand speicherte nur `true`: alle Arten an.
-                    const v = raw.notify[gid] === true ? { due: true, live: true } : raw.notify[gid];
-                    if (!v || typeof v !== 'object' || !out.groups[gid]) return;
-                    const kinds = {};
-                    NOTIFY_KINDS.forEach(function (k) { if (v[k] === true) kinds[k] = true; });
-                    if (Object.keys(kinds).length) out.notify[gid] = kinds;
-                });
+                out.news = cleanNews(raw.news, out.groups);
             }
         } catch (e) {
             console.warn('Kwidt: Gespeicherte Daten nicht lesbar.', e);
@@ -206,7 +199,6 @@
             toast('Speichern fehlgeschlagen. Bitte ein Backup sichern.');
         }
         askToKeepData();
-        saveSchedule();
     }
 
     /** Ohne diese Bitte darf der Browser die Daten löschen, sobald der Speicher knapp wird. */
@@ -242,7 +234,7 @@
         store.seen = loaded.seen;
         store.contacts = loaded.contacts;
         store.offsets = loaded.offsets;
-        store.notify = loaded.notify;
+        store.news = loaded.news;
         return changed;
     }
 
@@ -259,115 +251,135 @@
         }
     }
 
-    /* ---------- Benachrichtigungen ---------- */
+    /* ---------- Neues seit dem letzten Besuch ---------- */
 
-    // Ein Server, der Nachrichten an geschlossene Apps schickt (Web Push), fehlt mit Absicht.
-    // Gemeldet wird darum nur, was dieses Gerät selbst mitbekommt:
-    //  - Neue Einträge anderer, die über den Live-Abgleich ankommen, solange die App offen
-    //    ist, aber nicht im Vordergrund.
-    //  - Fällige wiederkehrende Ausgaben. Das prüft der Service Worker (sw.js), auch bei
-    //    geschlossener App, wenn der Browser ihn weckt (periodicsync, nur Chrome/Edge bei
-    //    installierter App). Dafür legt saveSchedule() eine Übersicht in IndexedDB ab.
-    // Pro Gruppe einzeln abschaltbar: store.notify[gid] = { due: true, live: true }.
-    const NOTIFY_KINDS = ['due', 'live'];
-    const DUE_TAG = 'kwidt-due';
-    const LIVE_LINES = 50;
+    // Dieses Gerät merkt sich pro Gruppe, was es schon angezeigt hat:
+    // store.news[gid] = { at: letzter Besuch, known: {id: t} aus C.changeKeys }.
+    // Beim Öffnen der Gruppe gilt das Gezeigte sofort als gesehen. Damit es trotzdem stehen
+    // bleibt, solange man da ist, hält `visit` den Stand vom Beginn des Besuchs fest. Ein
+    // Besuch endet, wenn man die Gruppe verlässt oder die App länger im Hintergrund war.
+    const VISIT_PAUSE = 10 * 60 * 1000;
+    const NEWS_LIMIT = 8;
+    let visit = null;
 
-    function canNotify() {
-        return 'Notification' in window && 'serviceWorker' in navigator;
+    function cleanNews(raw, groups) {
+        const out = {};
+        Object.keys(raw || {}).forEach(function (gid) {
+            const v = raw[gid];
+            if (!groups[gid] || !v || typeof v !== 'object') return;
+            const known = {};
+            Object.keys(v.known || {}).forEach(function (id) {
+                if (C.RE_EXPENSE_ID.test(id) && typeof v.known[id] === 'number') known[id] = v.known[id];
+            });
+            out[gid] = { at: typeof v.at === 'number' ? v.at : 0, known: known };
+        });
+        return out;
     }
 
-    function notifyWanted(gid, kind) {
-        return !!(store.notify[gid] && store.notify[gid][kind]);
+    /** Erster Besuch einer Gruppe: Was schon da ist, ist nicht neu. */
+    function startNews(doc) {
+        store.news[doc.id] = { at: 0, known: C.changeKeys(doc) };
     }
 
-    function notifyOn(gid, kind) {
-        return notifyWanted(gid, kind) && canNotify() && Notification.permission === 'granted';
+    /** Noch nicht angezeigte Neuigkeiten, für die Zahl auf der Startseite. */
+    function unseenCount(doc) {
+        const me = meId(doc.id);
+        if (!me || !store.news[doc.id]) return 0;
+        const news = C.newsSince(doc, store.news[doc.id].known, me);
+        return news.bookings.length + news.changes.length;
     }
 
-    function setNotify(gid, kind, on) {
-        const kinds = Object.assign({}, store.notify[gid]);
-        if (on) kinds[kind] = true;
-        else delete kinds[kind];
-        if (Object.keys(kinds).length) store.notify[gid] = kinds;
-        else delete store.notify[gid];
-        persist();
+    function visitNews(doc) {
+        return visit && visit.gid === doc.id ? C.newsSince(doc, visit.known, meId(doc.id)) : { bookings: [], changes: [] };
     }
 
-    /** Gruppen, deren fällige Wiederholungen gemeldet werden sollen. */
-    function dueGroups() {
-        return Object.keys(store.notify).filter(function (gid) { return notifyWanted(gid, 'due') && store.groups[gid]; });
+    /** Im Hintergrund hat es noch niemand gesehen. Das wird beim Zurückkommen nachgeholt. */
+    function markNewsSeen(doc) {
+        visit.pending = document.hidden;
+        if (visit.pending) return;
+        const record = store.news[doc.id];
+        const keys = C.changeKeys(doc);
+        let changed = !visit.marked;
+        Object.keys(keys).forEach(function (id) {
+            if (id in record.known && keys[id] <= record.known[id]) return;
+            record.known[id] = keys[id];
+            changed = true;
+        });
+        record.at = Date.now();
+        visit.marked = true;
+        if (changed) persist();
     }
 
-    let scheduleSaved = null;
-    function saveSchedule() {
-        if (!window.indexedDB || !window.KwidtKV) return;
-        const groups = dueGroups().map(function (gid) { return { gid: gid, name: store.groups[gid].meta.name, series: C.seriesDigest(store.groups[gid]) }; });
-        const json = JSON.stringify(groups);
-        if (json === scheduleSaved) return;
-        scheduleSaved = json;
-        KwidtKV.set('schedule', groups).catch(function (e) {
-            scheduleSaved = null;
-            console.warn('Kwidt: Übersicht für Benachrichtigungen nicht gespeichert.', e);
+    /** Bucht nach, was eine eigene Änderung an einer Serie auslöst. Das ist für dich nicht neu. */
+    function bookOwn(doc, seriesId) {
+        const before = C.changeKeys(doc);
+        C.expandRecurring(doc, C.todayStr());
+        C.occurrencesOf(doc, seriesId).forEach(function (e) {
+            if (e.id in before) return;
+            if (store.news[doc.id]) store.news[doc.id].known[e.id] = 0;
+            if (visit && visit.gid === doc.id) visit.known[e.id] = 0;
         });
     }
 
-    /**
-     * Bittet den Browser, den Service Worker ab und zu zu wecken. Liefert, ob das klappt:
-     * 'on', 'install' (geht erst, wenn die App installiert ist) oder 'none' (kann der Browser nicht).
-     */
-    async function updateBackgroundCheck() {
-        try {
-            const reg = await navigator.serviceWorker.getRegistration();
-            if (!reg || !reg.periodicSync) return 'none';
-            if (!dueGroups().length) {
-                await reg.periodicSync.unregister(DUE_TAG);
-                return 'none';
-            }
-            const status = await navigator.permissions.query({ name: 'periodic-background-sync' });
-            if (status.state !== 'granted') return 'install';
-            await reg.periodicSync.register(DUE_TAG, { minInterval: 6 * 3600 * 1000 });
-            return 'on';
-        } catch (e) {
-            return 'none';
-        }
+    /** Fällige Wiederholungen aller Gruppen buchen, damit die Startseite Salden und Neues richtig zeigt. */
+    function bookAllDue() {
+        let booked = 0;
+        Object.keys(store.groups).forEach(function (gid) { booked += C.expandRecurring(store.groups[gid], C.todayStr()); });
+        if (booked) persist();
     }
 
-    /** Lässt den Service Worker fällige Termine melden. Er schweigt, solange die App sichtbar ist. */
-    async function askForDueCheck() {
-        if (!dueGroups().length || !canNotify()) return;
-        try {
-            const reg = await navigator.serviceWorker.getRegistration();
-            if (reg && reg.active) reg.active.postMessage({ type: 'check-due' });
-        } catch (e) { /* dann eben beim nächsten Wecken */ }
+    /** Der Abschnitt „Neu“ über der Ausgabenliste, oder null. */
+    function viewNewsPanel(doc, me) {
+        if (!store.news[doc.id]) {
+            startNews(doc);
+            persist();
+        }
+        if (!visit || visit.gid !== doc.id) {
+            const record = store.news[doc.id];
+            visit = { gid: doc.id, since: record.at, known: Object.assign({}, record.known), marked: false, pending: false };
+        }
+        markNewsSeen(doc);
+        const news = visitNews(doc);
+        if (!news.bookings.length && !news.changes.length) return null;
+
+        function block(title, rows) {
+            if (!rows.length) return null;
+            const list = h('div', { class: 'list' }, rows.slice(0, NEWS_LIMIT));
+            const rest = rows.slice(NEWS_LIMIT);
+            const more = rest.length ? h('button', {
+                class: 'link-btn small', type: 'button',
+                onclick: function () {
+                    list.append.apply(list, rest);
+                    more.remove();
+                }
+            }, rest.length + ' weitere zeigen') : null;
+            return [h('div', { class: 'month' }, title), list, more];
+        }
+
+        return h('section', { class: 'panel news' },
+            h('div', { class: 'news-head' },
+                h('h2', null, 'Neu seit deinem letzten Besuch'),
+                h('button', {
+                    class: 'link-btn small', type: 'button',
+                    onclick: function () {
+                        visit.known = C.changeKeys(doc);
+                        softRender();
+                    }
+                }, 'Ausblenden')),
+            visit.since ? h('p', { class: 'small muted' }, 'Zuletzt hier: ' + dateTime(visit.since)) : null,
+            block('Wiederkehrend gebucht (' + news.bookings.length + ')', news.bookings.map(function (e) {
+                return h('a', { class: 'item', href: '#/g/' + doc.id + '/expense/' + e.id },
+                    categoryIcon(doc, e.category),
+                    h('span', { class: 'body' },
+                        h('div', { class: 'title' }, e.desc, ' 🔁'),
+                        h('div', { class: 'sub' }, formatDate(e.date) + ' · ' + (e.refund ? 'Rückzahlung ' : '') + money(e.amount, e.currency) + ' · ' + payerText(doc, e, me))),
+                    expenseEffect(e, me));
+            })),
+            block('Änderungen von anderen (' + news.changes.length + ')', news.changes.map(function (a) { return activityItem(doc, a); })));
     }
 
-    /**
-     * Neue Einträge anderer melden, wenn die App nicht im Vordergrund ist. Kommt mehr nach,
-     * bevor die Meldung weggetippt ist, wird sie ergänzt statt eine zweite daneben zu legen.
-     */
-    async function notifyActivity(doc, entries) {
-        if (!entries.length || !notifyOn(doc.id, 'live') || (!document.hidden && document.hasFocus())) return;
-        try {
-            const reg = await navigator.serviceWorker.getRegistration();
-            if (!reg) return;
-            const tag = 'kwidt-live-' + doc.id;
-            const old = (await reg.getNotifications({ tag: tag }))[0];
-            const lines = ((old && old.data && old.data.lines) || []).concat(entries.map(function (a) {
-                return activityText(doc, a) + (a.amount ? ' · ' + money(a.amount, a.currency) : '');
-            })).slice(-LIVE_LINES);
-            const newest = lines.slice(-4).reverse();
-            if (lines.length > newest.length) newest.push('und ' + (lines.length - newest.length) + ' weitere');
-            await reg.showNotification(doc.meta.name + (lines.length === 1 ? '' : ': ' + lines.length + ' Änderungen'), {
-                body: newest.join('\n'),
-                tag: tag,
-                renotify: true,
-                icon: 'icons/icon-192.png',
-                data: { hash: '#/g/' + doc.id + '/activity', lines: lines }
-            });
-        } catch (e) {
-            console.warn('Kwidt: Benachrichtigung nicht möglich.', e);
-        }
+    function newTag(text) {
+        return h('span', { class: 'new-tag' }, text);
     }
 
     function meId(gid) {
@@ -646,15 +658,9 @@
             const incoming = C.sanitizeGroup(msg.doc);
             const doc = store.groups[this.gid];
             if (!incoming || !doc || incoming.id !== this.gid) return;
-            const before = new Set(Object.keys(doc.activity));
             if (C.mergeGroups(doc, incoming)) {
                 persist();
                 softRender();
-                const me = meId(doc.id);
-                notifyActivity(doc, Object.keys(doc.activity)
-                    .filter(function (id) { return !before.has(id) && doc.activity[id].by !== me; })
-                    .map(function (id) { return doc.activity[id]; })
-                    .sort(function (a, b) { return a.t - b.t; }));
                 const self = this;
                 this.conns.forEach(function (conn) {
                     if (conn !== from) self.send(conn);
@@ -806,6 +812,8 @@
         }
 
         Sync.stop();
+        visit = null;
+        if (route.name === 'home') bookAllDue();
         app.appendChild(route.name === 'new' ? viewNewGroup()
             : route.name === 'transfer' ? viewTransferIn(route.value)
             : route.name === 'contact' ? viewContact(route.id)
@@ -963,11 +971,12 @@
             const balances = C.computeBalances(doc);
             const mine = myBalances(doc, balances);
             mine.forEach(function (b) { totals[b.cur] = (totals[b.cur] || 0) + b.amount; });
+            const unseen = unseenCount(doc);
             const memberCount = Object.keys(doc.members).filter(function (id) { return !doc.members[id].left; }).length;
             return h('a', { class: 'item', href: '#/g/' + doc.id },
                 groupAvatar(doc.meta.name, doc.meta.icon),
                 h('span', { class: 'body' },
-                    h('div', { class: 'title' }, doc.meta.name || 'Einladung'),
+                    h('div', { class: 'title' }, doc.meta.name || 'Einladung', unseen ? newTag(unseen + ' neu') : null),
                     h('div', { class: 'sub' }, doc.meta.t
                         ? [memberCount + (memberCount === 1 ? ' Person' : ' Personen') + ' · Datenstand ',
                             h('code', { class: 'state-code', title: 'Gleicher Code auf zwei Geräten heißt: gleicher Datenstand.' }, C.dataFingerprint(doc))]
@@ -1036,8 +1045,7 @@
                     factList('Vorteile', 'pro', [
                         'Kein Konto, keine Anmeldung',
                         'Daten nur auf euren Geräten',
-                        'Kostenlos, ohne Werbung',
-                        'Läuft auch offline'
+                        'Kostenlos, ohne Werbung'
                     ]),
                     factList('Nachteile', 'con', [
                         'Abgleich nur bei gleichzeitig offener Gruppe oder per Link',
@@ -1052,7 +1060,8 @@
                     'Rechnung nach Positionen: Jede Person tippt an, was sie hatte',
                     'Wiederholungen mit freiem Abstand, z. B. alle 3 Monate',
                     'Verpasste Termine werden nachgebucht',
-                    'Monatsübersicht pro Kategorie',
+                    'Zeigt beim Öffnen, was seit deinem letzten Besuch neu ist',
+                    'Übersicht nach Monat oder Jahr pro Kategorie',
                     'Filter nach Person, Kategorie, Betrag und Text',
                     'Mehrere Währungen in einer Gruppe',
                     'Import aus Splid und aus der eigenen CSV',
@@ -2510,7 +2519,7 @@
         delete store.me[doc.id];
         if (store.last === doc.id) store.last = null;
         delete store.seen[doc.id];
-        delete store.notify[doc.id];
+        delete store.news[doc.id];
         persist();
         go('/');
     }
@@ -2693,6 +2702,8 @@
     function renderEntries(container, doc, me, summary) {
         const term = state.search.trim().toLocaleLowerCase('de');
         const filtering = !!term || activeFilterCount() > 0;
+        const news = visitNews(doc);
+        const fresh = new Set(news.bookings.map(function (e) { return e.id; }).concat(news.changes.map(function (a) { return a.ref; })));
         const commentCounts = {};
         const commentTexts = {};
         Object.keys(doc.comments).forEach(function (id) {
@@ -2753,7 +2764,7 @@
                 container.appendChild(h('a', { class: 'item', href: '#/g/' + doc.id + '/expense/' + e.id },
                     categoryIcon(doc, e.category),
                     h('span', { class: 'body' },
-                        h('div', { class: 'title' }, e.desc, isRecurring ? ' 🔁' : ''),
+                        h('div', { class: 'title' }, e.desc, isRecurring ? ' 🔁' : '', fresh.has(e.id) ? newTag('neu') : null),
                         h('div', { class: 'sub' }, formatDate(e.date) + ' · ' + payerText(doc, e, me) + (comments ? ' · 💬 ' + comments : ''))),
                     amountColumns(e.refund ? 'refund' : 'expense', e.amount, e.currency),
                     expenseEffect(e, me)));
@@ -2761,7 +2772,7 @@
                 const p = entry.p;
                 container.appendChild(h('a', { class: 'item', href: '#/g/' + doc.id + '/pay/' + p.id },
                     h('span', { class: 'body' },
-                        h('div', { class: 'title' }, paymentText(doc, p, me)),
+                        h('div', { class: 'title' }, paymentText(doc, p, me), fresh.has(p.id) ? newTag('neu') : null),
                         h('div', { class: 'sub' }, formatDate(p.date) + (p.offset ? ' · angestoßen von ' + offsetStarter(doc, p, me) : '')
                             + (p.note && p.note !== OFFSET_NOTE ? ' · ' + p.note : ''))),
                     amountColumns(p.offset ? 'offset' : 'payment', p.amount, p.currency),
@@ -2811,6 +2822,8 @@
     }
 
     function viewExpensesTab(doc, balances, me) {
+        // Zuerst: Die Liste markiert, was der Abschnitt als neu zeigt.
+        const newsPanel = viewNewsPanel(doc, me);
         const list = h('div', { class: 'list' });
         const summary = h('div', { class: 'filter-summary', hidden: true });
         const members = activeMembers(doc);
@@ -2836,7 +2849,7 @@
         }
         update();
 
-        return h('div', null, viewSeriesPanel(doc), h('section', { class: 'panel' },
+        return h('div', null, newsPanel, viewSeriesPanel(doc), h('section', { class: 'panel' },
             members.length < 2 ? h('div', { class: 'notice' },
                 'Du bist noch allein hier. ',
                 h('a', { href: '#/g/' + doc.id + '/settings' }, 'Lade deine Freunde ein.')) : null,
@@ -3012,35 +3025,29 @@
     }
 
     /**
-     * Pro Monat, für eine gewählte Kategorie oder alle zusammen. Monate ohne Eintrag
+     * Pro Monat oder Jahr, für eine gewählte Kategorie oder alle zusammen. Monate ohne Eintrag
      * zeigen „–“, so fällt z. B. ein Monat ohne Internet-Rechnung sofort auf.
      */
-    function viewMonthPanel(doc, table, cur) {
-        if (!table.rows.length) return null;
-        if (state.statsCategory && table.categories.indexOf(state.statsCategory) === -1) state.statsCategory = '';
-        const rows = h('div', null);
-
-        function draw() {
-            const id = state.statsCategory;
-            const values = table.rows.map(function (row) {
-                return id ? (id in row.cells ? row.cells[id] : null) : (row.total || null);
-            });
-            const max = Math.max.apply(null, values.map(function (v) { return v || 0; }));
-            rows.textContent = '';
-            table.rows.forEach(function (row, i) {
-                const p = row.month.split('-').map(Number);
-                const label = new Date(p[0], p[1] - 1, 1).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
-                rows.appendChild(values[i] === null
-                    ? h('div', { class: 'bar-row' },
-                        h('span', { class: 'label' }, label),
-                        h('span', { class: 'bar', 'aria-hidden': 'true' }),
-                        h('span', { class: 'value muted' }, '–'))
-                    : barRow(label, values[i], max, cur));
-            });
-        }
-        draw();
-
-        return statFold('month', 'Nach Monat', table.rows.length + (table.rows.length === 1 ? ' Monat' : ' Monate'), [
+    function viewPeriodPanel(doc, stats, cur) {
+        const categories = stats.byMonth.categories;
+        if (!stats.byMonth.rows.length) return null;
+        if (state.statsCategory && categories.indexOf(state.statsCategory) === -1) state.statsCategory = '';
+        const periods = {
+            month: { title: 'Nach Monat', rows: stats.byMonth.rows, one: 'Monat', many: 'Monate', label: function (row) { return monthLabel(row.month); } },
+            year: { title: 'Nach Jahr', rows: stats.byYear.rows, one: 'Jahr', many: 'Jahre', label: function (row) { return row.year; } }
+        };
+        const list = h('div', null);
+        const seg = h('div', { class: 'seg period-seg', role: 'group', 'aria-label': 'Zeitraum' }, Object.keys(periods).map(function (key) {
+            return h('button', {
+                type: 'button', 'data-period': key,
+                onclick: function () {
+                    state.statsPeriod = key;
+                    draw();
+                }
+            }, periods[key].title);
+        }));
+        const panel = statFold('period', 'Nach Monat / Jahr', '', [
+            seg,
             h('div', { class: 'field' },
                 h('label', { for: 'statsCategory' }, 'Kategorie'),
                 h('select', {
@@ -3051,8 +3058,33 @@
                     }
                 },
                     h('option', { value: '' }, 'Alle Kategorien'),
-                    table.categories.map(function (id) { return h('option', { value: id }, categoryText(doc, id)); }))),
-            rows]);
+                    categories.map(function (id) { return h('option', { value: id }, categoryText(doc, id)); }))),
+            list]);
+
+        function draw() {
+            const period = periods[state.statsPeriod];
+            const id = state.statsCategory;
+            const values = period.rows.map(function (row) {
+                return id ? (id in row.cells ? row.cells[id] : null) : (row.total || null);
+            });
+            const max = Math.max.apply(null, values.map(function (v) { return v || 0; }));
+            list.textContent = '';
+            period.rows.forEach(function (row, i) {
+                const label = period.label(row);
+                list.appendChild(values[i] === null
+                    ? h('div', { class: 'bar-row' },
+                        h('span', { class: 'label' }, label),
+                        h('span', { class: 'bar', 'aria-hidden': 'true' }),
+                        h('span', { class: 'value muted' }, '–'))
+                    : barRow(label, values[i], max, cur));
+            });
+            panel.valueEl.textContent = period.rows.length + ' ' + (period.rows.length === 1 ? period.one : period.many);
+            seg.querySelectorAll('button').forEach(function (b) {
+                b.setAttribute('aria-pressed', String(b.dataset.period === state.statsPeriod));
+            });
+        }
+        draw();
+        return panel;
     }
 
     /** Personen mit Beträgen in einer Liste: aktive Mitglieder und alle, die in `maps` vorkommen. */
@@ -3224,7 +3256,7 @@
                 stats.byCategory.map(function (row) {
                     return barRow(categoryText(doc, row.id), row.amount, maxCategory, cur);
                 })),
-            viewMonthPanel(doc, stats.byMonth, cur),
+            viewPeriodPanel(doc, stats, cur),
             statFold('person', 'Nach Person', stats.byMember.length + (stats.byMember.length === 1 ? ' Person' : ' Personen'),
                 h('div', { class: 'table-wrap' },
                     h('table', { class: 'stat' },
@@ -3274,24 +3306,26 @@
         }
     }
 
+    function activityItem(doc, a) {
+        const body = [
+            h('span', { class: 'body' },
+                h('div', { class: 'title' }, activityText(doc, a)),
+                h('div', { class: 'sub' }, timeAgo(a.t) + (a.amount ? ' · ' + money(a.amount, a.currency) : '')))
+        ];
+        const target = /^expense|^comment|^claim/.test(a.kind) && doc.expenses[a.ref]
+            ? '#/g/' + doc.id + '/expense/' + a.ref
+            : /^pay/.test(a.kind) && doc.payments[a.ref] && !doc.payments[a.ref].del
+                ? '#/g/' + doc.id + '/pay/' + a.ref : null;
+        return target ? h('a', { class: 'item', href: target }, body) : h('div', { class: 'item' }, body);
+    }
+
     function viewActivityTab(doc) {
         const entries = Object.keys(doc.activity).map(function (id) { return doc.activity[id]; })
             .sort(function (a, b) { return b.t - a.t; })
             .slice(0, 150);
         if (!entries.length) return h('section', { class: 'panel' }, h('div', { class: 'empty' }, 'Noch nichts passiert.'));
 
-        return h('section', { class: 'panel' }, h('div', { class: 'list' }, entries.map(function (a) {
-            const body = [
-                h('span', { class: 'body' },
-                    h('div', { class: 'title' }, activityText(doc, a)),
-                    h('div', { class: 'sub' }, timeAgo(a.t) + (a.amount ? ' · ' + money(a.amount, a.currency) : '')))
-            ];
-            const target = /^expense|^comment|^claim/.test(a.kind) && doc.expenses[a.ref]
-                ? '#/g/' + doc.id + '/expense/' + a.ref
-                : /^pay/.test(a.kind) && doc.payments[a.ref] && !doc.payments[a.ref].del
-                    ? '#/g/' + doc.id + '/pay/' + a.ref : null;
-            return target ? h('a', { class: 'item', href: target }, body) : h('div', { class: 'item' }, body);
-        })));
+        return h('section', { class: 'panel' }, h('div', { class: 'list' }, entries.map(function (a) { return activityItem(doc, a); })));
     }
 
     /* Gruppe / Einstellungen */
@@ -3301,67 +3335,6 @@
         if (withLog) logActivity(doc, 'group-edit', '', doc.meta.name);
         commit(doc);
         softRender();
-    }
-
-    /** Benachrichtigungen gelten pro Gruppe und nur für dieses Gerät, darum liegen sie nicht im Dokument. */
-    function viewNotifyPanel(doc) {
-        const panel = h('section', { class: 'panel' }, h('h2', null, 'Benachrichtigungen'));
-        if (!canNotify()) {
-            panel.appendChild(h('p', { class: 'small muted' }, 'Dieser Browser kann keine Benachrichtigungen zeigen. Auf dem iPhone geht das erst, wenn Kwidt über „Zum Home-Bildschirm“ installiert ist.'));
-            return panel;
-        }
-        if (Notification.permission === 'denied') {
-            panel.appendChild(h('p', { class: 'small muted' }, 'Benachrichtigungen sind für diese Seite im Browser blockiert. Du kannst sie in den Website-Einstellungen des Browsers erlauben.'));
-            return panel;
-        }
-
-        const status = h('div', { class: 'small muted', style: 'margin-top:6px' });
-        async function showStatus() {
-            status.textContent = '';
-            // Meldet die Prüfung im Hintergrund auch ab, wenn keine Gruppe sie mehr braucht.
-            const mode = await updateBackgroundCheck();
-            if (!notifyOn(doc.id, 'due')) return;
-            status.textContent = mode === 'on'
-                ? 'Auch bei geschlossener App. Wann genau, entscheidet der Browser, meist etwa einmal am Tag.'
-                : mode === 'install'
-                    ? 'Bei geschlossener App erst, wenn Kwidt installiert ist („App installieren“ bzw. „Zum Startbildschirm hinzufügen“). Bis dahin nur, solange die App im Hintergrund offen ist.'
-                    : 'Dieser Browser weckt Kwidt nicht im Hintergrund. Gemeldet wird deshalb nur, solange die App im Hintergrund offen ist.';
-        }
-
-        function kindSwitch(kind, title, text, extra) {
-            return h('label', { class: 'switch-row', style: kind === 'live' ? 'margin-top:14px' : null },
-                h('input', {
-                    type: 'checkbox', checked: notifyOn(doc.id, kind),
-                    onchange: async function (e) {
-                        const box = e.target;
-                        box.blur();
-                        if (box.checked && Notification.permission !== 'granted') {
-                            let answer = 'default';
-                            try { answer = await Notification.requestPermission(); } catch (err) { /* bleibt aus */ }
-                            if (answer !== 'granted') {
-                                box.checked = false;
-                                if (answer === 'denied') softRender();
-                                return;
-                            }
-                        }
-                        setNotify(doc.id, kind, box.checked);
-                        if (kind === 'due') showStatus();
-                    }
-                }),
-                h('span', null,
-                    h('strong', null, title),
-                    h('div', { class: 'small muted' }, text),
-                    extra));
-        }
-
-        panel.append(
-            h('p', { class: 'small muted' }, 'Gilt nur für diese Gruppe auf diesem Gerät.'),
-            kindSwitch('due', 'Fällige Wiederholungen', 'Wenn eine wiederkehrende Ausgabe oder Rückzahlung fällig wird.', status),
-            kindSwitch('live', 'Änderungen von anderen',
-                'Wenn jemand anderes etwas einträgt, ändert oder löscht, während ihr beide die Gruppe offen habt. '
-                + 'Ohne Server erfährt dein Gerät davon nur, solange beide online sind.'));
-        showStatus();
-        return panel;
     }
 
     function viewInvitePanel(doc) {
@@ -3563,7 +3536,6 @@
                 h('div', { class: 'field' },
                     h('label', { for: 'editCurrency' }, 'Standardwährung'),
                     currencySelect(doc.meta.currency, function (e) { saveMeta(doc, { currency: e.target.value }, true); }, { id: 'editCurrency' }))),
-            viewNotifyPanel(doc),
             h('section', { class: 'panel' },
                 h('h2', null, 'Daten'),
                 h('div', { class: 'actions', style: 'margin-top:0' },
@@ -4164,6 +4136,7 @@
 
             doc.expenses[eid] = record;
             logActivity(doc, existing ? 'expense-edit' : 'expense-add', eid, desc, total, form.currency);
+            if (record.repeat !== 'none') bookOwn(doc, eid);
             commit(doc);
             state.formActive = false;
             go('/g/' + doc.id + (form.type === 'items' || (existing && existing.series) ? '/expense/' + eid : ''));
@@ -4418,6 +4391,7 @@
         const current = doc.expenses[e.id];
         doc.expenses[e.id] = Object.assign({}, current, { del: deleted, t: C.nextT(doc) });
         logActivity(doc, deleted ? 'expense-del' : 'expense-restore', e.id, current.desc, current.amount, current.currency);
+        if (!deleted && current.series) bookOwn(doc, e.id);
         commit(doc);
     }
 
@@ -4683,46 +4657,63 @@
 
     // Ein Tab im Hintergrund bekommt auf dem Handy keine storage-Events. Ohne das hier
     // würde er beim nächsten Speichern überschreiben, was ein anderer Tab angelegt hat.
+    let hiddenAt = 0;
     document.addEventListener('visibilitychange', function () {
-        if (document.hidden) return;
-        if (!state.unsaved && adoptStored()) softRender();
+        if (document.hidden) {
+            hiddenAt = Date.now();
+            return;
+        }
+        // Nach einer längeren Pause beginnt ein neuer Besuch, siehe viewNewsPanel().
+        const away = visit && hiddenAt && Date.now() - hiddenAt > VISIT_PAUSE;
+        const pending = visit && visit.pending;
+        if (away) visit = null;
+        const adopted = !state.unsaved && adoptStored();
+        if (adopted || away || pending) softRender();
         Sync.wake();
     });
     window.addEventListener('online', function () { Sync.wake(); });
     window.addEventListener('offline', function () { updateSyncPill(); });
 
     // Hält „zuletzt online“ aktuell, solange die Seite offen ist. Beginnt dabei ein neuer
-    // Tag, werden fällige Wiederholungen gebucht (sichtbar) oder gemeldet (im Hintergrund).
+    // Tag, werden fällige Wiederholungen gebucht. Im Hintergrund wartet das, bis die Seite
+    // wieder sichtbar ist und den gespeicherten Stand übernommen hat (siehe oben).
     let today = C.todayStr();
     setInterval(function () {
         Sync.heartbeat();
         if (Sync.conns.size) markSeen(Sync.gid);
         updateSyncPill();
-        if (today !== C.todayStr()) {
+        if (!document.hidden && today !== C.todayStr()) {
             today = C.todayStr();
-            if (document.hidden) askForDueCheck();
-            else softRender();
+            softRender();
         }
     }, HEARTBEAT);
 
     store = readStored();
     askToKeepData();
+    // Gruppen aus Versionen ohne „Neu seit deinem letzten Besuch“. Vor dem ersten Buchen,
+    // damit fällige Wiederholungen schon beim ersten Mal als neu erscheinen.
+    const without = Object.keys(store.groups).filter(function (gid) { return !store.news[gid] && meId(gid); });
+    without.forEach(function (gid) { startNews(store.groups[gid]); });
+    if (without.length) persist();
     // Ohne Link landet man immer auf der Startseite, nicht in der zuletzt offenen Gruppe.
     handleJoin().then(render);
 
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js')
-            .then(function () { if (dueGroups().length) updateBackgroundCheck(); })
-            .catch(function (e) {
-                // Normal bei file://, die App läuft dann ohne Offline-Modus.
-                console.info('Kwidt: Kein Service Worker.', e);
-            });
-        // Tippen auf eine Benachrichtigung, während die App schon offen ist.
-        navigator.serviceWorker.addEventListener('message', function (e) {
-            const msg = e.data;
-            if (msg && msg.app === 'quitt' && msg.type === 'open' && /^#\/g\/[0-9a-f]{32}(\/activity)?$/.test(msg.hash)) {
-                location.hash = msg.hash;
+    // Bis Version 1.45 gab es einen Service Worker (Offline-Start, Benachrichtigungen). Auf
+    // Geräten, die ihn noch haben, muss die Seite ihn samt seinen Daten selbst abmelden:
+    // Dass sw.js auf dem Server fehlt, reicht dafür nicht.
+    async function removeServiceWorker() {
+        if ('serviceWorker' in navigator) {
+            const scope = new URL('./', location.href).href;
+            for (const reg of await navigator.serviceWorker.getRegistrations()) {
+                if (reg.scope === scope) await reg.unregister();
             }
-        });
+        }
+        if (window.caches) {
+            for (const name of await caches.keys()) {
+                if (name.indexOf('kwidt-') === 0) await caches.delete(name);
+            }
+        }
+        if (window.indexedDB) indexedDB.deleteDatabase('kwidt');
     }
+    removeServiceWorker().catch(function (e) { console.info('Kwidt: Alter Service Worker nicht entfernt.', e); });
 })();

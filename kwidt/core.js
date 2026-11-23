@@ -640,6 +640,7 @@
         var byCategory = Object.keys(categories)
             .map(function (id) { return { id: id, amount: categories[id] }; })
             .sort(byAmountDesc);
+        var byMonth = monthTable(months, byCategory.map(function (row) { return row.id; }));
         return {
             total: total,
             count: count,
@@ -647,7 +648,8 @@
             spent: spent,
             income: income,
             byCategory: byCategory,
-            byMonth: monthTable(months, byCategory.map(function (row) { return row.id; })),
+            byMonth: byMonth,
+            byYear: yearTable(byMonth),
             byMember: Object.keys(members)
                 .map(function (id) { return members[id]; })
                 .sort(function (a, b) { return b.share - a.share || (a.id < b.id ? -1 : 1); })
@@ -678,6 +680,22 @@
                 return { month: k, cells: cells, total: total };
             })
         };
+    }
+
+    /** Die Monate aus monthTable zu Jahren zusammengefasst, neuestes zuerst: rows: [{year, cells, total}]. */
+    function yearTable(table) {
+        var rows = [];
+        table.rows.forEach(function (m) {
+            var year = m.month.slice(0, 4);
+            var row = rows[rows.length - 1];
+            if (!row || row.year !== year) {
+                row = { year: year, cells: {}, total: 0 };
+                rows.push(row);
+            }
+            Object.keys(m.cells).forEach(function (id) { row.cells[id] = (row.cells[id] || 0) + m.cells[id]; });
+            row.total += m.total;
+        });
+        return { categories: table.categories, rows: rows };
     }
 
     /** Alle Währungen, die in der Gruppe vorkommen; die Gruppenwährung zuerst. */
@@ -865,37 +883,44 @@
         return null;
     }
 
+    /* ---------- Neues seit dem letzten Besuch ---------- */
+
     /**
-     * Was der Service Worker über die Serien einer Gruppe wissen muss, um fällige Termine
-     * zu melden, ohne an die ganze Gruppe zu kommen: die Vorlagen und je Vorlage der
-     * zuletzt gebuchte Termin (`booked`, sonst '').
+     * Alles, was als „neu“ angezeigt werden kann: Einträge im Verlauf und gebuchte Termine
+     * von Serien (die stehen nicht im Verlauf). Liefert {id: t}. Bei Terminen ist t immer 0:
+     * Spätere Änderungen daran stehen als eigener Eintrag im Verlauf.
+     *
+     * Verglichen wird über IDs statt über „seit wann“: Was jemand ohne Netz eingetragen hat,
+     * kommt oft erst an, wenn die Gruppe hier längst wieder offen war.
      */
-    function seriesDigest(doc) {
-        var latest = latestOccurrences(doc);
-        return Object.keys(doc.expenses).map(function (k) { return doc.expenses[k]; })
-            .filter(function (e) { return !e.del && !e.parent && e.repeat && e.repeat !== 'none'; })
-            .map(function (e) {
-                return {
-                    id: e.id, desc: e.desc, amount: e.amount, currency: e.currency, refund: !!e.refund,
-                    date: e.date, repeat: e.repeat, every: seriesEvery(e), until: seriesUntil(e), count: seriesCount(e),
-                    booked: latest[e.id] || ''
-                };
-            });
+    function changeKeys(doc) {
+        var keys = {};
+        Object.keys(doc.activity).forEach(function (id) { keys[id] = doc.activity[id].t; });
+        Object.keys(doc.expenses).forEach(function (id) { if (doc.expenses[id].parent) keys[id] = 0; });
+        return keys;
     }
 
     /**
-     * Termine einer Serie aus seriesDigest, die nach `after` bis einschließlich `today`
-     * fällig wurden und noch nicht gebucht sind. Gebucht wird wie bei expandRecurring
-     * nur nach dem zuletzt gebuchten Termin.
+     * Was nicht in `known` (siehe changeKeys) steht: gebuchte Termine und Änderungen anderer,
+     * jeweils neueste zuerst. Eigene Einträge kennt man schon. Ein Verlaufseintrag mit neuerem
+     * Zeitstempel zählt wieder als neu, denn „Positionen zugeordnet“ wird fortgeschrieben.
      */
-    function dueDates(series, after, today) {
-        var out = [];
-        for (var n = 0; n <= MAX_COUNT; n++) {
-            var date = occurrence(series.date, series.repeat, n, series.every);
-            if (date > today || !withinSeries(series, n, date)) break;
-            if (date > after && date > series.booked) out.push(date);
-        }
-        return out;
+    function newsSince(doc, known, me) {
+        var bookings = [];
+        var changes = [];
+        var keys = changeKeys(doc);
+        Object.keys(keys).forEach(function (id) {
+            if (id in known && keys[id] <= known[id]) return;
+            var a = doc.activity[id];
+            if (!a) {
+                if (!doc.expenses[id].del) bookings.push(doc.expenses[id]);
+            } else if (!me || a.by !== me) {
+                changes.push(a);
+            }
+        });
+        bookings.sort(function (a, b) { return a.date !== b.date ? (a.date < b.date ? 1 : -1) : (a.id < b.id ? -1 : 1); });
+        changes.sort(function (a, b) { return b.t - a.t || (a.id < b.id ? -1 : 1); });
+        return { bookings: bookings, changes: changes };
     }
 
     /* ---------- Fixkosten & Vorausberechnung ---------- */
@@ -1982,8 +2007,8 @@
         liveSeries: liveSeries,
         occurrencesOf: occurrencesOf,
         nextOccurrence: nextOccurrence,
-        seriesDigest: seriesDigest,
-        dueDates: dueDates,
+        changeKeys: changeKeys,
+        newsSince: newsSince,
         fixedCosts: fixedCosts,
         forecast: forecast,
         dataFingerprint: dataFingerprint,
