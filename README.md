@@ -74,8 +74,7 @@ relativ, über die eigene `src`-Angabe.
   Makler, Inventar, WG-Eignung) mit Rückfragen an Makler/Verwaltung zum Kopieren und Unterlagen-Checkliste. Wünsche & Bedingungen:
   gemeinsame Liste frei formulierter Wünsche, jede Person gewichtet jeden Wunsch (0–100 %) und bewertet ihn in jeder Wohnung;
   daraus Passung je Person und gemeinsam (offene Gewichtungen/Bewertungen werden angezeigt). `js/calc.js` ist die Rechenlogik, `js/app.js` die Oberfläche. Daten im
-  localStorage, Übertragung zwischen Geräten per JSON-Export/-Import (alles oder einzelne Wohnung) oder per Link/QR-Code
-  (`#import=…`, Daten deflate-komprimiert im Hash, überschreibt nach Rückfrage alles auf dem Zielgerät).
+  localStorage, Übertragung zwischen Geräten per JSON-Export/-Import (alles oder einzelne Wohnung).
 - `/zauberkloppen/` – Szenario-Generator für Fantasy-Rollenspiele.
 - `/zeitfresser/` – Zeitfresser: Wochenanalyse, wohin die Zeit geht. Themen mit Wert pro Woche oder pro Tag
   an gewählten Wochentagen, darunter eine Ebene Unterpunkte; nicht zugeordnete Zeit wird schraffiert gezeigt,

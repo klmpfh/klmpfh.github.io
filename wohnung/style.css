@@ -1117,32 +1117,3 @@ summary {
     .person { grid-template-columns: minmax(0, 1.2fr) 28px minmax(0, 1fr) 28px; }
     .page-head h1 { font-size: 24px; }
 }
-
-/* Deep Link */
-.link-box:not(:empty) { margin-top: 14px; }
-
-.link-row {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-}
-
-.link-row input {
-    flex: 1 1 260px;
-    font-family: var(--theme-font-mono);
-    font-size: 12px;
-}
-
-.qr {
-    display: inline-block;
-    margin-top: 12px;
-    padding: 10px;
-    background: #fff;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    line-height: 0;
-}
-
-.qr img, .qr canvas { display: block; max-width: 100%; height: auto; }
-
-.link-note { margin-top: 8px; line-height: 1.45; max-width: 70ch; }

@@ -481,127 +481,6 @@
         });
     }
 
-    /* ---------- Deep Link ----------
-       Alle Daten (wie beim JSON-Export) komprimiert im #-Teil der URL:
-       "#import=z<base64url(deflate-raw(JSON))>", ohne CompressionStream
-       "#import=j<base64url(JSON)>". Der #-Teil wird nie an den Server
-       geschickt – der Link selbst enthält aber alle Daten. */
-
-    var MAX_DECOMPRESSED = 4 * 1024 * 1024;
-
-    function toBase64Url(bytes) {
-        var bin = '';
-        for (var i = 0; i < bytes.length; i += 0x8000) {
-            bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-        }
-        return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    }
-
-    function fromBase64Url(text) {
-        var bin = atob(text.replace(/-/g, '+').replace(/_/g, '/'));
-        var bytes = new Uint8Array(bin.length);
-        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-        return bytes;
-    }
-
-    function readAll(stream) {
-        var reader = stream.getReader();
-        var chunks = [], size = 0;
-        function pump() {
-            return reader.read().then(function (part) {
-                if (part.done) {
-                    var out = new Uint8Array(size), offset = 0;
-                    chunks.forEach(function (c) { out.set(c, offset); offset += c.length; });
-                    return out;
-                }
-                size += part.value.length;
-                if (size > MAX_DECOMPRESSED) {
-                    reader.cancel();
-                    throw new Error('Link-Inhalt zu groß');
-                }
-                chunks.push(part.value);
-                return pump();
-            });
-        }
-        return pump();
-    }
-
-    function encodeData(data) {
-        var json = new TextEncoder().encode(JSON.stringify(data));
-        if (typeof CompressionStream === 'undefined') return Promise.resolve('j' + toBase64Url(json));
-        return readAll(new Blob([json]).stream().pipeThrough(new CompressionStream('deflate-raw')))
-            .then(function (bytes) { return 'z' + toBase64Url(bytes); });
-    }
-
-    function decodeData(text) {
-        return Promise.resolve().then(function () {
-            var bytes = fromBase64Url(text.slice(1));
-            if (text.charAt(0) === 'z') {
-                if (typeof DecompressionStream === 'undefined') throw new Error('Browser kann den Link nicht entpacken');
-                return readAll(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw')));
-            }
-            if (text.charAt(0) !== 'j') throw new Error('unbekanntes Link-Format');
-            return bytes;
-        }).then(function (bytes) {
-            return JSON.parse(new TextDecoder().decode(bytes));
-        });
-    }
-
-    function buildShareLink() {
-        saveNow();
-        return encodeData(Object.assign({ app: 'wohnungskauf', version: 1 }, dataOut())).then(function (code) {
-            return location.href.split('#')[0] + '#import=' + code;
-        });
-    }
-
-    /** Zeigt den erzeugten Link mit Kopieren/Teilen und – wenn er kurz genug ist – als QR-Code. */
-    function renderShareLink(box, link) {
-        box.innerHTML = '';
-        var input = el('input', { type: 'text', readonly: true, 'aria-label': 'Link mit allen Daten', onfocus: function (e) { e.target.select(); } });
-        input.value = link;
-        box.appendChild(el('div', { class: 'link-row' }, [
-            input,
-            btn('Kopieren', 'btn-primary', function (e) { copyText(link, e.currentTarget); }),
-            navigator.share ? btn('Teilen …', 'btn-ghost', function () {
-                navigator.share({ title: 'Wohnungskauf – meine Daten', url: link }).catch(function () { /* abgebrochen */ });
-            }) : null
-        ]));
-
-        var qr = el('div', { class: 'qr' });
-        var qrOk = false;
-        if (typeof QRCode !== 'undefined') {
-            try {
-                new QRCode(qr, { text: link, width: 300, height: 300, colorDark: '#14121a', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.L });
-                qrOk = true;
-            } catch (err) { qr.innerHTML = ''; }
-        }
-        if (qrOk) box.appendChild(qr);
-        box.appendChild(el('p', { class: 'muted small link-note', text:
-            (qrOk ? 'QR-Code mit dem anderen Gerät scannen oder den Link dort öffnen' : 'Zu viele Daten für einen QR-Code – den Link auf dem anderen Gerät öffnen') +
-            ' (' + new Intl.NumberFormat('de-DE').format(link.length) + ' Zeichen). Beim Öffnen werden alle Daten dort überschrieben. ' +
-            'Wer den Link hat, sieht alle Finanzdaten, auch die der anderen Personen – nur an dich selbst oder Vertraute schicken. Der Link ist ein Schnappschuss: spätere Änderungen sind nicht enthalten.' }));
-    }
-
-    function importFromLink(code) {
-        // Hash sofort entfernen: Neuladen importiert nicht erneut, und der
-        // Link mit allen Daten bleibt nicht als aktuelle Adresse stehen.
-        history.replaceState(null, '', location.href.split('#')[0]);
-        decodeData(code).then(function (data) {
-            if (!data || !Array.isArray(data.flats)) throw new Error('keine Wohnungsdaten im Link');
-            var next = normalizeState(data);
-            var msg = 'Daten aus dem Link übernehmen?\n\nLink: Meine Finanzen + ' + next.flats.length + ' Wohnung(en)\n' +
-                'Alle bisherigen Daten hier werden überschrieben (' + state.flats.length + ' Wohnung(en)).';
-            if (confirm(msg)) {
-                state = next;
-                saveNow();
-            }
-            route();
-        }).catch(function () {
-            alert('Der Link ist unvollständig oder beschädigt – wurde er vollständig kopiert? Es wurde nichts geändert.');
-            route();
-        });
-    }
-
     var importInput = el('input', { type: 'file', accept: '.json,application/json', hidden: true });
     document.body.appendChild(importInput);
     importInput.addEventListener('change', function () {
@@ -837,21 +716,12 @@
         }));
         renderCostsEditor(costsBox);
 
-        var linkBox = el('div', { class: 'link-box' });
         app.appendChild(panel('Daten übertragen', [
             el('div', { class: 'actions' }, [
-                btn('Link mit allen Daten erzeugen', 'btn-primary', function (e) {
-                    var b = e.currentTarget;
-                    b.disabled = true;
-                    buildShareLink().then(function (link) { renderShareLink(linkBox, link); })
-                        .catch(function () { alert('Link konnte nicht erzeugt werden.'); })
-                        .then(function () { b.disabled = false; });
-                }),
                 btn('Alles exportieren (JSON)', 'btn-ghost', exportAll),
                 btn('Importieren …', 'btn-ghost', function () { importInput.click(); })
-            ]),
-            linkBox
-        ], { hint: 'Link und Export enthalten „Meine Finanzen“, Personen & Wünsche und alle Wohnungen (Kauf und Miete). Link öffnen oder Gesamt-Datei importieren ersetzt alles auf dem Zielgerät; eine einzeln exportierte Wohnung wird nur hinzugefügt.' }));
+            ])
+        ], { hint: 'Der Export enthält „Meine Finanzen“, Personen & Wünsche und alle Wohnungen (Kauf und Miete). Eine Gesamt-Datei importieren ersetzt alles auf dem Zielgerät; eine einzeln exportierte Wohnung wird nur hinzugefügt.' }));
 
         currentUpdate = function () {
             updateLimits(peopleBox);
@@ -864,7 +734,6 @@
             renderBudget(budgetBox, waysBox);
             renderWishStatus(wishStatus);
             renderFlatList(listBox);
-            linkBox.innerHTML = '';   // ein schon erzeugter Link wäre nach Änderungen veraltet
         };
         currentUpdate();
     }
@@ -2367,8 +2236,6 @@
     function route() {
         if (saveTimer) saveNow();
         currentUpdate = null;
-        var imp = location.hash.match(/^#import=([A-Za-z0-9_-]+)/);
-        if (imp) { importFromLink(imp[1]); return; }
         var m = location.hash.match(/^#w=(.+)$/);
         var id = m ? decodeURIComponent(m[1]) : null;
         var f = id ? state.flats.find(function (x) { return x.id === id; }) : null;
