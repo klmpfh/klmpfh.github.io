@@ -615,6 +615,7 @@
         var spent = { amount: 0, count: 0 };
         var income = { amount: 0, count: 0 };
         var months = {};
+        var days = {};
         function member(id) {
             if (!members[id]) members[id] = { id: id, paid: 0, share: 0 };
             return members[id];
@@ -634,6 +635,7 @@
             categories[categoryId] = (categories[categoryId] || 0) + sign * e.amount;
             var month = months[e.date.slice(0, 7)] || (months[e.date.slice(0, 7)] = {});
             month[categoryId] = (month[categoryId] || 0) + sign * e.amount;
+            days[e.date] = (days[e.date] || 0) + sign * e.amount;
             Object.keys(e.payers).forEach(function (id) { member(id).paid += sign * e.payers[id]; });
             Object.keys(owed).forEach(function (id) { member(id).share += sign * owed[id]; });
         });
@@ -650,6 +652,7 @@
             byCategory: byCategory,
             byMonth: byMonth,
             byYear: yearTable(byMonth),
+            timeline: runningTotal(days),
             byMember: Object.keys(members)
                 .map(function (id) { return members[id]; })
                 .sort(function (a, b) { return b.share - a.share || (a.id < b.id ? -1 : 1); })
@@ -680,6 +683,15 @@
                 return { month: k, cells: cells, total: total };
             })
         };
+    }
+
+    /** Aus {datum: betrag} die Summe bis zu jedem Tag, ältester zuerst: [{date, total}]. */
+    function runningTotal(days) {
+        var sum = 0;
+        return Object.keys(days).sort().map(function (date) {
+            sum += days[date];
+            return { date: date, total: sum };
+        });
     }
 
     /** Die Monate aus monthTable zu Jahren zusammengefasst, neuestes zuerst: rows: [{year, cells, total}]. */

@@ -28,7 +28,15 @@
         --neg-soft: var(--theme-danger-soft);
         --warn-soft: var(--theme-warning-soft);
         --warn-text: var(--theme-warning-text);
+        /* Diagramme: Akzent für das Wichtige, Grau für den Vergleich. Beide sind für jeden
+           gewürfelten Farbton auf Unterscheidbarkeit geprüft, auch bei Farbfehlsichtigkeit. */
+        --chart: var(--theme-accent);
+        --chart-2: #b4b4bc;
     }
+    @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) { --chart: var(--theme-accent-strong); --chart-2: #62626b; }
+    }
+    :root[data-theme="dark"] { --chart: var(--theme-accent-strong); --chart-2: #62626b; }
 
     body {
         padding: calc(var(--theme-nav-height) + 24px) 16px 40px;
@@ -505,8 +513,92 @@
     }
     .bar-row .label { overflow-wrap: anywhere; }
     .bar-row .value { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
-    .bar { height: 10px; background: var(--theme-gray-150); border-radius: 4px; overflow: hidden; }
-    .bar span { display: block; height: 100%; background: var(--primary); border-radius: 0 4px 4px 0; min-width: 2px; }
+    .bar { position: relative; height: 10px; background: var(--theme-gray-150); border-radius: 4px; overflow: hidden; }
+    .bar span { position: absolute; top: 0; bottom: 0; background: var(--chart); border-radius: 0 4px 4px 0; min-width: 2px; }
+    .bar span.down { border-radius: 4px 0 0 4px; }
+
+    /* Diagramme */
+    .chart-title { margin: 16px 0 10px; font-size: 13px; font-weight: 700; color: var(--muted); }
+    .chart-title:first-child { margin-top: 4px; }
+    .chart { margin-bottom: 16px; border-radius: 6px; }
+    .chart-plot { position: relative; height: 160px; margin-top: 8px; touch-action: pan-y; }
+    .chart-grid { position: absolute; left: 0; right: 0; border-top: 1px solid var(--border); }
+    .chart-grid.zero { border-color: var(--theme-gray-400); }
+    .chart-grid span {
+        position: absolute;
+        right: 100%;
+        padding-right: 8px;
+        transform: translateY(-50%);
+        font-size: 11px;
+        line-height: 1;
+        color: var(--muted);
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+    }
+    .chart-cols { position: absolute; inset: 0; display: flex; }
+    .chart-slot { position: relative; flex: 1 1 0; min-width: 0; }
+    .chart-col {
+        position: absolute;
+        left: 50%;
+        width: calc(100% - 2px);
+        max-width: 24px;
+        min-height: 2px;
+        transform: translateX(-50%);
+        background: var(--chart);
+        border-radius: 4px 4px 0 0;
+    }
+    .chart-col.down { border-radius: 0 0 4px 4px; }
+    .chart-slot.on { background: var(--theme-gray-150); border-radius: 4px; }
+    .chart-plot svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+    .chart-plot .area { fill: var(--chart); opacity: 0.1; }
+    .chart-plot .line { fill: none; stroke: var(--chart); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+    .chart-hair { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--muted); }
+    .chart-dot {
+        position: absolute;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--chart);
+        box-shadow: 0 0 0 2px var(--surface);
+        transform: translate(-50%, 50%);
+        pointer-events: none;
+    }
+    .chart-x { position: relative; height: 14px; margin-top: 8px; font-size: 11px; line-height: 1; color: var(--muted); }
+    .chart-x span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+    .chart-x .first { transform: none; }
+    .chart-x .last { transform: translateX(-100%); }
+    .chart-tip {
+        position: absolute;
+        top: 0;
+        z-index: 2;
+        padding: 6px 9px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+        box-shadow: var(--theme-shadow);
+        font-size: 12px;
+        line-height: 1.4;
+        color: var(--muted);
+        white-space: nowrap;
+        pointer-events: none;
+    }
+    .chart-tip strong { color: var(--text-strong); }
+    .chart-tip .key { display: inline-block; width: 12px; height: 3px; margin-right: 6px; border-radius: 2px; vertical-align: 3px; }
+    .chart-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 4px 0 8px; font-size: 13px; color: var(--muted); }
+    .chart-legend .swatch { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 3px; }
+    .pair-chart { margin-bottom: 14px; }
+    .pair-row { position: relative; padding: 6px 0; border-radius: 6px; font-size: 14px; }
+    .pair-row .label { margin-bottom: 4px; overflow-wrap: anywhere; }
+    .pair-row .chart-tip { right: 0; }
+    .pair-bars { position: relative; }
+    .pair-bar { position: relative; height: 10px; }
+    .pair-bar + .pair-bar { margin-top: 2px; }
+    .pair-bar span { position: absolute; top: 0; bottom: 0; min-width: 2px; border-radius: 0 4px 4px 0; }
+    .pair-bar span.down { border-radius: 4px 0 0 4px; }
+    .pair-zero { position: absolute; top: -3px; bottom: -3px; width: 1px; background: var(--theme-gray-400); }
+    .pair-row:hover .pair-bar span { filter: brightness(1.1); }
+    .main { background: var(--chart); }
+    .second { background: var(--chart-2); }
 
     .table-wrap { overflow-x: auto; }
     table.stat { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -603,14 +695,14 @@
 <div class="container">
     <main id="app"></main>
     <noscript>Kwidt braucht JavaScript.</noscript>
-    <div class="footer-info">v<span id="versionNumber">1.46</span></div>
+    <div class="footer-info">v<span id="versionNumber">1.47</span></div>
 </div>
 <div id="toast" role="status" hidden></div>
 
 <script src="../fileshare/vendor/peerjs.min.js"></script>
 <script src="../fileshare/vendor/qrcode.min.js"></script>
 <!-- ?v= immer zusammen mit der Versionsnummer oben ändern: Sonst läuft die neue Seite mit alten Skripten aus dem Browser-Cache. -->
-<script src="core.js?v=1.46"></script>
-<script src="app.js?v=1.46"></script>
+<script src="core.js?v=1.47"></script>
+<script src="app.js?v=1.47"></script>
 </body>
 </html>

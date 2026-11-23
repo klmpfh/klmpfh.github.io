@@ -3017,12 +3017,231 @@
 
     /* Statistik */
 
-    function barRow(label, value, max, cur) {
+    /* Diagramme */
+
+    // Aus HTML-Elementen mit Prozentwerten statt aus gemessenen Pixeln: So passen sie in jede
+    // Breite und lassen sich auch in einer zugeklappten Kachel zeichnen. Jeder Wert steht
+    // zusätzlich als Text darunter, die Sprechblase ist nur eine Abkürzung.
+    const CHART_COLUMNS = 36;
+
+    /** Wertebereich eines Balkendiagramms, immer mit der Null darin. */
+    function barRange(values) {
+        return { lo: Math.min.apply(null, values.concat(0)), hi: Math.max.apply(null, values.concat(0)) };
+    }
+
+    /** Ein Balken von der Null aus, nach links bei negativen Werten (mehr Rückzahlungen als Ausgaben). */
+    function barMark(value, range, cls) {
+        const span = range.hi - range.lo || 1;
+        const from = (Math.min(0, value) - range.lo) / span * 100;
+        return h('span', {
+            class: (cls || '') + (value < 0 ? ' down' : ''), hidden: !value,
+            style: 'left:' + from.toFixed(2) + '%;width:' + (Math.abs(value) / span * 100).toFixed(2) + '%'
+        });
+    }
+
+    function barRow(label, value, range, cur, note) {
         return h('div', { class: 'bar-row' },
-            h('span', { class: 'label' }, label),
-            h('span', { class: 'bar', 'aria-hidden': 'true' }, h('span', { style: 'width:' + (max > 0 ? Math.max(0, value) / max * 100 : 0).toFixed(1) + '%' })),
+            h('span', { class: 'label' }, label, note ? h('div', { class: 'small muted' }, note) : null),
+            h('span', { class: 'bar', 'aria-hidden': 'true' }, barMark(value, range)),
             h('span', { class: 'value' }, money(value, cur)));
     }
+
+    /** Glatte Achsenwerte (1, 2 oder 5 mal Zehnerpotenz), die `lo` bis `hi` und die Null abdecken. */
+    function axisTicks(lo, hi) {
+        const raw = Math.max(1, (hi - lo) / 3);
+        const power = Math.pow(10, Math.floor(Math.log10(raw)));
+        const step = [1, 2, 5, 10].map(function (f) { return f * power; }).filter(function (v) { return v >= raw; })[0];
+        const ticks = [];
+        for (let v = Math.floor(lo / step) * step; v < hi + step; v += step) ticks.push(v);
+        return ticks.length > 1 ? ticks : [0, step];
+    }
+
+    /** „1.000 €“ statt „1.000,00 €“. */
+    function axisMoney(minor, cur) {
+        const decimals = C.currencyDecimals(cur);
+        return decimals ? money(minor, cur).replace(',' + '0'.repeat(decimals), '') : money(minor, cur);
+    }
+
+    /** Sprechblase: oben der Wert, darunter, wozu er gehört. Texte nur als Textknoten. */
+    function fillTip(tip, lines) {
+        tip.textContent = '';
+        lines.forEach(function (line) {
+            tip.appendChild(h('div', null, line.cls ? h('span', { class: 'key ' + line.cls }) : null, h('strong', null, line.value), line.label ? ' ' + line.label : ''));
+        });
+    }
+
+    /**
+     * Rahmen für Säulen und Linie: Achsen, Sprechblase, Maus, Finger und Pfeiltasten.
+     * `o`: lo, hi, cur, label, count, at(i) und near(x) (0 bis 1), xLabels [{at, text}],
+     * marks(y) liefert die Formen, tip(i) die Zeilen, highlight(i, y) hebt hervor (-1: nichts).
+     */
+    function chartFrame(o) {
+        const ticks = axisTicks(o.lo, o.hi);
+        const bottom = ticks[0];
+        const span = ticks[ticks.length - 1] - bottom;
+        function y(v) { return (v - bottom) / span * 100; }
+        const labels = ticks.map(function (t) { return axisMoney(t, o.cur); });
+        const gutter = Math.ceil(Math.max.apply(null, labels.map(function (l) { return l.length; })) * 6.2 + 8);
+
+        const tip = h('div', { class: 'chart-tip', role: 'status', hidden: true });
+        const plot = h('div', { class: 'chart-plot' },
+            ticks.map(function (t, i) {
+                return h('div', { class: 'chart-grid' + (t === 0 ? ' zero' : ''), 'aria-hidden': 'true', style: 'bottom:' + y(t).toFixed(2) + '%' }, h('span', null, labels[i]));
+            }),
+            o.marks(y),
+            tip);
+        const box = h('div', { class: 'chart', role: 'group', tabindex: '0', 'aria-label': o.label + ' (Pfeiltasten zeigen einzelne Werte)', style: 'padding-left:' + gutter + 'px' },
+            plot,
+            h('div', { class: 'chart-x', 'aria-hidden': 'true' }, o.xLabels.map(function (l) {
+                return h('span', { class: l.edge || null, style: 'left:' + (l.at * 100).toFixed(2) + '%' }, l.text);
+            })));
+
+        let active = -1;
+        function show(i) {
+            if (i === active) return;
+            active = i;
+            tip.hidden = i < 0;
+            o.highlight(i, y);
+            if (i < 0) return;
+            fillTip(tip, o.tip(i));
+            // Neben den Punkt, auf die Seite mit mehr Platz.
+            const x = o.at(i) * plot.clientWidth;
+            const left = x < plot.clientWidth / 2 ? x + 14 : x - 14 - tip.offsetWidth;
+            tip.style.left = Math.max(-gutter, Math.min(left, plot.clientWidth - tip.offsetWidth)) + 'px';
+        }
+        function point(e) {
+            const rect = plot.getBoundingClientRect();
+            show(o.near(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))));
+        }
+        plot.addEventListener('pointermove', point);
+        plot.addEventListener('pointerdown', point);
+        // Beim Finger bleibt die Sprechblase stehen, bis man woanders hintippt.
+        plot.addEventListener('pointerleave', function (e) { if (e.pointerType !== 'touch') show(-1); });
+        box.addEventListener('blur', function () { show(-1); });
+        box.addEventListener('focus', function () { if (active < 0 && box.matches(':focus-visible')) show(o.count - 1); });
+        box.addEventListener('keydown', function (e) {
+            const step = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+            if (e.key === 'Escape') show(-1);
+            if (!step) return;
+            e.preventDefault();
+            show(Math.max(0, Math.min(o.count - 1, (active < 0 ? o.count - 1 : active) + step)));
+        });
+        return box;
+    }
+
+    /** Säulen über die Zeit, älteste links. rows: [{label, short, value}], value null heißt: kein Eintrag. */
+    function columnChart(rows, cur, label) {
+        const range = barRange(rows.map(function (r) { return r.value || 0; }));
+        const slots = rows.map(function () { return h('div', { class: 'chart-slot' }); });
+        const n = rows.length;
+        const every = Math.ceil(n / 5);
+        return chartFrame({
+            lo: range.lo, hi: range.hi, cur: cur, label: label, count: n,
+            at: function (i) { return (i + 0.5) / n; },
+            near: function (x) { return Math.min(n - 1, Math.floor(x * n)); },
+            // Von hinten gezählt, damit der neueste Zeitraum immer beschriftet ist.
+            xLabels: rows.map(function (r, i) { return { at: (i + 0.5) / n, text: r.short, on: (n - 1 - i) % every === 0 }; })
+                .filter(function (l) { return l.on; }),
+            marks: function (y) {
+                rows.forEach(function (r, i) {
+                    if (!r.value) return;
+                    const a = y(Math.min(0, r.value));
+                    const b = y(Math.max(0, r.value));
+                    slots[i].appendChild(h('div', { class: 'chart-col' + (r.value < 0 ? ' down' : ''), style: 'bottom:' + a.toFixed(2) + '%;height:' + (b - a).toFixed(2) + '%' }));
+                });
+                return h('div', { class: 'chart-cols', 'aria-hidden': 'true' }, slots);
+            },
+            tip: function (i) { return [{ value: rows[i].value === null ? '–' : money(rows[i].value, cur) }, { value: '', label: rows[i].label }]; },
+            highlight: function (i) { slots.forEach(function (slot, k) { slot.classList.toggle('on', k === i); }); }
+        });
+    }
+
+    /** Aufsummierte Beträge als Stufenlinie: Zwischen zwei Tagen mit Ausgaben ändert sich nichts. */
+    function totalChart(points, cur, label) {
+        const range = barRange(points.map(function (p) { return p.total; }));
+        const times = points.map(function (p) { return Date.parse(p.date + 'T00:00:00Z'); });
+        const first = times[0];
+        const width = times[times.length - 1] - first;
+        function at(i) { return (times[i] - first) / width; }
+        const hair = h('div', { class: 'chart-hair', hidden: true });
+        const dot = h('div', { class: 'chart-dot' });
+        const last = points.length - 1;
+        return chartFrame({
+            lo: range.lo, hi: range.hi, cur: cur, label: label, count: points.length,
+            at: at,
+            near: function (x) {
+                let best = 0;
+                times.forEach(function (t, i) { if (Math.abs(at(i) - x) < Math.abs(at(best) - x)) best = i; });
+                return best;
+            },
+            xLabels: [
+                { at: 0, edge: 'first', text: formatDate(points[0].date, true) },
+                { at: 1, edge: 'last', text: formatDate(points[last].date, true) }],
+            marks: function (y) {
+                function svg(tag, attrs) {
+                    const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+                    Object.keys(attrs).forEach(function (k) { el.setAttribute(k, attrs[k]); });
+                    return el;
+                }
+                const line = points.map(function (p, i) {
+                    const x = (at(i) * 100).toFixed(3);
+                    const top = (100 - y(p.total)).toFixed(3);
+                    return i ? 'H' + x + 'V' + top : 'M' + x + ' ' + top;
+                }).join('');
+                const zero = (100 - y(0)).toFixed(3);
+                const image = svg('svg', { viewBox: '0 0 100 100', preserveAspectRatio: 'none', 'aria-hidden': 'true' });
+                image.appendChild(svg('path', { class: 'area', d: line + 'V' + zero + 'H0Z' }));
+                image.appendChild(svg('path', { class: 'line', d: line }));
+                dot.style.left = '100%';
+                dot.style.bottom = y(points[last].total) + '%';
+                return [image, hair, dot];
+            },
+            tip: function (i) { return [{ value: money(points[i].total, cur) }, { value: '', label: 'bis ' + formatDate(points[i].date, true) }]; },
+            highlight: function (i, y) {
+                const k = i < 0 ? last : i;
+                hair.hidden = i < 0;
+                hair.style.left = dot.style.left = at(k) * 100 + '%';
+                dot.style.bottom = y(points[k].total) + '%';
+            }
+        });
+    }
+
+    /** Zwei Werte pro Person untereinander, auf einer gemeinsamen Skala. rows: [{label, values: [a, b]}], names wie values. */
+    function pairChart(rows, names, cur, label) {
+        const keys = ['main', 'second'];
+        const range = barRange([].concat.apply([], rows.map(function (r) { return r.values; })));
+        const zero = -range.lo / (range.hi - range.lo || 1) * 100;
+        return h('div', { class: 'pair-chart', role: 'group', 'aria-label': label },
+            h('div', { class: 'chart-legend' }, names.map(function (name, i) { return h('span', null, h('span', { class: 'swatch ' + keys[i] }), name); })),
+            rows.map(function (r) {
+                const tip = h('div', { class: 'chart-tip', hidden: true });
+                fillTip(tip, r.values.map(function (v, i) { return { cls: keys[i], value: money(v, cur), label: names[i] }; }));
+                function show() { tip.hidden = false; }
+                function hide() { tip.hidden = true; }
+                return h('div', {
+                    class: 'pair-row', tabindex: '0', role: 'img',
+                    'aria-label': r.label + ': ' + r.values.map(function (v, i) { return names[i] + ' ' + money(v, cur); }).join(', '),
+                    onpointerenter: show, onpointerdown: show, onfocus: show, onblur: hide,
+                    onpointerleave: function (e) { if (e.pointerType !== 'touch') hide(); }
+                },
+                    h('div', { class: 'label' }, r.label),
+                    h('div', { class: 'pair-bars' },
+                        range.lo < 0 ? h('div', { class: 'pair-zero', style: 'left:' + zero.toFixed(2) + '%' }) : null,
+                        r.values.map(function (v, i) { return h('div', { class: 'pair-bar' }, barMark(v, range, keys[i])); })),
+                    tip);
+            }));
+    }
+
+    function chartTitle(text) {
+        return h('div', { class: 'chart-title' }, text);
+    }
+
+    function monthShort(month) {
+        const p = month.split('-').map(Number);
+        return new Date(p[0], p[1] - 1, 1).toLocaleDateString('de-DE', { month: 'short', year: '2-digit' });
+    }
+
+    /* Kacheln */
 
     /**
      * Pro Monat oder Jahr, für eine gewählte Kategorie oder alle zusammen. Monate ohne Eintrag
@@ -3033,10 +3252,11 @@
         if (!stats.byMonth.rows.length) return null;
         if (state.statsCategory && categories.indexOf(state.statsCategory) === -1) state.statsCategory = '';
         const periods = {
-            month: { title: 'Nach Monat', rows: stats.byMonth.rows, one: 'Monat', many: 'Monate', label: function (row) { return monthLabel(row.month); } },
-            year: { title: 'Nach Jahr', rows: stats.byYear.rows, one: 'Jahr', many: 'Jahre', label: function (row) { return row.year; } }
+            month: { title: 'Nach Monat', rows: stats.byMonth.rows, one: 'Monat', many: 'Monate', label: function (row) { return monthLabel(row.month); }, short: function (row) { return monthShort(row.month); } },
+            year: { title: 'Nach Jahr', rows: stats.byYear.rows, one: 'Jahr', many: 'Jahre', label: function (row) { return row.year; }, short: function (row) { return row.year; } }
         };
         const list = h('div', null);
+        const chart = h('div', null);
         const seg = h('div', { class: 'seg period-seg', role: 'group', 'aria-label': 'Zeitraum' }, Object.keys(periods).map(function (key) {
             return h('button', {
                 type: 'button', 'data-period': key,
@@ -3059,6 +3279,7 @@
                 },
                     h('option', { value: '' }, 'Alle Kategorien'),
                     categories.map(function (id) { return h('option', { value: id }, categoryText(doc, id)); }))),
+            chart,
             list]);
 
         function draw() {
@@ -3067,16 +3288,20 @@
             const values = period.rows.map(function (row) {
                 return id ? (id in row.cells ? row.cells[id] : null) : (row.total || null);
             });
-            const max = Math.max.apply(null, values.map(function (v) { return v || 0; }));
+            chart.textContent = '';
+            // Eine einzelne Säule sagt nicht mehr als die Zahl.
+            if (period.rows.length > 1) {
+                const shown = period.rows.map(function (row, i) { return { label: period.label(row), short: period.short(row), value: values[i] }; })
+                    .slice(0, CHART_COLUMNS).reverse();
+                const title = (id ? categoryText(doc, id) : 'Ausgaben') + ' pro ' + period.one
+                    + (period.rows.length > CHART_COLUMNS ? ', die letzten ' + CHART_COLUMNS + ' ' + period.many : '');
+                chart.append(chartTitle(title), columnChart(shown, cur, title));
+            }
             list.textContent = '';
             period.rows.forEach(function (row, i) {
-                const label = period.label(row);
-                list.appendChild(values[i] === null
-                    ? h('div', { class: 'bar-row' },
-                        h('span', { class: 'label' }, label),
-                        h('span', { class: 'bar', 'aria-hidden': 'true' }),
-                        h('span', { class: 'value muted' }, '–'))
-                    : barRow(label, values[i], max, cur));
+                list.appendChild(h('div', { class: 'kv' },
+                    h('span', null, period.label(row)),
+                    values[i] === null ? h('span', { class: 'muted' }, '–') : h('span', null, money(values[i], cur))));
             });
             panel.valueEl.textContent = period.rows.length + ' ' + (period.rows.length === 1 ? period.one : period.many);
             seg.querySelectorAll('button').forEach(function (b) {
@@ -3101,22 +3326,22 @@
         const fixed = C.fixedCosts(doc, cur);
         if (!fixed.items.length) return null;
         const me = meId(doc.id);
+        const people = statPeople(doc, [fixed.owed]);
+        const itemRange = barRange(fixed.items.map(function (item) { return item.monthly; }));
+        const peopleRange = barRange(people.map(function (id) { return fixed.owed[id] || 0; }));
         return statFold('fixed', 'Fixkosten', money(fixed.total, cur) + ' im Monat', [
             h('div', { class: 'stat-total' }, money(fixed.total, cur), h('span', { class: 'stat-unit' }, ' im Monat')),
             h('div', { class: 'small muted', style: 'margin-bottom:10px' }, 'Aus ' + fixed.items.length + (fixed.items.length === 1 ? ' Wiederholung' : ' Wiederholungen')
                 + ', im Schnitt pro Monat. Was seltener als monatlich anfällt, zählt anteilig.'
                 + (me && fixed.owed[me] ? ' Dein Anteil: ' + money(fixed.owed[me], cur) + '.' : '')),
+            chartTitle('Wofür, pro Monat'),
             fixed.items.map(function (item) {
-                return h('div', { class: 'kv' },
-                    h('span', null, item.series.desc,
-                        h('div', { class: 'small muted' }, repeatLabel(item.series, doc) + ' · ' + money(C.expenseSign(item.series) * item.series.amount, cur))),
-                    h('span', null, money(item.monthly, cur)));
+                return barRow(item.series.desc, item.monthly, itemRange, cur,
+                    repeatLabel(item.series, doc) + ' · ' + money(C.expenseSign(item.series) * item.series.amount, cur));
             }),
-            h('div', { class: 'link-title', style: 'margin-top:12px' }, 'Pro Person und Monat'),
-            statPeople(doc, [fixed.owed]).map(function (id) {
-                return h('div', { class: 'kv' },
-                    h('span', null, memberName(doc, id) + (id === me ? ' (du)' : '')),
-                    h('span', null, money(fixed.owed[id] || 0, cur)));
+            chartTitle('Anteil pro Person und Monat'),
+            people.map(function (id) {
+                return barRow(memberName(doc, id) + (id === me ? ' (du)' : ''), fixed.owed[id] || 0, peopleRange, cur);
             })]);
     }
 
@@ -3125,6 +3350,34 @@
         const d = new Date();
         d.setMonth(d.getMonth() + n);
         return C.todayStr(d);
+    }
+
+    /** Die vorausberechneten Buchungen als Säulen: pro Monat, bei langen Zeiträumen pro Jahr. */
+    function forecastRows(fc) {
+        function sums(length) {
+            const out = {};
+            fc.items.forEach(function (item) {
+                item.dates.forEach(function (date) {
+                    const key = date.slice(0, length);
+                    out[key] = (out[key] || 0) + C.expenseSign(item.series) * item.series.amount;
+                });
+            });
+            return out;
+        }
+        const months = sums(7);
+        const keys = Object.keys(months).sort();
+        const all = [];
+        const p = keys[0].split('-').map(Number);
+        for (let i = 0; i === 0 || all[i - 1] < keys[keys.length - 1]; i++) all.push(C.todayStr(new Date(p[0], p[1] - 1 + i, 1)).slice(0, 7));
+        if (all.length <= CHART_COLUMNS) {
+            return all.map(function (m) { return { label: monthLabel(m), short: monthShort(m), value: m in months ? months[m] : null }; });
+        }
+        const years = sums(4);
+        const rows = [];
+        for (let year = +all[0].slice(0, 4); year <= +all[all.length - 1].slice(0, 4); year++) {
+            rows.push({ label: String(year), short: String(year), value: year in years ? years[year] : null });
+        }
+        return rows;
     }
 
     /** Was die Wiederholungen bis zu einem Datum noch buchen, und wie die Salden dann stehen. */
@@ -3157,6 +3410,11 @@
             result.appendChild(h('div', { class: 'stat-total' }, money(fc.total, cur)));
             result.appendChild(h('div', { class: 'small muted', style: 'margin-bottom:10px' },
                 fc.count + (fc.count === 1 ? ' Buchung' : ' Buchungen') + ' bis einschließlich ' + formatDate(until, true)));
+            const columns = forecastRows(fc);
+            if (columns.length > 1) {
+                const title = 'Kommende Buchungen pro ' + (columns[0].short === columns[0].label ? 'Jahr' : 'Monat');
+                result.append(chartTitle(title), columnChart(columns, cur, title));
+            }
             fc.items.forEach(function (item) {
                 const each = C.expenseSign(item.series) * item.series.amount;
                 result.appendChild(h('div', { class: 'kv' },
@@ -3164,7 +3422,12 @@
                         h('div', { class: 'small muted' }, item.dates.length + '× ' + money(each, cur) + ' · ' + item.dates.map(function (d) { return formatDate(d); }).join(', '))),
                     h('span', null, money(each * item.dates.length, cur))));
             });
-            result.appendChild(h('div', { class: 'link-title', style: 'margin-top:12px' }, 'Verteilung und Salden'));
+            const people = statPeople(doc, [fc.owed, fc.paid]).map(function (id) {
+                const now = balances[id] || 0;
+                return { id: id, name: memberName(doc, id) + (id === me ? ' (du)' : ''), now: now, then: now + (fc.paid[id] || 0) - (fc.owed[id] || 0) };
+            });
+            result.appendChild(h('div', { class: 'link-title', style: 'margin-top:16px' }, 'Verteilung und Salden'));
+            result.appendChild(pairChart(people.map(function (p) { return { label: p.name, values: [p.then, p.now] }; }), ['Saldo dann', 'Saldo heute'], cur, 'Salden heute und am Ende'));
             result.appendChild(h('div', { class: 'table-wrap' },
                 h('table', { class: 'stat' },
                     h('thead', null, h('tr', null,
@@ -3172,13 +3435,15 @@
                         h('th', { scope: 'col' }, 'Trägt'),
                         h('th', { scope: 'col' }, 'Zahlt'),
                         h('th', { scope: 'col' }, 'Saldo dann'))),
-                    h('tbody', null, statPeople(doc, [fc.owed, fc.paid]).map(function (id) {
-                        const after = (balances[id] || 0) + (fc.paid[id] || 0) - (fc.owed[id] || 0);
+                    h('tbody', null, people.map(function (p) {
                         return h('tr', null,
-                            h('td', null, memberName(doc, id) + (id === me ? ' (du)' : '')),
-                            h('td', null, money(fc.owed[id] || 0, cur)),
-                            h('td', null, money(fc.paid[id] || 0, cur)),
-                            h('td', { class: after > 0 ? 'pos' : after < 0 ? 'neg' : '' }, money(after, cur)));
+                            h('td', null, p.name),
+                            h('td', null, money(fc.owed[p.id] || 0, cur)),
+                            h('td', null, money(fc.paid[p.id] || 0, cur)),
+                            // Keine eigene Spalte für heute: Fünf passen nicht auf ein Handy.
+                            h('td', null,
+                                h('span', { class: p.then > 0 ? 'pos' : p.then < 0 ? 'neg' : null }, money(p.then, cur)),
+                                h('div', { class: 'small muted' }, 'heute ' + money(p.now, cur))));
                     })))));
             result.appendChild(h('p', { class: 'small muted', style: 'margin-top:8px' },
                 '„Saldo dann“ ist der heutige Saldo plus diese Buchungen, angenommen, sonst ändert sich nichts. Positiv: bekommt Geld, negativ: schuldet. Gebucht wird erst, wenn ein Termin da ist.'));
@@ -3233,7 +3498,11 @@
                 viewForecast(doc, cur));
         }
 
-        const maxCategory = stats.byCategory[0].amount;
+        const me = meId(doc.id);
+        const categoryRange = barRange(stats.byCategory.map(function (row) { return row.amount; }));
+        // Ein Anteil am Ganzen ergibt nur Sinn, wenn keine Kategorie unter null liegt.
+        const withShare = categoryRange.lo === 0 && stats.total > 0;
+        const totalTitle = stats.income.count ? 'Ausgaben minus Einnahmen, aufsummiert' : 'Ausgaben, aufsummiert';
         return h('div', null,
             h('section', { class: 'panel' },
                 picker,
@@ -3250,14 +3519,17 @@
                     h('div', null,
                         h('div', { class: 'small muted' }, 'Ergebnis'),
                         h('div', { class: 'stat-total ' + (stats.total > 0 ? 'neg' : stats.total < 0 ? 'pos' : '') }, money(-stats.total, cur)),
-                        h('div', { class: 'small muted' }, 'Einnahmen minus Ausgaben')))),
+                        h('div', { class: 'small muted' }, 'Einnahmen minus Ausgaben'))),
+                stats.timeline.length > 1 ? [chartTitle(totalTitle), totalChart(stats.timeline, cur, totalTitle)] : null),
             // Erst, was war, dann, was kommt.
             statFold('category', 'Nach Kategorie', stats.byCategory.length + (stats.byCategory.length === 1 ? ' Kategorie' : ' Kategorien'),
                 stats.byCategory.map(function (row) {
-                    return barRow(categoryText(doc, row.id), row.amount, maxCategory, cur);
+                    return barRow(categoryText(doc, row.id), row.amount, categoryRange, cur,
+                        withShare ? (row.amount / stats.total * 100).toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' %' : null);
                 })),
             viewPeriodPanel(doc, stats, cur),
-            statFold('person', 'Nach Person', stats.byMember.length + (stats.byMember.length === 1 ? ' Person' : ' Personen'),
+            statFold('person', 'Nach Person', stats.byMember.length + (stats.byMember.length === 1 ? ' Person' : ' Personen'), [
+                pairChart(stats.byMember.map(function (m) { return { label: memberName(doc, m.id) + (m.id === me ? ' (du)' : ''), values: [m.paid, m.share] }; }), ['Bezahlt', 'Anteil'], cur, 'Bezahlt und Anteil pro Person'),
                 h('div', { class: 'table-wrap' },
                     h('table', { class: 'stat' },
                         h('thead', null, h('tr', null,
@@ -3269,7 +3541,7 @@
                                 h('td', null, memberName(doc, m.id)),
                                 h('td', null, money(m.paid, cur)),
                                 h('td', null, money(m.share, cur)));
-                        }))))),
+                        }))))]),
             C.liveSeries(doc).some(function (e) { return e.currency === cur; }) ? h('h3', { class: 'stat-group' }, 'Hochrechnung') : null,
             viewFixedCosts(doc, cur),
             viewForecast(doc, cur));
