@@ -75,8 +75,8 @@ relativ, über die eigene `src`-Angabe.
   gemeinsame Liste frei formulierter Wünsche, jede Person gewichtet jeden Wunsch (0–100 %) und bewertet ihn in jeder Wohnung;
   daraus Passung je Person und gemeinsam (offene Gewichtungen/Bewertungen werden angezeigt). `js/calc.js` ist die Rechenlogik, `js/app.js` die Oberfläche. Daten im
   localStorage, Übertragung zwischen Geräten per JSON-Export/-Import (alles oder einzelne Wohnung). Angebote lassen sich per KI übernehmen:
-  Prompt auf der Wohnungsseite kopieren, Antwort (JSON) dort einfügen (`js/offer.js`: Felder, Prompt und Einlesen). Wichtige Orte der Personen (Arbeit, Familie …) gehen in den Prompt;
-  Entfernungen dorthin und zur nächsten U-/S-Bahn stehen je Wohnung und im Vergleich.
+  Prompt auf der Wohnungsseite kopieren, Antwort (JSON) dort einfügen (`js/offer.js`: Felder, Prompt und Einlesen). Wichtige Orte der Personen (Arbeit, Familie …) und die Wünsche gehen in den Prompt (eindeutig Erfülltes wird vorausgefüllt);
+  Entfernungen zu den Orten und zur nächsten U-/S-Bahn stehen je Wohnung und im Vergleich.
 - `/zauberkloppen/` – Szenario-Generator für Fantasy-Rollenspiele.
 - `/zeitfresser/` – Zeitfresser: Wochenanalyse, wohin die Zeit geht. Themen mit Wert pro Woche oder pro Tag
   an gewählten Wochentagen, darunter eine Ebene Unterpunkte; nicht zugeordnete Zeit wird schraffiert gezeigt,

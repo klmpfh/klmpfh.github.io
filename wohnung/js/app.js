@@ -89,6 +89,7 @@
             steps: [],           // Staffelmiete: [{ year: ab Mietjahr, rent: Kaltmiete }]
             coveredCosts: {},    // { privateCostId: true } – schon in Warmmiete/Hausgeld enthalten
             persons: null,       // Personen, die sich die privaten Nebenkosten teilen; leer = automatisch (personCount in calc.js)
+            wishHints: {},   // { wishId: { score, text } } – Einschätzung der KI aus dem Angebot
             ratings: {}   // { wishId: { personId: 0–100 } } – wie gut die Wohnung den Wunsch erfüllt
         };
     }
@@ -145,6 +146,11 @@
         }) : base.wg.rooms;
         out.distances = isObj(out.distances) ? Object.assign({}, out.distances) : {};
         Object.keys(out.distances).forEach(function (id) { if (!WK.isSet(out.distances[id])) delete out.distances[id]; else out.distances[id] = Number(out.distances[id]); });
+        out.wishHints = {};
+        if (isObj(f && f.wishHints)) Object.keys(f.wishHints).forEach(function (wid) {
+            var h = f.wishHints[wid];
+            if (isObj(h) && WK.isSet(h.score)) out.wishHints[wid] = { score: Number(h.score), text: String(h.text || '') };
+        });
         out.ratings = {};
         if (isObj(f && f.ratings)) Object.keys(f.ratings).forEach(function (wid) {
             if (isObj(f.ratings[wid])) out.ratings[wid] = Object.assign({}, f.ratings[wid]);
@@ -393,6 +399,33 @@
         return fieldWrap(label, input, o.hint, o.cls);
     }
 
+    /** Nur http(s), ohne Angabe https – der Link kann aus einem Import stammen. */
+    function webUrl(text) {
+        text = String(text || '').trim();
+        if (!text) return null;
+        try {
+            var url = new URL(/^[a-z][a-z0-9+.-]*:/i.test(text) ? text : 'https://' + text);
+            return /^https?:$/.test(url.protocol) && url.hostname.indexOf('.') !== -1 ? url : null;
+        } catch (e) { return null; }
+    }
+
+    /** Textfeld mit anklickbarem Link darunter, solange die Adresse gültig ist. */
+    function linkField(obj, key, label, o) {
+        var a = el('a', { target: '_blank', rel: 'noopener noreferrer' });
+        var small = el('small', { class: 'field-hint field-link' }, [a]);
+        function show() {
+            var url = webUrl(obj[key]);
+            small.hidden = !url;
+            if (!url) { a.removeAttribute('href'); return; }
+            a.href = url.href;
+            a.textContent = url.hostname.replace(/^www\./, '') + ' öffnen ↗';
+        }
+        var field = textField(obj, key, label, Object.assign({}, o, { onchange: show }));
+        field.appendChild(small);
+        show();
+        return field;
+    }
+
     function stateSelect(obj, key, label, onchange) {
         var sel = el('select', null, [el('option', { value: '', text: 'anderes / manuell' })].concat(WK.STATES.map(function (s) {
             return el('option', { value: s[0], text: s[1] + ' (' + String(s[2]).replace('.', ',') + ' %)' });
@@ -520,7 +553,7 @@
                 route();
             } else if (data && isObj(data.flat) && !data.flat.id && !data.exported) {
                 // Antwort einer KI als Datei (siehe offer.js), kein Export dieser Seite
-                var read = OFFER.read(data, { parseNum: parseNum, places: allPlaces() });
+                var read = OFFER.read(data, offerContext());
                 if (read.error) alert(read.error);
                 else addOfferFlat(read);
             } else if (data && data.flat && typeof data.flat === 'object') {
@@ -551,6 +584,25 @@
 
     var offerStatus = null;   // { id, text } – Ergebnis der letzten Übernahme, bis zur Rückkehr auf die Übersicht
 
+    /** Was offer.js zum Schreiben des Prompts und Lesen der Antwort braucht. */
+    function offerContext() {
+        return { parseNum: parseNum, places: allPlaces(), wishes: state.wishes };
+    }
+
+    /** Einschätzung der KI merken und damit alle noch offenen Bewertungen füllen –
+     *  eigene Bewertungen bleiben. Liefert die Wünsche, bei denen etwas gefüllt wurde. */
+    function applyWishes(f, hints) {
+        return state.wishes.filter(function (w) {
+            var h = hints[w.id];
+            if (!h) return false;
+            f.wishHints[w.id] = h;
+            var r = f.ratings[w.id] = f.ratings[w.id] || {};
+            var open = state.people.filter(function (p) { return !WK.isSet(r[p.id]); });
+            open.forEach(function (p) { r[p.id] = h.score; });
+            return open.length > 0;
+        });
+    }
+
     /** Überträgt gelesene Angaben. Ein selbst vergebener Name bleibt, Notizen werden ergänzt. */
     function applyOffer(f, offer) {
         var stateBefore = f.state;
@@ -558,6 +610,7 @@
             if (k === 'name') { if (autoName(f.name)) f.name = offer.name; }
             else if (k === 'notes') { if ((f.notes || '').indexOf(offer.notes) === -1) f.notes = (f.notes ? f.notes + '\n\n' : '') + offer.notes; }
             else if (k === 'steps') f.steps = offer.steps.map(function (s) { return Object.assign(newStep(), s); });
+            else if (k === 'wishes') return;   // siehe takeOffer
             else if (k === 'distances') Object.assign(f.distances, offer.distances);
             else f[k] = offer[k];
         });
@@ -581,7 +634,7 @@
         }
         OFFER.FIELDS.forEach(function (field) {
             var k = field.key, now = f[k], next = offer[k];
-            if (next === undefined || k === 'name' || k === 'notes') return;
+            if (next === undefined || k === 'name' || k === 'notes' || k === 'wishes') return;
             if (k === 'distances') {
                 allPlaces().forEach(function (x) {
                     if (WK.isSet(now[x.id]) && WK.isSet(next[x.id]) && now[x.id] !== next[x.id]) out.push(x.label + ': ' + fmtKm(now[x.id]) + ' → ' + fmtKm(next[x.id]));
@@ -596,11 +649,19 @@
         return out;
     }
 
-    function offerDone(f, read) {
-        var count = Object.keys(read.flat).length - 1;   // ohne "kind"
+    /** Übernimmt die Angaben und merkt sich, was danach oben auf der Seite steht. */
+    function takeOffer(f, read) {
+        applyOffer(f, read.flat);
+        var filled = applyWishes(f, read.flat.wishes || {});
+        var count = Object.keys(read.flat).filter(function (k) { return k !== 'kind' && k !== 'wishes'; }).length;
+        var openWishes = OFFER.written(state.wishes).filter(function (w) {
+            return state.people.some(function (p) { return !(f.ratings[w.id] && WK.isSet(f.ratings[w.id][p.id])); });
+        }).length;
         var missing = OFFER.missing(f).concat(OFFER.located(allPlaces()).filter(function (x) { return !WK.isSet(f.distances[x.id]); })
             .map(function (x) { return 'Entfernung zu ' + x.label; }));
-        offerStatus = { id: f.id, text: count + (count === 1 ? ' Angabe' : ' Angaben') + ' übernommen – bitte kurz prüfen.' +
+        offerStatus = { id: f.id, text: (count ? count + (count === 1 ? ' Angabe' : ' Angaben') + ' übernommen' : 'Übernommen') + ' – bitte kurz prüfen.' +
+            (filled.length ? ' Wünsche vorausgefüllt: ' + filled.map(function (w) { return '„' + w.text.trim() + '“ ' + read.flat.wishes[w.id].score + ' %'; }).join(', ') + '.' : '') +
+            (openWishes ? ' ' + (openWishes === 1 ? 'Ein Wunsch ist' : openWishes + ' Wünsche sind') + ' noch zu bewerten.' : '') +
             (missing.length ? ' Es fehlen noch: ' + missing.join(', ') + '.' : '') +
             (read.ignored.length ? ' Nicht lesbar: ' + read.ignored.join(', ') + '.' : '') };
     }
@@ -608,9 +669,8 @@
     function addOfferFlat(read) {
         var f = linkRooms(newFlat(state.profile, read.flat.kind), state.people);
         f.name = (f.kind === 'rent' ? 'Mietwohnung ' : 'Wohnung ') + (state.flats.length + 1);
-        applyOffer(f, read.flat);
+        takeOffer(f, read);
         state.flats.push(f);
-        offerDone(f, read);
         saveNow();
         location.hash = 'w=' + f.id;
     }
@@ -620,13 +680,15 @@
         var error = el('p', { class: 'small offer-error', role: 'alert' });
         function withAnswer(fn, kind) {
             return function () {
-                var read = OFFER.parse(answer.value, { parseNum: parseNum, places: allPlaces(), kind: kind });
+                var read = OFFER.parse(answer.value, Object.assign(offerContext(), { kind: kind }));
                 error.textContent = read.error || '';
                 if (!read.error) fn(read);
             };
         }
-        var places = OFFER.located(allPlaces());
-        var preview = el('pre', { class: 'offer-prompt', tabindex: '0', text: OFFER.prompt(places) });
+        var places = OFFER.located(allPlaces()), wishCount = OFFER.written(state.wishes).length;
+        var included = [places.length ? 'die Adressen eurer wichtigen Orte (' + places.map(function (x) { return (x.name || '').trim() || 'Ort'; }).join(', ') + ')' : '',
+            wishCount ? 'eure Wünsche (ohne Wichtigkeit)' : ''].filter(Boolean);
+        var preview = el('pre', { class: 'offer-prompt', tabindex: '0', text: OFFER.prompt(offerContext()) });
         var open = f.kind === 'rent' ? !(n(f.coldRent) > 0) : !(n(f.price) > 0);
         var status = offerStatus && offerStatus.id === f.id ? offerStatus.text : null;
 
@@ -635,14 +697,16 @@
             el('details', { class: 'offer', open: open && !status }, [
                 el('summary', { text: 'Anleitung, Prompt & Antwort einfügen' }),
                 el('ol', { class: 'offer-steps' }, [
-                    el('li', { text: 'Prompt kopieren und in eine KI einfügen (z. B. ChatGPT, Claude, Gemini). ' + (places.length
-                        ? 'Er enthält die Adressen eurer wichtigen Orte (' + places.map(function (x) { return (x.name || '').trim() || 'Ort'; }).join(', ') + '), aber keine Personennamen und keine Finanzen.'
-                        : 'Er enthält keine Daten von dir. Mit wichtigen Orten unter „Personen“ (Übersicht) ermittelt die KI auch die Entfernungen.') }),
+                    el('li', { text: 'Prompt kopieren und in eine KI einfügen (z. B. ChatGPT, Claude, Gemini). Er enthält ' + (included.length
+                        ? included.join(' und ') + ', aber keine Namen aus „Personen“ und keine Finanzen.'
+                        : 'keine Daten von dir.') +
+                        (places.length ? '' : ' Mit wichtigen Orten unter „Personen“ (Übersicht) ermittelt die KI auch die Entfernungen.') +
+                        (wishCount ? '' : ' Mit Wünschen (Übersicht) bewertet sie auch, was eindeutig ist.') }),
                     el('li', { text: 'Den Text des Angebots dahinter einfügen, oder PDF bzw. Screenshots anhängen, und abschicken.' }),
-                    el('li', { text: 'Die Antwort unten einfügen und übernehmen.' })
+                    el('li', { text: 'Die Antwort unten einfügen und übernehmen.' + (wishCount ? ' Bei Wünschen werden nur offene Bewertungen gefüllt.' : '') })
                 ]),
                 el('div', { class: 'actions' }, [
-                    btn('Prompt kopieren', 'btn-primary', function (e) { copyText(OFFER.prompt(places), e.currentTarget); }),
+                    btn('Prompt kopieren', 'btn-primary', function (e) { copyText(OFFER.prompt(offerContext()), e.currentTarget); }),
                     btn('Prompt nur für Entfernungen', 'btn-ghost', function (e) {
                         error.textContent = (f.address || '').trim() ? '' : 'Trag zuerst unter „Objekt“ eine Adresse oder Lage ein.';
                         if (!error.textContent) copyText(OFFER.distancePrompt(places, f), e.currentTarget);
@@ -655,8 +719,7 @@
                     btn('In diese Wohnung übernehmen', 'btn-primary', withAnswer(function (read) {
                         var conflicts = offerConflicts(f, read.flat);
                         if (conflicts.length && !confirm('Diese Angaben werden überschrieben:\n\n' + conflicts.join('\n') + '\n\nÜbernehmen?')) return;
-                        applyOffer(f, read.flat);
-                        offerDone(f, read);
+                        takeOffer(f, read);
                         saveNow();
                         renderDetail(f);
                     }, f.kind)),
@@ -1153,7 +1216,7 @@
 
     function removeWish(w) {
         state.wishes.splice(state.wishes.indexOf(w), 1);
-        state.flats.forEach(function (f) { delete f.ratings[w.id]; });
+        state.flats.forEach(function (f) { delete f.ratings[w.id]; delete f.wishHints[w.id]; });
     }
 
     function removePerson(p) {
@@ -1444,6 +1507,7 @@
             .concat(people.map(function (p) { return el('span', { text: personName(p) }); }))));
 
         wishes.forEach(function (w) {
+            var hint = f.wishHints[w.id];
             var cells = people.map(function (p) {
                 var r = f.ratings[w.id] || {};
                 var imp = w.weights[p.id];
@@ -1479,7 +1543,10 @@
                 return cell;
             });
             list.appendChild(el('div', { class: 'rate-row' }, [
-                el('div', { class: 'rate-text', text: w.text || '(ohne Text)' })
+                el('div', { class: 'rate-text' }, [
+                    w.text || '(ohne Text)',
+                    hint ? el('small', { class: 'field-hint', text: 'KI: ' + fmtInput(hint.score, 0) + ' %' + (hint.text ? ' – ' + hint.text : '') }) : null
+                ])
             ].concat(cells)));
         });
 
@@ -1721,7 +1788,7 @@
                     fieldWrap('Art', kindSel, rent ? 'Mietwohnung – zum Vergleich mit Kaufwohnungen.' : 'Kaufwohnung mit Finanzierung.'),
                     textField(f, 'name', 'Spitzname', { placeholder: 'z. B. Altbau am Park', cls: 'span-2', onchange: showName, hint: 'So heißt die Wohnung in der Übersicht und im Vergleich.' }),
                     textField(f, 'address', 'Adresse / Lage', { cls: 'span-2' }),
-                    textField(f, 'link', 'Link zum Exposé', { placeholder: 'https://…', cls: 'span-2' }),
+                    linkField(f, 'link', 'Link zum Exposé', { placeholder: 'https://…', cls: 'span-2' }),
                     numField(f, 'area', 'Wohnfläche', { unit: 'm²', dec: 1 }),
                     numField(f, 'year', 'Baujahr', { dec: 0, noGroup: true }),
                     textField(f, 'notes', 'Notizen', { multiline: true, cls: 'span-2' })

@@ -2,14 +2,16 @@
    prompt() erklärt einer KI, welche Angaben aus einem Angebot gebraucht werden
    und wie das JSON aussieht; read()/parse() lesen die Antwort wieder ein.
    Beides entsteht aus FIELDS – neue Angaben nur dort ergänzen.
-   places: [{ id, name, address }] – wichtige Orte der Personen. Namen der
+   places: [{ id, name, address }] – wichtige Orte der Personen,
+   wishes: [{ id, text }] – gemeinsame Wünsche (ohne Gewichtung). Namen der
    Personen stehen nicht im Prompt, wohl aber die Adressen der Orte. */
 var OFFER = (function () {
     'use strict';
 
     var BASIS = [['adresse', 'genaue Adresse'], ['gebiet', 'nur ungefähre Lage']];
 
-    // kind: 'both' | 'rent' | 'buy' | 'geo' (Entfernungen, für beide); type: 'num' | 'text' | 'enum' | 'steps' | 'distances'
+    // kind: 'both' | 'rent' | 'buy' | 'geo' (Entfernungen) | 'wish' (Wünsche) – die letzten beiden für Miete und Kauf
+    // type: 'num' | 'text' | 'enum' | 'steps' | 'distances' | 'wishes'
     var FIELDS = [
         { key: 'name', kind: 'both', type: 'text', label: 'Spitzname', text: 'kurzer Name für die Wohnung, höchstens 40 Zeichen, z. B. "3 Zimmer Nordstadt"' },
         { key: 'address', kind: 'both', type: 'text', label: 'Adresse / Lage', text: 'Straße, PLZ, Ort, Stadtteil – so genau wie angegeben' },
@@ -41,7 +43,9 @@ var OFFER = (function () {
         { key: 'distanceBasis', kind: 'geo', type: 'enum', options: BASIS, label: 'Genauigkeit der Lage', text: '"adresse" nur, wenn Straße und Hausnummer bekannt sind; bei Straße ohne Hausnummer, Stadtteil oder PLZ "gebiet" und von der Mitte dieses Gebiets rechnen' },
         { key: 'station', kind: 'geo', type: 'text', label: 'Nächste U-/S-Bahn', text: 'nächste U- oder S-Bahn-Station mit Linien, z. B. "U Nordstadt (U2)". Bei "gebiet" nur, wenn das Angebot sie nennt. Gibt es dort keine U- oder S-Bahn: null' },
         { key: 'stationM', kind: 'geo', type: 'num', label: 'Fußweg zur U-/S-Bahn', text: 'Fußweg zu dieser Station in Metern. Im Angebot genannte Gehminuten × 80, sonst Luftlinie × 1,3, auf 50 m gerundet' },
-        { key: 'distances', kind: 'geo', type: 'distances', label: 'Entfernungen', text: 'Luftlinie von der Wohnung zu jedem der unten genannten Orte in km, eine Nachkommastelle: Liste aus { "id": Kennung des Ortes, "km": Zahl oder null }' }
+        { key: 'distances', kind: 'geo', type: 'distances', label: 'Entfernungen', text: 'Luftlinie von der Wohnung zu jedem der unten genannten Orte in km, eine Nachkommastelle: Liste aus { "id": Kennung des Ortes, "km": Zahl oder null }' },
+
+        { key: 'wishes', kind: 'wish', type: 'wishes', label: 'Wünsche', text: 'für jeden unten genannten Wunsch, wie gut die Wohnung ihn erfüllt: Liste aus { "id": Kennung des Wunsches, "score": 0, 25, 50, 75, 100 oder null, "reason": kurze Begründung mit der Stelle im Angebot (höchstens 15 Wörter) oder null }' }
     ];
 
     var KINDS = [['rent', 'Miete'], ['buy', 'Kauf']];
@@ -64,11 +68,15 @@ var OFFER = (function () {
         }
     };
 
-    /** Beispiel mit erfundenen Entfernungen zu den echten Orten. */
-    function exampleFlat(kind, places) {
+    /** Beispiel mit erfundenen Entfernungen zu den echten Orten und erfundenen Bewertungen. */
+    function exampleFlat(kind, places, wishes) {
         var flat = Object.assign({}, EXAMPLES[kind]);
         if (places.length) flat.distances = places.map(function (p, i) {
             return { id: p.id, km: Math.round((kind === 'rent' ? 4.2 + 3.3 * i : 6.8 + 2.1 * i) * 10) / 10 };
+        });
+        if (wishes && wishes.length) flat.wishes = wishes.map(function (w, i) {
+            var x = [[100, 'steht ausdrücklich im Angebot'], [null, null], [0, 'im Angebot ausgeschlossen']][(kind === 'rent' ? i : i + 1) % 3];
+            return { id: w.id, score: x[0], reason: x[1] };
         });
         return flat;
     }
@@ -91,6 +99,23 @@ var OFFER = (function () {
 
     /** Orte, zu denen sich eine Entfernung bestimmen lässt. */
     function located(places) { return (places || []).filter(function (p) { return oneLine(p.address); }); }
+
+    function written(wishes) { return (wishes || []).filter(function (w) { return oneLine(w.text); }); }
+
+    /** Nur Eindeutiges: 0 % bei einem Muss-Wunsch schließt die Wohnung aus. */
+    function wishLines(wishes) {
+        if (!wishes.length) return [];
+        return ['Wünsche, ebenfalls in "flat":',
+            '- Bewerte nur, was sich aus dem Angebot (Text, Bilder, Grundriss) eindeutig ergibt: 100 = voll erfüllt, 0 = eindeutig nicht erfüllt, 25/50/75 nur bei belegter teilweiser Erfüllung.',
+            '- Wird ein Wunsch im Angebot nicht erwähnt, ist "score" null und nicht 0. Ein fehlender Hinweis ist keine Absage.',
+            '- Geschmack und Eindruck (schön, gemütlich, gute Nachbarschaft) und Werbesprache ohne Fakten: null.',
+            '- Wünsche zu Entfernungen nur bei "distanceBasis": "adresse" und nur, wenn der Wert deutlich auf einer Seite der Grenze liegt. Fahrzeiten: null, außer das Angebot nennt sie.',
+            '- Im Zweifel null.',
+            fieldLines('wish', []),
+            '',
+            'Wünsche für "wishes" (Kennung = Wunsch):'
+        ].concat(wishes.map(function (w) { return '- "' + w.id + '" = ' + oneLine(w.text); }), ['']);
+    }
 
     var GEO_RULES = [
         '- Nutze eine Karten- oder Websuche, wenn du eine hast, sonst dein Wissen über die Lage. Schätzen ist hier erlaubt.',
@@ -124,8 +149,9 @@ var OFFER = (function () {
         ]).join('\n');
     }
 
-    function prompt(places) {
-        places = located(places);
+    /** ctx: { places, wishes } */
+    function prompt(ctx) {
+        var places = located(ctx.places), wishes = written(ctx.wishes);
         return [
             'Lies aus dem Wohnungsangebot am Ende (Miete oder Kauf; als Text, PDF oder Bild) die Daten heraus und gib sie als JSON im folgenden Format zurück. Ich importiere das JSON danach in meine Wohnungsberechnung.',
             '',
@@ -154,16 +180,17 @@ var OFFER = (function () {
             '',
             'Entfernungen, ebenfalls in "flat":',
             geoLines(places).join('\n'),
-            '',
+            ''
+        ].concat(wishLines(wishes), [
             'Beispiel Miete (Werte erfunden, nicht übernehmen):',
-            json(exampleFlat('rent', places)),
+            json(exampleFlat('rent', places, wishes)),
             '',
             'Beispiel Kauf (Werte erfunden, nicht übernehmen):',
-            json(exampleFlat('buy', places)),
+            json(exampleFlat('buy', places, wishes)),
             '',
             'Hier ist das Angebot:',
             ''
-        ].join('\n');
+        ]).join('\n');
     }
 
     function isObj(x) { return !!x && typeof x === 'object' && !Array.isArray(x); }
@@ -210,7 +237,22 @@ var OFFER = (function () {
         return res;
     }
 
-    /** Liest nur bekannte, gültige Angaben. ctx: { parseNum, places, kind } –
+    /** Liste [{ id, score, reason }] → { id: { score, text } } für bekannte Wünsche,
+     *  auf die Stufen der Auswahl (25er-Schritte) gerundet. Ergebnis: { map, bad }. */
+    function toWishes(v, wishes, parseNum) {
+        var res = { map: {}, bad: !Array.isArray(v) };
+        (Array.isArray(v) ? v.filter(isObj) : []).forEach(function (x) {
+            if (empty(x.score)) return;
+            var wish = wishes.find(function (w) { return w.id === String(x.id); });
+            var score = toNum(x.score, parseNum);
+            if (wish && score !== null && score <= 100) {
+                res.map[wish.id] = { score: Math.round(score / 25) * 25, text: typeof x.reason === 'string' ? oneLine(x.reason).slice(0, 200) : '' };
+            } else res.bad = true;
+        });
+        return res;
+    }
+
+    /** Liest nur bekannte, gültige Angaben. ctx: { parseNum, places, wishes, kind } –
      *  kind gilt, wenn die Antwort keine Art nennt. Ergebnis: { error } oder
      *  { flat: vorhandene Angaben, ignored: Namen unlesbarer Angaben }. */
     function read(data, ctx) {
@@ -227,8 +269,8 @@ var OFFER = (function () {
             if ((f.kind === 'rent' || f.kind === 'buy') && f.kind !== kind) return;
             var v = raw[f.key];
             if (empty(v) || (Array.isArray(v) && !v.length)) return;
-            if (f.type === 'distances') {
-                var d = toDistances(v, ctx.places || [], parseNum);
+            if (f.type === 'distances' || f.type === 'wishes') {
+                var d = f.type === 'wishes' ? toWishes(v, ctx.wishes || [], parseNum) : toDistances(v, ctx.places || [], parseNum);
                 if (Object.keys(d.map).length) flat[f.key] = d.map;
                 if (d.bad) ignored.push(f.label);
                 return;
@@ -264,5 +306,5 @@ var OFFER = (function () {
         return FIELDS.filter(function (f) { return keys.indexOf(f.key) !== -1 && empty(flat[f.key]); }).map(function (f) { return f.label; });
     }
 
-    return { FIELDS: FIELDS, BASIS: BASIS, EXAMPLES: EXAMPLES, located: located, prompt: prompt, distancePrompt: distancePrompt, read: read, parse: parse, missing: missing };
+    return { FIELDS: FIELDS, BASIS: BASIS, EXAMPLES: EXAMPLES, located: located, written: written, prompt: prompt, distancePrompt: distancePrompt, read: read, parse: parse, missing: missing };
 })();
