@@ -932,8 +932,7 @@ button:focus-visible {
 }
 
 .day-bar {
-    display: flex;
-    gap: 2px;
+    position: relative;
     height: 26px;
 }
 
@@ -942,13 +941,12 @@ button:focus-visible {
 }
 
 .day-seg {
-    flex-basis: 0;
-    flex-shrink: 1;
-    min-width: 0;
+    position: absolute;
+    top: 0;
+    bottom: 0;
     border-radius: 4px;
     display: flex;
     align-items: center;
-    padding-left: 6px;
     cursor: pointer;
     overflow: visible;
 }
@@ -967,6 +965,7 @@ button:focus-visible {
 }
 
 .seg-text {
+    padding-left: 6px;
     font-size: 11px;
     font-weight: 700;
     white-space: nowrap;

@@ -153,22 +153,21 @@ function renderShareCanvas(sc) {
         ctx.fillStyle = t.muted;
         ctx.fillText(r.short, L, cy);
 
-        const span = Math.max(r.total, r.ref);
         const items = r.segs.map(s => ({ hours: s.hours, real: s.real, color: s.color, rest: s.kind === 'rest' }));
         if (r.free > EPS) items.push({ hours: r.free, real: r.free, color: null, rest: false });
-        const segGap = 2;
-        const usable = barW - segGap * Math.max(0, items.length - 1);
+        const segGap = 1;
         let x = barX;
         items.forEach(it => {
-            const w = usable * it.hours / span;
-            if (w <= 0.3) { x += w + segGap; return; }
+            // Gleicher Maßstab in allen Zeilen, die Lücke geht vom Segment selbst ab.
+            const slot = barW * it.hours / r.full;
+            const w = Math.max(1, slot - segGap);
             const p = roundRectPath(x, y, w, h, 4);
             if (it.rest) {
                 fillHatched(ctx, p, t, it.color);
             } else if (it.color) {
                 ctx.fillStyle = it.color;
                 ctx.fill(p);
-                if (it.hours / span >= 0.09) {
+                if (it.hours / r.full >= 0.09) {
                     ctx.font = font(12, 700);
                     ctx.fillStyle = textOn(it.color);
                     ctx.textAlign = 'left';
@@ -177,12 +176,12 @@ function renderShareCanvas(sc) {
             } else {
                 fillHatched(ctx, p, t);
             }
-            x += w + segGap;
+            x += slot;
         });
         if (r.over) {
             ctx.strokeStyle = t.danger;
             ctx.lineWidth = 2;
-            ctx.stroke(roundRectPath(barX - 3, y - 3, barW + 6, h + 6, 6));
+            ctx.stroke(roundRectPath(barX - 3, y - 3, barW * r.total / r.full + 6, h + 6, 6));
         }
 
         ctx.textAlign = 'right';

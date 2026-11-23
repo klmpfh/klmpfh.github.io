@@ -203,7 +203,7 @@ function updateInfos() {
                     span.appendChild(document.createTextNode(
                         'Unterpunkte: ' + fmtNumber(cs / n) + ' von ' + perDay(w / n) + ' (' +
                         fmtNumber(cs) + ' von ' + perWeek(w) + ') – ' +
-                        perDay((w - cs) / n) + ' nicht zugeordnet'));
+                        perDay((w - cs) / n) + ' (' + perWeek(w - cs) + ') nicht zugeordnet'));
                     info.appendChild(span);
                 } else {
                     info.appendChild(el('span', 'info-ok', '✓ Unterpunkte decken alles ab'));

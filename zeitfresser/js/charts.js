@@ -20,6 +20,10 @@
  * auf die Tage des Themas verteilt – so bleibt die Wochensumme gleich, auch
  * wenn ein Unterpunkt nur an einzelnen Tagen stattfindet.
  *
+ * Maßstab: Alle Zeilen teilen sich denselben, damit dieselbe Stundenzahl an
+ * jedem Tag gleich lang ist. Ist ein Tag überbucht, werden deshalb alle
+ * Zeilen entsprechend kürzer, statt nur diesen Tag zu stauchen.
+ *
  * Die Berechnung (computeDayRows, computeSunburst) ist von der Darstellung
  * getrennt, damit share.js dieselben Daten für das Bild nutzen kann.
  */
@@ -96,7 +100,9 @@ function collectSegments(nodes, day, colors, path, out, scale, scaledBy) {
     return out;
 }
 
-/** Zeile "Woche" plus je eine Zeile pro Wochentag, mit Summe und freier Zeit. */
+/** Zeile "Woche" plus je eine Zeile pro Wochentag, mit Summe und freier Zeit.
+ *  full = Stunden, die der vollen Breite entsprechen: für alle Tage gleich, für
+ *  die Woche das Siebenfache. */
 function computeDayRows(sc, colors) {
     const rows = [{ day: null, short: 'Woche', long: 'der Woche', ref: weekRef(sc) }];
     for (let d = 0; d < 7; d++) rows.push({ day: d, short: DAY_SHORT[d], long: 'am ' + DAY_LONG[d], ref: sc.hoursPerDay });
@@ -106,6 +112,8 @@ function computeDayRows(sc, colors) {
         r.free = r.ref - r.total;          // negativ = überbucht
         r.over = r.free < -EPS;
     });
+    const stretch = Math.max.apply(null, rows.map(r => r.total / r.ref).concat(1));
+    rows.forEach(r => { r.full = r.ref * stretch; });
     return rows;
 }
 
@@ -125,6 +133,15 @@ function renderDays(el, sc, colors) {
 
     computeDayRows(sc, colors).forEach(r => {
         const span = Math.max(r.total, r.ref);
+        let start = 0;
+
+        // Feste Prozente statt flex-grow: Dort hinge die Länge davon ab, wie viele
+        // Segmente (und Lücken) sich eine Zeile teilen.
+        function place(seg, hours) {
+            seg.style.left = (start / span * 100) + '%';
+            seg.style.width = 'max(1px, calc(' + (hours / span * 100) + '% - 1px))';
+            start += hours;
+        }
 
         const rowEl = document.createElement('div');
         rowEl.className = 'day-row' + (r.day == null ? ' day-row-week' : '');
@@ -136,6 +153,7 @@ function renderDays(el, sc, colors) {
 
         const bar = document.createElement('div');
         bar.className = 'day-bar';
+        bar.style.width = (span / r.full * 100) + '%';
         bar.setAttribute('role', 'img');
         bar.setAttribute('aria-label', (r.day == null ? 'Woche' : DAY_LONG[r.day]) + ': ' +
             r.segs.map(s => s.label + (s.kind === 'rest' ? ' (nicht zugeordnet) ' : ' ') + fmtHours(s.real)).join(', ') +
@@ -144,7 +162,7 @@ function renderDays(el, sc, colors) {
         r.segs.forEach(s => {
             const seg = document.createElement('div');
             seg.className = 'seg day-seg';
-            seg.style.flexGrow = s.hours;
+            place(seg, s.hours);
             seg.dataset.id = s.id;
             if (s.kind === 'rest') {
                 seg.classList.add('seg-rest');
@@ -158,7 +176,7 @@ function renderDays(el, sc, colors) {
                     tipLines.push(tipScaled(s.scaledBy));
                 }
                 seg.dataset.tip = tipLines.join('\n');
-                if (s.hours / span >= 0.11) {
+                if (s.hours / r.full >= 0.11) {
                     const t = document.createElement('span');
                     t.className = 'seg-text';
                     t.style.color = textOn(s.color);
@@ -172,7 +190,7 @@ function renderDays(el, sc, colors) {
         if (r.free > EPS) {
             const freeSeg = document.createElement('div');
             freeSeg.className = 'seg day-seg seg-free';
-            freeSeg.style.flexGrow = r.free;
+            place(freeSeg, r.free);
             freeSeg.dataset.tip = tipFree(r.free, r.ref, r.day == null ? 'der Woche' : 'des Tages');
             bar.appendChild(freeSeg);
         }
