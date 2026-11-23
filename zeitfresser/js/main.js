@@ -70,6 +70,73 @@ function initCollapsibles() {
     apply();
 }
 
+/* ── Mitlaufende Diagramme ──
+ * Passen die Diagramme ins Fenster, reicht position: sticky aus style.css.
+ * Sind sie höher, scrollen sie mit der Seite mit, bis beim Runterscrollen ihr
+ * unterer bzw. beim Hochscrollen ihr oberer Rand erreicht ist, und bleiben dort
+ * stehen. Unterwegs sind sie "lose" (position: relative), damit nichts ruckelt. */
+
+function initStickyCharts() {
+    const panel = document.querySelector('.chart-panel');
+    const layout = panel.parentElement;
+    const mq = window.matchMedia(ONE_COLUMN_MQ);
+    let lastY = window.scrollY;
+
+    /** Oberste (max) und unterste (min) Haltestelle der Oberkante im Fenster. */
+    function limits() {
+        const nav = parseFloat(getComputedStyle(panel).getPropertyValue('--theme-nav-height')) || 0;
+        const max = nav + 16;
+        return { min: Math.min(max, window.innerHeight - panel.offsetHeight), max: max };
+    }
+
+    function stick(top) {
+        panel.style.position = '';
+        panel.style.top = top + 'px';
+    }
+
+    function clear() {
+        panel.style.position = '';
+        panel.style.top = '';
+    }
+
+    function onScroll() {
+        const dy = window.scrollY - lastY;
+        lastY = window.scrollY;
+        if (mq.matches || !dy) return;
+        const lim = limits();
+        if (lim.min === lim.max) { clear(); return; }
+
+        if (panel.style.position !== 'relative') {
+            const held = panel.style.top ? parseFloat(panel.style.top) : lim.max;
+            if (dy > 0 ? held <= lim.min : held >= lim.max) return;   // steht schon am richtigen Rand
+            // Loslassen: dort weiter, wo die Diagramme vor diesem Scrollschritt standen.
+            const shift = panel.getBoundingClientRect().top - layout.getBoundingClientRect().top - dy;
+            const room = Math.max(0, layout.offsetHeight - panel.offsetHeight);
+            panel.style.position = 'relative';
+            panel.style.top = Math.min(room, Math.max(0, shift)) + 'px';
+        }
+        const top = panel.getBoundingClientRect().top;
+        if (dy > 0 && top <= lim.min) stick(lim.min);
+        else if (dy < 0 && top >= lim.max) stick(lim.max);
+    }
+
+    /** Größe geändert: möglichst an Ort und Stelle festhalten. */
+    function onResize() {
+        if (mq.matches) { clear(); return; }
+        const lim = limits();
+        if (lim.min === lim.max) { clear(); return; }
+        stick(Math.min(lim.max, Math.max(lim.min, panel.getBoundingClientRect().top)));
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onResize);
+    if (window.ResizeObserver) {
+        const ro = new ResizeObserver(onResize);
+        ro.observe(panel);
+        ro.observe(document.querySelector('.editor-panel'));
+    }
+}
+
 /** Kurzinfo in den Box-Überschriften – vor allem für eingeklappte Boxen. */
 function updatePanelSummaries() {
     const sc = activeScenario();
@@ -273,4 +340,5 @@ document.addEventListener('DOMContentLoaded', () => {
     initChartInteraction(revealNode);
     watchTheme();
     renderAll();
+    initStickyCharts();
 });

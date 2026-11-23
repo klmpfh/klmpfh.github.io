@@ -65,10 +65,11 @@ relativ, über die eigene `src`-Angabe.
   Status (offen/fällig/überfällig/zurück), Filter und Suche. Daten liegen nur im localStorage des Browsers,
   Backup als JSON-Datei herunterladen und wieder einlesen.
 - `/wohnung/` – Wohnung kaufen oder mieten: persönliche Finanzen (Cash, Eigenkapital, Einkommen, Kreditrahmen der Bank,
-  private Nebenkosten wie Strom/Internet/Rundfunk – je Wohnung abwählbar, wenn schon in Warmmiete/Hausgeld enthalten) auf der
+  private Nebenkosten wie Strom/Internet/Rundfunk – mit Zeitraum (Monat bis Jahr) und Aufteilung (gleichmäßig, Prozent, je Person,
+  komplett), je Wohnung abwählbar, wenn schon in Warmmiete/Hausgeld enthalten) auf der
   Übersicht. Mietwohnungen mit Kalt-/Warmmiete, Kaution und fester, Staffel- oder Indexmiete (Mietentwicklung über 10 Jahre),
   im selben Vergleich wie Kaufwohnungen. Je Kaufwohnung Kaufpreis, Nebenkosten (Grunderwerbsteuer je Bundesland), Hausgeld, WG-Zimmer mit Untermiete
-  (inkl. grober Steuerschätzung), Annuitätendarlehen mit Zinsbindung/Anschlusszins/Sondertilgung. Monatsbilanz, Checks,
+  (ohne Steuer), Annuitätendarlehen mit Zinsbindung/Anschlusszins/Sondertilgung. Monatsbilanz, Checks,
   Tilgungsplan, Diagramm und Vergleichstabelle. Objekt-Bewertung gegen Faustwerte (Hausgeld/m², Baujahr, Grundsteuer,
   Makler, Inventar, WG-Eignung) mit Rückfragen an Makler/Verwaltung zum Kopieren und Unterlagen-Checkliste. Wünsche & Bedingungen:
   Personen ergänzen frei formulierte Wünsche, jede Person gewichtet jeden Wunsch (0–100 %) und bewertet ihn in jeder Wohnung;

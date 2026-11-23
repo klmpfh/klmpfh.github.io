@@ -660,6 +660,23 @@
     }
 
     /**
+     * Die benutzten Kategorien (ohne „Keine Kategorie“) in der Reihenfolge ihrer ersten Ausgabe,
+     * über alle Währungen. Daran hängen die Farben der Diagramme: Eine neue Kategorie kommt
+     * hinten dazu und färbt die bisherigen nicht um.
+     */
+    function categoryOrder(doc) {
+        var first = {};
+        liveExpenses(doc).forEach(function (e) {
+            var id = findCategory(doc, e.category).id;
+            if (!first[id] || e.date < first[id]) first[id] = e.date;
+        });
+        // sort() ist stabil: Bei gleichem Datum gilt die Reihenfolge der Auswahl.
+        return groupCategories(doc).map(function (c) { return c.id; })
+            .filter(function (id) { return first[id] && id !== CATEGORIES[0].id; })
+            .sort(function (a, b) { return first[a] < first[b] ? -1 : first[a] > first[b] ? 1 : 0; });
+    }
+
+    /**
      * Beträge pro Monat und Kategorie, neuester Monat zuerst. Monate ganz ohne Ausgaben
      * zwischen dem ersten und letzten sind dabei, damit auffällt, wenn etwas ausblieb.
      * Liefert {categories, rows: [{month, cells: {id: betrag}, total}]}.
@@ -2013,6 +2030,7 @@
         settlements: settlements,
         isSettled: isSettled,
         statistics: statistics,
+        categoryOrder: categoryOrder,
         currenciesUsed: currenciesUsed,
         occurrence: occurrence,
         expandRecurring: expandRecurring,

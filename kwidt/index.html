@@ -32,11 +32,24 @@
            gewürfelten Farbton auf Unterscheidbarkeit geprüft, auch bei Farbfehlsichtigkeit. */
         --chart: var(--theme-accent);
         --chart-2: #b4b4bc;
+        /* Kategorien. Die Reihenfolge ist Teil der Prüfung: Benachbarte Farben bleiben auch bei
+           Farbfehlsichtigkeit unterscheidbar. hue-none ist „Keine Kategorie“, hue-dim ausgegraut. */
+        --hue-1: #2a78d6; --hue-2: #eb6834; --hue-3: #1baf7a; --hue-4: #eda100; --hue-5: #e87ba4; --hue-6: #008300; --hue-7: #6250d6; --hue-8: #e34948;
+        --hue-none: #71717a; --hue-dim: #d4d4d8;
+        --ink-light: #ffffff; --ink-dark: #0b0b0b;
     }
     @media (prefers-color-scheme: dark) {
-        :root:not([data-theme="light"]) { --chart: var(--theme-accent-strong); --chart-2: #62626b; }
+        :root:not([data-theme="light"]) {
+            --chart: var(--theme-accent-strong); --chart-2: #62626b;
+            --hue-1: #3987e5; --hue-2: #d95926; --hue-3: #199e70; --hue-4: #c98500; --hue-5: #d55181; --hue-6: #0ca30c; --hue-7: #9085e9; --hue-8: #e66767;
+            --hue-none: #9a9aa5; --hue-dim: #3f3f46; --ink-light: #0b0b0b;
+        }
     }
-    :root[data-theme="dark"] { --chart: var(--theme-accent-strong); --chart-2: #62626b; }
+    :root[data-theme="dark"] {
+        --chart: var(--theme-accent-strong); --chart-2: #62626b;
+        --hue-1: #3987e5; --hue-2: #d95926; --hue-3: #199e70; --hue-4: #c98500; --hue-5: #d55181; --hue-6: #0ca30c; --hue-7: #9085e9; --hue-8: #e66767;
+        --hue-none: #9a9aa5; --hue-dim: #3f3f46; --ink-light: #0b0b0b;
+    }
 
     body {
         padding: calc(var(--theme-nav-height) + 24px) 16px 40px;
@@ -516,6 +529,23 @@
     .bar { position: relative; height: 10px; background: var(--theme-gray-150); border-radius: 4px; overflow: hidden; }
     .bar span { position: absolute; top: 0; bottom: 0; background: var(--chart); border-radius: 0 4px 4px 0; min-width: 2px; }
     .bar span.down { border-radius: 4px 0 0 4px; }
+    .swatch { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 3px; }
+
+    /* Farbe einer Kategorie, siehe categoryPalette() */
+    .cat-1 { --cat: var(--hue-1); --cat-ink: var(--ink-light); }
+    .cat-2 { --cat: var(--hue-2); --cat-ink: var(--ink-dark); }
+    .cat-3 { --cat: var(--hue-3); --cat-ink: var(--ink-dark); }
+    .cat-4 { --cat: var(--hue-4); --cat-ink: var(--ink-dark); }
+    .cat-5 { --cat: var(--hue-5); --cat-ink: var(--ink-dark); }
+    .cat-6 { --cat: var(--hue-6); --cat-ink: var(--ink-light); }
+    .cat-7 { --cat: var(--hue-7); --cat-ink: var(--ink-light); }
+    .cat-8 { --cat: var(--hue-8); --cat-ink: var(--ink-dark); }
+    .cat-none { --cat: var(--hue-none); --cat-ink: var(--ink-light); }
+    .cat-dim { --cat: var(--hue-dim); }
+    .cat, .bar span.cat { background-color: var(--cat); }
+    .cat.stripes { --stripe: color-mix(in srgb, var(--surface) 60%, transparent); }
+    .cat.stripes { background-image: repeating-linear-gradient(45deg, transparent 0 3px, var(--stripe) 3px 5px); }
+    .cat.stripes.back { background-image: repeating-linear-gradient(-45deg, transparent 0 3px, var(--stripe) 3px 5px); }
 
     /* Diagramme */
     .chart-title { margin: 16px 0 10px; font-size: 13px; font-weight: 700; color: var(--muted); }
@@ -548,6 +578,23 @@
         border-radius: 4px 4px 0 0;
     }
     .chart-col.down { border-radius: 0 0 4px 4px; }
+    /* Abschnitt einer gestapelten Säule. Die Lücke zum nächsten geht von seiner Länge ab, nur der
+       letzte (end) reicht bis an seinen Wert, so stimmt die Höhe der ganzen Säule. */
+    .chart-part {
+        position: absolute;
+        left: 50%;
+        bottom: var(--from);
+        width: calc(100% - 2px);
+        max-width: 24px;
+        height: max(1px, calc(var(--size) - 2px));
+        transform: translateX(-50%);
+    }
+    .chart-part.down { bottom: calc(var(--from) + 2px); }
+    .chart-part.end { bottom: var(--from); height: max(1px, var(--size)); border-radius: 4px 4px 0 0; }
+    .chart-part.down.end { border-radius: 0 0 4px 4px; }
+    /* Die hervorgehobene Kategorie bleibt auch bei kleinen Beträgen sichtbar. */
+    .chart-part.cat.picked { z-index: 1; min-height: 4px; background-image: none; }
+    .chart-plot.tall { height: 220px; }
     .chart-slot.on { background: var(--theme-gray-150); border-radius: 4px; }
     .chart-plot svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
     .chart-plot .area { fill: var(--chart); opacity: 0.1; }
@@ -563,6 +610,14 @@
         transform: translate(-50%, 50%);
         pointer-events: none;
     }
+    .pie { position: relative; margin-bottom: 14px; border-radius: 6px; text-align: center; }
+    .pie svg { width: 100%; max-width: 230px; overflow: visible; }
+    .pie path { fill: var(--cat); stroke: var(--surface); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; transition: opacity 0.12s; }
+    .pie .picked path:not(.on) { opacity: 0.35; }
+    .pie .fill { fill: var(--cat); }
+    .pie .stripe { fill: var(--surface); opacity: 0.6; }
+    .pie text { fill: var(--cat-ink); font-size: 11px; font-weight: 700; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+    .pie .chart-tip { text-align: left; }
     .chart-x { position: relative; height: 14px; margin-top: 8px; font-size: 11px; line-height: 1; color: var(--muted); }
     .chart-x span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
     .chart-x .first { transform: none; }
@@ -585,7 +640,10 @@
     .chart-tip strong { color: var(--text-strong); }
     .chart-tip .key { display: inline-block; width: 12px; height: 3px; margin-right: 6px; border-radius: 2px; vertical-align: 3px; }
     .chart-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 4px 0 8px; font-size: 13px; color: var(--muted); }
-    .chart-legend .swatch { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 3px; }
+    .chart-legend[hidden] { display: none; }
+    .chart-legend button { min-height: 28px; padding: 2px 0; border: none; background: none; color: inherit; font: inherit; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
+    .chart-legend button:hover { color: var(--text-strong); }
+    .chart-legend button[aria-pressed="true"] { color: var(--text-strong); font-weight: 700; }
     .pair-chart { margin-bottom: 14px; }
     .pair-row { position: relative; padding: 6px 0; border-radius: 6px; font-size: 14px; }
     .pair-row .label { margin-bottom: 4px; overflow-wrap: anywhere; }
@@ -695,14 +753,14 @@
 <div class="container">
     <main id="app"></main>
     <noscript>Kwidt braucht JavaScript.</noscript>
-    <div class="footer-info">v<span id="versionNumber">1.47</span></div>
+    <div class="footer-info">v<span id="versionNumber">1.48</span></div>
 </div>
 <div id="toast" role="status" hidden></div>
 
 <script src="../fileshare/vendor/peerjs.min.js"></script>
 <script src="../fileshare/vendor/qrcode.min.js"></script>
 <!-- ?v= immer zusammen mit der Versionsnummer oben ändern: Sonst läuft die neue Seite mit alten Skripten aus dem Browser-Cache. -->
-<script src="core.js?v=1.47"></script>
-<script src="app.js?v=1.47"></script>
+<script src="core.js?v=1.48"></script>
+<script src="app.js?v=1.48"></script>
 </body>
 </html>

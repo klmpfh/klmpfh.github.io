@@ -200,14 +200,6 @@ textarea::placeholder {
     color: var(--theme-gray-400);
 }
 
-.check {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 40px;
-    font-size: 13px;
-}
-
 input[type="checkbox"] {
     width: 18px;
     height: 18px;
@@ -650,6 +642,17 @@ table {
 }
 
 .step { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr) 32px; }
+.cost-row { grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.9fr) minmax(0, 1.1fr) minmax(0, 1.8fr) minmax(0, 0.8fr) 32px; }
+.cost-split { display: flex; gap: 8px; min-width: 0; }
+.cost-split select { flex: 1 1 0; }
+.cost-split .input-wrap { flex: 0 0 84px; }
+.cost-split .input-wrap[hidden],
+.cost-persons[hidden] { display: none; }
+.cost-mine { font-variant-numeric: tabular-nums; text-align: right; }
+.cost-row:not(.room-head) .cost-mine { font-size: 13px; font-weight: 600; }
+.cost-persons { margin-bottom: 12px; }
+.cost-total { font-weight: 600; }
+.cost-total:empty { display: none; }
 .cost-row .input-wrap input,
 .step .input-wrap input { padding-right: 30px; }
 .cost-row .unit,
@@ -657,12 +660,12 @@ table {
 
 .cost-foot {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 12px;
 }
 
-.cost-foot .btn-add { width: auto; flex: 1 1 auto; }
-.cost-foot .muted:empty { display: none; }
+.cost-foot .btn-add { width: auto; flex: 1 1 160px; }
 
 .group-hint {
     margin: -4px 0 10px;
@@ -670,7 +673,23 @@ table {
 }
 
 .steps-hint { margin-top: 14px; }
-.costs { max-width: 640px; }
+.costs { max-width: 980px; }
+
+@media (max-width: 760px) {
+    .cost-row {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 32px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--border);
+    }
+    .cost-row.room-head { display: none; }
+    .cost-row > input { grid-column: 1 / 3; grid-row: 1; }
+    .cost-row > .icon-btn { grid-column: 3; grid-row: 1; }
+    .cost-row > .input-wrap { grid-column: 1; }
+    .cost-row > select { grid-column: 2 / -1; }
+    .cost-split,
+    .cost-row > .cost-mine { grid-column: 1 / -1; }
+    .cost-row > .cost-mine::before { content: "Mein Anteil pro Monat: "; font-weight: 400; color: var(--muted); }
+}
 
 /* Private Nebenkosten je Wohnung an-/abwählen */
 .cost-checks {

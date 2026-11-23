@@ -121,40 +121,74 @@ var WK = (function () {
 
     /* ---------- WG / Untervermietung ---------- */
 
-    /** Anteil der Wohnung, der vermietet ist (für die steuerliche Aufteilung
-     *  der Kosten). Gemeinschaftsflächen (Wohnfläche minus alle Zimmer) werden
-     *  nach Köpfen aufgeteilt. Ohne Zimmergrößen: nach Anzahl der Zimmer. */
-    function rentedShare(flat) {
-        var rooms = (flat.wg && flat.wg.rooms) || [];
-        if (!rooms.length) return 0;
-        var rented = rooms.filter(function (r) { return !r.self; });
-        if (!rented.length) return 0;
-        var area = n(flat.area);
-        var allSized = rooms.every(function (r) { return n(r.size) > 0; });
-        if (area > 0 && allSized) {
-            var roomSum = rooms.reduce(function (s, r) { return s + n(r.size); }, 0);
-            var common = Math.max(0, area - roomSum);
-            var rentedArea = rented.reduce(function (s, r) { return s + n(r.size); }, 0) + common * rented.length / rooms.length;
-            return Math.min(1, rentedArea / Math.max(area, roomSum));
-        }
-        return rented.length / rooms.length;
+    /** WG-Einnahmen. Steuer auf die Untermiete ist bewusst nicht eingerechnet. */
+    function sublet(a, flat) {
+        var wg = flat.wg || {};
+        var rooms = wg.rooms || [];
+        a.roomsRented = rooms.filter(function (r) { return !r.self; }).length;
+        a.persons = rooms.length;
+        a.rentGross = rooms.reduce(function (s, r) { return s + (r.self ? 0 : n(r.rent)); }, 0);
+        a.rentEff = a.rentGross * (1 - Math.min(100, n(wg.vacancyPct)) / 100);
     }
 
     /* ---------- Private Nebenkosten ----------
        In "Meine Finanzen" gepflegt (Strom, Internet, Rundfunkbeitrag …) und
        für jede Wohnung gültig. Eine Wohnung kann einzelne Posten abwählen,
        wenn sie dort schon in Warmmiete oder Hausgeld enthalten sind
-       (flat.coveredCosts = { costId: true }). */
+       (flat.coveredCosts = { costId: true }).
+
+       Jeder Posten = Betrag + Zeitraum (every: alle so viele Monate) +
+       Aufteilung (split) und wird auf zwei Monatswerte zurückgeführt:
+       gross = für die ganze Wohnung, mine = mein Anteil. In die Wohnkosten
+       geht nur mine ein.
+         equal   Betrag für die Wohnung, gleichmäßig durch alle Personen
+         percent Betrag für die Wohnung, mein Anteil in % (leer = gleichmäßig)
+         person  Betrag gilt je Person
+         all     zahle ich komplett – auch wenn Mitbewohner ihren Teil schon
+                 mit der Warmmiete zahlen (die zählt ja als Einnahme) */
+
+    // [Monate, Beschriftung]
+    var COST_EVERY = [[1, 'pro Monat'], [2, 'alle 2 Monate'], [3, 'pro Quartal'], [6, 'pro Halbjahr'], [12, 'pro Jahr']];
+    var COST_SPLIT = [['equal', 'gleichmäßig geteilt'], ['percent', 'mein Anteil in %'], ['person', 'Betrag je Person'], ['all', 'zahle ich komplett']];
+
+    /** Personen, die sich die Kosten teilen. Je Wohnung überschreibbar, sonst
+     *  ich + vermietete Zimmer; ohne Zimmer bzw. ohne Wohnung (= heute) der
+     *  Wert aus "Meine Finanzen". */
+    function personCount(p, flat) {
+        var rooms = (flat && flat.wg && flat.wg.rooms) || [];
+        var v = flat && isSet(flat.persons) ? n(flat.persons)
+            : rooms.length ? 1 + rooms.filter(function (r) { return !r.self; }).length
+            : n(p.persons);
+        return Math.max(1, Math.round(v));
+    }
+
+    /** Ein Posten pro Monat bei so vielen Personen. */
+    function costMonthly(c, count) {
+        var base = n(c.amount) / (n(c.every) > 0 ? n(c.every) : 1);
+        if (c.split === 'person') return { gross: base * count, mine: base, share: 1 / count };
+        var share = c.split === 'all' ? 1
+            : c.split === 'percent' && isSet(c.sharePct) ? pct100(c.sharePct) / 100
+            : 1 / count;
+        return { gross: base, mine: base * share, share: share };
+    }
 
     function privateCosts(p, flat) {
         var covered = (flat && flat.coveredCosts) || {};
+        var count = personCount(p, flat);
         var items = (p.privateCosts || []).map(function (c) {
-            return { id: c.id, name: c.name, amount: n(c.amount), covered: !!covered[c.id] };
+            var m = costMonthly(c, count);
+            return { id: c.id, name: c.name, gross: m.gross, mine: m.mine, covered: !!covered[c.id] };
         });
+        function sum(key, test) {
+            return items.reduce(function (s, c) { return s + (!test || test(c) ? c[key] : 0); }, 0);
+        }
+        function counts(c) { return !c.covered; }
         return {
             items: items,
-            total: items.reduce(function (s, c) { return s + (c.covered ? 0 : c.amount); }, 0),
-            all: items.reduce(function (s, c) { return s + c.amount; }, 0)
+            persons: count,
+            total: sum('mine', counts),      // mein Anteil, der hier zählt
+            gross: sum('gross', counts),     // dasselbe für die ganze Wohnung
+            all: sum('mine')                 // mein Anteil inkl. abgewählter Posten
         };
     }
 
@@ -189,22 +223,6 @@ var WK = (function () {
         return flat && flat.kind === 'rent' ? analyzeRent(flat, profile, peers) : analyzeBuy(flat, profile, peers);
     }
 
-    /** WG-Einnahmen, Steuer auf Untermiete. costBaseYear = jährliche Kosten der
-     *  Wohnung, von denen der vermietete Anteil absetzbar ist. */
-    function sublet(a, flat, p, costBaseYear) {
-        var wg = flat.wg || {};
-        var rooms = wg.rooms || [];
-        a.roomsRented = rooms.filter(function (r) { return !r.self; }).length;
-        a.persons = rooms.length;
-        a.rentGross = rooms.reduce(function (s, r) { return s + (r.self ? 0 : n(r.rent)); }, 0);
-        a.rentEff = a.rentGross * (1 - Math.min(100, n(wg.vacancyPct)) / 100);
-        a.rentedShare = rentedShare(flat);
-        a.deductible = a.rentedShare * costBaseYear;
-        a.taxableIncome = a.rentEff * 12 - a.deductible;
-        a.rentTax = wg.taxable && a.rentGross > 0 ? a.taxableIncome * n(p.taxRate) / 100 / 12 : 0;
-        a.rentNet = a.rentEff - a.rentTax;
-    }
-
     function analyzeRent(flat, profile, peers) {
         var p = profile;
         var a = { flat: flat, kind: 'rent', warnings: [] };
@@ -229,10 +247,9 @@ var WK = (function () {
         a.moveIn = a.deposit + a.oneOff;
         a.cashAfter = n(p.cash) - a.moveIn;
 
-        // WG: als Hauptmieter untervermieten – absetzbar ist der vermietete Anteil der Wohnkosten
-        sublet(a, flat, p, a.outflow * 12);
+        sublet(a, flat);
 
-        a.netHousing = a.outflow - a.rentNet;
+        a.netHousing = a.outflow - a.rentEff;
         a.currentRent = n(p.currentRent);
         a.currentHousing = currentHousing(p);
         a.vsRent = a.currentHousing > 0 ? a.netHousing - a.currentHousing : null;
@@ -253,7 +270,7 @@ var WK = (function () {
         var sum = 0;
         for (var y = 1; y <= 10; y++) {
             var cold = coldRentInYear(flat, y);
-            var net = a.netHousing + (cold - a.coldRent) * (1 - (flat.wg && flat.wg.taxable && a.rentGross > 0 ? a.rentedShare * n(p.taxRate) / 100 : 0));
+            var net = a.netHousing + cold - a.coldRent;
             a.rentTimeline.push({ year: y, cold: cold, warm: cold + a.serviceCharges + a.heating, net: net });
             sum += net;
         }
@@ -271,8 +288,8 @@ var WK = (function () {
         if (a.coldRent <= 0) { warn(a, 'info', 'Kaltmiete eingeben, um die Wohnung durchzurechnen.'); return; }
         if (a.netIncome > 0) {
             if (a.rentRatio <= 0.3) warn(a, 'ok', 'Warmmiete bei ' + pct(a.rentRatio) + ' des Nettoeinkommens – im Rahmen der 30-%-Faustregel.');
-            else if (a.rentRatio <= 0.4) warn(a, 'warn', 'Warmmiete bei ' + pct(a.rentRatio) + ' des Nettoeinkommens – über der 30-%-Faustregel' + (a.rentNet > 0 ? ', mit WG-Einnahmen ' + pct(a.burdenNet) + '.' : '.'));
-            else warn(a, a.rentNet > 0 && a.burdenNet <= 0.35 ? 'warn' : 'bad', 'Warmmiete bei ' + pct(a.rentRatio) + ' des Nettoeinkommens' + (a.rentNet > 0 ? ' (mit WG-Einnahmen ' + pct(a.burdenNet) + ')' : '') + ' – Faustregel: max. 30–35 %.');
+            else if (a.rentRatio <= 0.4) warn(a, 'warn', 'Warmmiete bei ' + pct(a.rentRatio) + ' des Nettoeinkommens – über der 30-%-Faustregel' + (a.rentEff > 0 ? ', mit WG-Einnahmen ' + pct(a.burdenNet) + '.' : '.'));
+            else warn(a, a.rentEff > 0 && a.burdenNet <= 0.35 ? 'warn' : 'bad', 'Warmmiete bei ' + pct(a.rentRatio) + ' des Nettoeinkommens' + (a.rentEff > 0 ? ' (mit WG-Einnahmen ' + pct(a.burdenNet) + ')' : '') + ' – Faustregel: max. 30–35 %.');
             if (a.available < 0) warn(a, 'bad', 'Haushalt geht nicht auf: monatlich fehlen ' + eur(-a.available) + '.');
             if (a.roomsRented > 0 && a.netIncome - n(p.livingCosts) - n(p.otherDebt) - a.outflow < 0) {
                 warn(a, 'warn', 'Ohne Untermieter geht der Haushalt nicht auf (Leerstand / Auszug einplanen).');
@@ -418,14 +435,10 @@ var WK = (function () {
         a.runningCosts = a.hoa + a.propertyTax + a.maintenance + a.utilities + a.private;
         a.outflow = a.payment + a.runningCosts;
 
-        // WG-Einnahmen
-        var wg = flat.wg || {};
-        a.afaBase = Math.max(0, a.price - a.inventory + a.closing) * n(wg.buildingPct) / 100;
-        a.afa = a.afaBase * n(wg.afaPct) / 100;
-        sublet(a, flat, p, a.interestYear1 + (a.hoa + a.maintenance + a.utilities + a.private) * 12 + n(flat.propertyTax) + a.afa);
+        sublet(a, flat);
 
         // Monatsbilanz
-        a.netHousing = a.outflow - a.rentNet;
+        a.netHousing = a.outflow - a.rentEff;
         a.currentRent = n(p.currentRent);
         a.currentHousing = currentHousing(p);
         a.vsRent = a.currentHousing > 0 ? a.netHousing - a.currentHousing : null;
@@ -433,7 +446,7 @@ var WK = (function () {
         a.opportunity = a.equity * n(p.altReturn) / 100 / 12;
         // "Echte Kosten": was wirklich weg ist – Zinsen, Nebenkosten, entgangene
         // Rendite aufs Eigenkapital, abzüglich WG-Einnahmen. Tilgung ist Sparen.
-        a.trueCost = a.interestYear1 / 12 + a.runningCosts + a.opportunity - a.rentNet;
+        a.trueCost = a.interestYear1 / 12 + a.runningCosts + a.opportunity - a.rentEff;
         a.trueVsRent = a.currentHousing > 0 ? a.trueCost - a.currentHousing : null;
 
         // Haushalt
@@ -600,7 +613,7 @@ var WK = (function () {
         var heating = 'Welche Heizung gibt es, wie alt ist sie, und ist ein Austausch (Gebäudeenergiegesetz) geplant?';
         var energy = 'Energieausweis anfordern: Verbrauch oder Bedarf, Energieklasse?';
         if (year === null) {
-            if (a.price > 0) review(a, 'info', 'Baujahr fehlt', 'Das Baujahr verrät viel über anstehende Sanierungen und bestimmt den Abschreibungssatz für die WG-Steuer.', ['Baujahr und Jahr der letzten größeren Sanierungen?']);
+            if (a.price > 0) review(a, 'info', 'Baujahr fehlt', 'Das Baujahr verrät viel über anstehende Sanierungen.', ['Baujahr und Jahr der letzten größeren Sanierungen?']);
         } else if (year < 1949) {
             review(a, 'info', 'Altbau (' + year + ')',
                 'Charme, aber typische Baustellen: alte Strom- und Wasserleitungen, Holzbalkendecken, Feuchte im Keller, eventuell Denkmalschutz (Auflagen, aber auch Steuervorteile).',
@@ -650,7 +663,7 @@ var WK = (function () {
                 ['Inventarliste mit Zeitwerten (Alter, Neupreis) für den Kaufvertrag anfordern.']);
         }
 
-        // WG & Steuer
+        // WG
         var wg = flat.wg || {};
         if (a.roomsRented > 0) {
             if (area > 0 && rooms.length && area / rooms.length < 15) {
@@ -665,20 +678,8 @@ var WK = (function () {
             if (n(wg.vacancyPct) <= 0) {
                 review(a, 'info', 'Kein Leerstand eingeplant', 'Auch in begehrten Lagen gibt es Wechsel und Suchzeiten – 3–8 % sind realistisch.', []);
             }
-            if (year !== null) {
-                var afaSuggest = year < 1925 ? 2.5 : year >= 2023 ? 3 : 2;
-                if (n(wg.afaPct) !== afaSuggest) {
-                    review(a, 'info', 'AfA-Satz passt nicht zum Baujahr',
-                        'Für Baujahr ' + year + ' gilt in der Regel ' + String(afaSuggest).replace('.', ',') + ' % (eingetragen: ' + String(n(wg.afaPct)).replace('.', ',') + ' %).', []);
-                }
-            }
-            if (n(wg.buildingPct) > 0 && (n(wg.buildingPct) < 50 || n(wg.buildingPct) > 90)) {
-                review(a, 'info', 'Gebäudeanteil ungewöhnlich (' + fmt1.format(n(wg.buildingPct)) + ' %)',
-                    'Nur der Gebäudeanteil wird abgeschrieben. Das Finanzamt rechnet ihn meist über Bodenrichtwert und Grundstücksanteil aus (Arbeitshilfe des Bundesfinanzministeriums).',
-                    ['Wie hoch ist der Bodenrichtwert, und wie groß ist der Grundstücksanteil der Wohnung?']);
-            }
             if (a.utilities <= 0 && a.private <= 0) {
-                review(a, 'info', 'Strom & Internet fehlen', 'In einer WG zahlst du diese meist vor und legst sie über die Warmmiete um – trag sie ein, sonst wirkt die Bilanz zu gut.', []);
+                review(a, 'info', 'Strom & Internet fehlen', 'In einer WG zahlst du diese meist vor und legst sie über die Warmmiete um oder teilst sie auf – trag sie ein, sonst wirkt die Bilanz zu gut.', []);
             }
         }
     }
@@ -806,6 +807,10 @@ var WK = (function () {
         STATES: STATES,
         DOCUMENTS: DOCUMENTS,
         transferTaxFor: transferTaxFor,
+        COST_EVERY: COST_EVERY,
+        COST_SPLIT: COST_SPLIT,
+        personCount: personCount,
+        costMonthly: costMonthly,
         privateCosts: privateCosts,
         coldRentInYear: coldRentInYear,
         analyze: analyze,
