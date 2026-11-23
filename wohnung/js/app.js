@@ -10,7 +10,8 @@
 
     var PROFILE_DEFAULTS = {
         cash: null, equity: null, reserve: null,
-        netIncome: null, livingCosts: null, otherDebt: null, currentRent: null,
+        netIncome: null, livingCosts: null, otherDebt: null, keepSaving: null, currentRent: null,
+        estRunning: null,   // laufende Kosten einer Kaufwohnung, leer = geschätzt (runningEstimate in calc.js)
         bankMaxLoan: null, bankMaxRate: null,
         altReturn: 2, appreciation: 1.5,
         state: '', notaryPct: 2, brokerPct: 3.57,
@@ -89,11 +90,12 @@
 
     /** self: das bin ich (genau eine Person, deren Finanzen im Profil stehen).
      *  netIncome/livingCosts/otherDebt: Pflichtangaben der anderen, daraus folgt
-     *  ihr Maximum im Monat für alles (personLimit in calc.js). rent: eigene
+     *  (mit keepSaving = will sie weiter sparen, freiwillig) ihr Maximum im
+     *  Monat für alles (personLimit in calc.js). rent: eigene
      *  Grenze, geht dem berechneten Maximum vor. includes: { Posten: false } = zahlt sie nicht über
      *  mich (running = Nebenkosten & Heizung bzw. Hausgeld, sonst privateCostId). */
     function newPerson() {
-        return { id: uid(), name: '', self: false, netIncome: null, livingCosts: null, otherDebt: null, rent: null, includes: {} };
+        return { id: uid(), name: '', self: false, netIncome: null, livingCosts: null, otherDebt: null, keepSaving: null, rent: null, includes: {} };
     }
 
     /** Wünsche gelten gemeinsam für alle. weights: { personId: 0–100 } – wie wichtig der Wunsch der jeweiligen Person ist. */
@@ -145,7 +147,7 @@
             ? data.people.filter(isObj).map(function (p) {
                 return { id: p.id ? String(p.id) : uid(), name: String(p.name || ''), self: p.self === true,
                     netIncome: numOrNull(p.netIncome), livingCosts: numOrNull(p.livingCosts), otherDebt: numOrNull(p.otherDebt),
-                    rent: numOrNull(p.rent),
+                    keepSaving: numOrNull(p.keepSaving), rent: numOrNull(p.rent),
                     includes: isObj(p.includes) ? Object.assign({}, p.includes) : {} };
             })
             : [newPerson(), newPerson()];
@@ -435,7 +437,7 @@
             ]).concat([
                 ['Lage & Ausstattung', 'Macht ein Zimmer teurer oder günstiger als die anderen. Beispiel: 15 m² mit Balkon (+5 %) zählen wie 15,75 m². Die Prozentwerte sind grobe Orientierung. Mit „Weiterer Zu-/Abschlag“ kannst du selbst nachregeln, z. B. −5 für eine Dachschräge oder +5 für einen Keller.'],
                 ['Miete an mich', 'Leer lassen, dann gilt die faire Miete (grau im Feld). Wer etwas anderes vereinbart, trägt hier den Betrag ein; darunter steht, wie weit er von der fairen Miete entfernt ist.'],
-                ['Maximum', 'Was die Person laut „Personen“ auf der Übersicht höchstens für alles zahlen kann, berechnet aus ihrem Einkommen. Ist die faire Miete höher, rechnet die Seite mit dem Maximum, und der Rest bleibt bei dir. Fehlen Angaben für die faire Miete, wird vorläufig gleichmäßig geteilt, höchstens bis zum Maximum (beim Kauf ohne Vergleichsmiete gilt das Maximum selbst).'],
+                ['Maximum', 'Was die Person laut „Personen“ auf der Übersicht höchstens für alles zahlen kann, berechnet aus ihrem Einkommen. Ist die faire Miete höher, rechnet die Seite mit dem Maximum, und der Rest bleibt bei dir. Fehlen Angaben für die faire Miete, wird vorläufig gleichmäßig geteilt, höchstens bis zum Maximum (beim Kauf ohne Vergleichsmiete zählt das Maximum, höchstens aber 35 % vom Netto).'],
                 ['Leerstand / Mietausfall', 'Puffer für Monate, in denen ein Zimmer leer steht oder die Miete ausbleibt. Bei einer festen Person (z. B. Partner:in) kannst du 0 % eintragen.']
             ]));
     }
@@ -729,6 +731,7 @@
         app.innerHTML = '';
 
         var budgetBox = el('div', { class: 'tiles' });
+        var waysBox = el('div');
         var listBox = el('div');
         var costsBox = el('div', { class: 'costs' });
 
@@ -744,10 +747,10 @@
             'Hier steht, wer mit einzieht und wie viel jede Person beitragen kann. Das gilt für alle Wohnungen. Ob eine Mietwohnung passt, prüft die Seite am gemeinsamen Einkommen aller, die dort ein Zimmer haben, und zusätzlich an deinem eigenen Teil.', [
                 ['Ich', 'Die Person, die kauft bzw. den Mietvertrag unterschreibt und deren Finanzen unten stehen. Alle anderen zahlen an sie.'],
                 ['Pflichtangaben', 'Nettoeinkommen, Lebenshaltung ohne Wohnen und andere Kreditraten, jeweils pro Monat. Gibt es einen Posten nicht, 0 eintragen. Erst wenn alle drei da sind, wird das Maximum berechnet, und das Einkommen zählt bei Mietwohnungen mit.'],
-                ['Wie das Maximum entsteht', '35 % vom Netto minus andere Kreditraten, höchstens das, was nach Lebenshaltung und Krediten übrig ist. Das Maximum gilt für alles zusammen: Miete, Nebenkosten, Strom, Internet usw.'],
+                ['Wie das Maximum entsteht', 'Netto − Lebenshaltung − andere Kreditraten − was die Person weiter sparen will. Davon bleiben 10 % als Luft. Die heutige Miete wird nicht abgezogen, weil sie wegfällt. Das Maximum gilt für alles zusammen: Miete, Nebenkosten, Strom, Internet usw.'],
                 ['Max. im Monat', 'Leer lassen, dann gilt das berechnete Maximum (grau im Feld). Will jemand weniger oder mehr zahlen, hier die eigene Grenze eintragen – sie geht vor. Zahlt jemand nichts, 0 eintragen; dann zählt auch das Einkommen nicht mit.'],
                 ['Zahlt über mich', 'Mit Haken: Du bezahlst die Rechnung, und die Person gibt dir ihren Anteil mit der Miete. Der Anteil ist deshalb kein Geld für Kredit oder Kaltmiete. Ohne Haken: Die Person zahlt ihren Anteil selbst, z. B. direkt an den Anbieter. Bei Nebenkosten & Heizung heißt ohne Haken: Sie zahlt dir den Anteil zusätzlich zur Miete.'],
-                ['Was davon im Budget zählt', '„Was ist drin?“ rechnet mit dem, was vom Maximum nach den privaten Nebenkosten übrig ist. Für die Kreditrate zählen davon nur 70 %, weil Banken Mieteinnahmen meist nicht voll anrechnen. Was eine Person wirklich zahlt, steht in jeder Wohnung.']
+                ['Was davon im Budget zählt', '„Was ist drin?“ rechnet mit dem, was vom Maximum nach den privaten Nebenkosten übrig ist, aber höchstens mit 30 % vom Netto der Person (mehr Miete wäre unrealistisch). Für die Bank zählen davon nur 70 %, weil Banken Mieteinnahmen meist nicht voll anrechnen. Was eine Person wirklich zahlt, steht in jeder Wohnung.']
             ])], {
             hint: 'Wer zusammen wohnen will. Alle hier teilen sich die privaten Nebenkosten und gewichten die Wünsche. ' +
                 'Für alle außer dir sind Einkommen, Lebenshaltung und Kredite Pflicht: Daraus ergibt sich, was die Person im Monat höchstens für alles zusammen zahlen kann. ' +
@@ -766,9 +769,10 @@
             ]),
             group('Einkommen & Ausgaben (monatlich)', [
                 numField(p, 'netIncome', 'Nettoeinkommen', { unit: '€' }),
-                numField(p, 'livingCosts', 'Lebenshaltung ohne Wohnen', { unit: '€', hint: 'Essen, Mobilität, Versicherungen, Freizeit, Sparpläne …' }),
+                numField(p, 'livingCosts', 'Lebenshaltung ohne Wohnen', { unit: '€', hint: 'Essen, Mobilität, Versicherungen, Freizeit … Ohne Miete und ohne Sparen.' }),
                 numField(p, 'otherDebt', 'Andere Kreditraten', { unit: '€', hint: 'Auto, Studienkredit, Ratenkäufe.' }),
-                numField(p, 'currentRent', 'Aktuelle Warmmiete', { unit: '€', hint: 'Vergleichswert: Was kostet Wohnen heute? Die privaten Nebenkosten unten kommen dazu.' })
+                numField(p, 'keepSaving', 'Will ich weiter sparen', { unit: '€', hint: 'Optional: Sparpläne, Altersvorsorge. Geht nicht in die Rate.' }),
+                numField(p, 'currentRent', 'Aktuelle Warmmiete', { unit: '€', hint: 'Vergleichswert: Was kostet Wohnen heute? Die privaten Nebenkosten unten kommen dazu. Fällt beim Umzug weg und wird deshalb nirgends abgezogen.' })
             ]),
             el('div', { class: 'group' }, [
                 el('h3', { class: 'group-title', text: 'Private Nebenkosten' }),
@@ -782,12 +786,18 @@
             group('Kreditwürdigkeit (laut Bank)', [
                 numField(p, 'bankMaxLoan', 'Max. Darlehen', { unit: '€', dec: 0, hint: 'Was die Bank dir maximal leihen würde.' }),
                 numField(p, 'bankMaxRate', 'Max. Monatsrate', { unit: '€', hint: function () {
-                    return 'Leer = Faustregel 35 % vom Netto' + rentsText(WK.budget(p)) + ' minus andere Kredite' + result(p.netIncome, eur(WK.budget(p).ruleRate)) + '.';
+                    var b = WK.budget(p, state.flats);
+                    return 'Leer = übliche Grenze: 40 % vom Netto' + rentsText(b) + ' minus andere Kredite' + result(p.netIncome, eur(b.bankRule)) + '.';
                 } })
             ]),
             group('Annahmen', [
                 numField(p, 'altReturn', 'Alternative Rendite fürs Eigenkapital', { unit: '%', hint: 'Was das Geld sonst bringen würde (Tagesgeld, ETF) – fließt in die „echten Kosten“.' }),
-                numField(p, 'appreciation', 'Wertsteigerung pro Jahr', { unit: '%' })
+                numField(p, 'appreciation', 'Wertsteigerung pro Jahr', { unit: '%' }),
+                numField(p, 'estRunning', 'Laufende Kosten einer Kaufwohnung', { unit: '€', hint: function () {
+                    var e = WK.runningEstimate(state.flats);
+                    return 'Hausgeld, Grundsteuer und eigene Rücklage pro Monat, nur für „Was ist drin?“. Leer = ' +
+                        (e.count ? 'Schnitt deiner Kaufwohnungen' : '5 €/m² bei 70 m²') + ' (' + eur(e.value) + ').';
+                } })
             ]),
             group('Standards für neue Wohnungen', [
                 stateSelect(p, 'state', 'Bundesland'),
@@ -799,7 +809,8 @@
                 numField(p, 'defFollowRate', 'Anschlusszins (Annahme)', { unit: '%' })
             ]),
             el('h3', { class: 'group-title', text: 'Was ist drin?' }),
-            budgetBox
+            budgetBox,
+            waysBox
         ], { hint: 'Alles Persönliche, das für jede Wohnung gleich ist. Wird nur in diesem Browser gespeichert.' }));
 
         var wishStatus = el('div', { class: 'wish-status' });
@@ -845,12 +856,12 @@
         currentUpdate = function () {
             updateLimits(peopleBox);
             updateIncludes(peopleBox);
-            var b = WK.budget(p), off = b.rentsGross - b.rents;
+            var b = WK.budget(p, state.flats), off = b.rentsGross - b.rents;
             peopleSum.textContent = b.rentsGross > 0 ? 'Zusammen höchstens ' + eur(b.rentsGross) + ' im Monat' +
                 (off > 0.5 ? ', nach privaten Nebenkosten ' + eur(b.rents) : '') : '';
             costPeople.textContent = costPeopleText();
             updateCostsEditor(costsBox);
-            renderBudget(budgetBox);
+            renderBudget(budgetBox, waysBox);
             renderWishStatus(wishStatus);
             renderFlatList(listBox);
             linkBox.innerHTML = '';   // ein schon erzeugter Link wäre nach Änderungen veraltet
@@ -957,23 +968,69 @@
         return tile('Max. Eigenkapital', eur(max), sub.join(' · '), free < 0 || diff < 0 ? 'tile-warn' : '');
     }
 
-    /** Zusatz zur Faustregel für die Monatsrate. */
+    /** Zusatz zur Bankgrenze für die Monatsrate. */
     function rentsText(b) {
-        return b.rents > 0 ? ' + 70 % von max. ' + eur(b.rents) + ' der anderen' : '';
+        return b.rentsWarm > 0 ? ' + 70 % von max. ' + eur(b.rentsWarm) + ' der anderen' : '';
     }
 
-    function renderBudget(box) {
+    /** Was das Kaufpreis-Budget bremst. */
+    var LIMIT_TEXT = { own: 'gebremst durch deinen Haushalt', bank: 'gebremst durch die Bankgrenze', loan: 'gebremst durch den Kreditrahmen der Bank' };
+
+    /** Rechenwege der beiden Raten. */
+    function renderWays(box, b) {
         var p = state.profile;
-        var b = WK.budget(p);
-        if (!(n(p.netIncome) > 0) && !(n(p.bankMaxLoan) > 0)) {
+        if (b.maxRate === null) { box.innerHTML = ''; return; }
+        var own = '<h4>Was du tragen kannst</h4>';
+        if (b.affordRate === null) own += '<p class="muted small">Dafür fehlt noch: ' + (n(p.netIncome) > 0 ? 'Lebenshaltung ohne Wohnen' : 'Nettoeinkommen') + '.</p>';
+        else {
+            var today = WK.currentHousing(p);
+            own += '<table class="calc">' +
+                line('Nettoeinkommen', eur(n(p.netIncome))) +
+                line('Lebenshaltung ohne Wohnen', '− ' + eur(n(p.livingCosts))) +
+                (n(p.otherDebt) > 0 ? line('Andere Kreditraten', '− ' + eur(n(p.otherDebt))) : '') +
+                line('Übrig fürs Wohnen und Sparen', eur(b.surplus), 'sum') +
+                (today > 0 ? line('heute davon: Wohnen ' + eur(today) + ', zum Sparen', eur(b.surplus - today), 'muted-row') : '') +
+                line('Laufende Kosten der Wohnung (' + (WK.isSet(p.estRunning) ? 'eingetragen' : 'geschätzt') + ')', '− ' + eur(b.running)) +
+                (b.private > 0 ? line('Private Nebenkosten (mein Anteil)', '− ' + eur(b.private)) : '') +
+                (b.saving > 0 ? line('Weiter sparen', '− ' + eur(b.saving)) : '') +
+                line('10 % Luft', '− ' + eur(b.buffer)) +
+                (b.rentsWarm > 0 ? line('Höchstens von den anderen', '+ ' + eur(b.rentsWarm)) : '') +
+                line('Tragbare Rate', eur(b.affordRate), 'sum strong') + '</table>';
+        }
+        var bank = '<h4>Was die Bank voraussichtlich mitmacht</h4>';
+        if (n(p.bankMaxRate) > 0) bank += '<table class="calc">' + line('Max. Monatsrate laut Bank', eur(b.bankRate), 'strong') + '</table>';
+        else bank += '<table class="calc">' +
+            line('Nettoeinkommen', eur(n(p.netIncome))) +
+            (b.rentsWarm > 0 ? line('70 % von ' + eur(b.rentsWarm) + ' Miete der anderen', '+ ' + eur(0.7 * b.rentsWarm)) : '') +
+            line('Davon 40 %', eur(0.4 * (n(p.netIncome) + 0.7 * b.rentsWarm)), 'sum') +
+            (n(p.otherDebt) > 0 ? line('Andere Kreditraten', '− ' + eur(n(p.otherDebt))) : '') +
+            line('Bankgrenze', eur(b.bankRule), 'sum strong') + '</table>' +
+            '<p class="muted small">Die meisten Banken lehnen Raten über 40 % vom Netto ab, empfohlen werden oft 35 %. Für die Lebenshaltung setzen sie eigene Pauschalen an. Nennt dir deine Bank eine Rate, trag sie oben ein – dann gilt die.</p>';
+        var note = '';
+        if (b.affordRate !== null) {
+            var left = b.surplus - b.running - b.private - b.maxRate + b.rentsWarm;
+            note = 'Für das Darlehen zählt die kleinere Rate (' + eur(b.maxRate) + '). Damit ' + (left >= 0
+                ? 'bleiben dir im Monat ' + eur(left) + ' zum Sparen und als Luft'
+                : 'fehlen dir im Monat ' + eur(-left)) +
+                (b.rentsWarm > 0 ? ', wenn die anderen ' + eur(b.rentsWarm) + ' beitragen' : '') + '.';
+        }
+        box.innerHTML = '<div class="budget-ways"><div>' + own + '</div><div>' + bank + '</div></div>' + (note ? '<p class="small">' + esc(note) + '</p>' : '');
+    }
+
+    function renderBudget(box, ways) {
+        var p = state.profile;
+        var b = WK.budget(p, state.flats);
+        renderWays(ways, b);
+        if (!(n(p.netIncome) > 0) && !(n(p.bankMaxLoan) > 0) && !(n(p.bankMaxRate) > 0)) {
             box.innerHTML = '<p class="muted">Trag Nettoeinkommen oder den Kreditrahmen der Bank ein, dann steht hier dein grobes Budget.</p>';
             return;
         }
         box.innerHTML =
-            tile('Max. Darlehen', eur(b.maxLoan), n(p.bankMaxLoan) > 0 ? (b.loanFromRate < n(p.bankMaxLoan) ? 'begrenzt durch die Rate' : 'laut Bank') : 'aus der Rate bei ' + fmtInput(n(p.defRate) + n(p.defRepay), 2) + ' % Zins + Tilgung') +
-            tile('Max. Monatsrate', eur(b.maxRate), n(p.bankMaxRate) > 0 ? 'laut Bank' : 'Faustregel 35 % vom Netto' + rentsText(b) + (n(p.otherDebt) > 0 ? ' minus andere Kredite' : '')) +
-            tile('Kaufpreis-Budget', eur(b.maxPrice), 'Eigenkapital + Darlehen, abzgl. ~' + fmtInput(b.closingPct, 1) + ' % Nebenkosten') +
-            (n(p.netIncome) > 0 ? tile('Max. Warmmiete', eur(b.maxWarmRent), 'Faustregel 30 % vom Netto' + (b.rentsWarm > 0 ? ' + max. ' + eur(b.rentsWarm) + ' der anderen' : '')) : '') +
+            tile('Rate, die du tragen kannst', eur(b.affordRate), b.affordRate === null ? 'Lebenshaltung oder Nettoeinkommen fehlt' : 'nach allen Kosten' + (b.saving > 0 ? ', Sparen' : '') + ' und 10 % Luft' + (b.rentsWarm > 0 ? ', mit max. ' + eur(b.rentsWarm) + ' der anderen' : '')) +
+            tile('Rate, die die Bank mitmacht', eur(b.bankRate), b.bankRate === null ? 'Nettoeinkommen fehlt' : n(p.bankMaxRate) > 0 ? 'laut Bank' : 'üblich: 40 % vom Netto' + rentsText(b) + (n(p.otherDebt) > 0 ? ' minus andere Kredite' : '')) +
+            tile('Max. Darlehen', eur(b.maxLoan), b.limit === 'loan' ? 'Kreditrahmen laut Bank' : 'aus ' + eur(b.maxRate) + ' Rate bei ' + fmtInput(n(p.defRate) + n(p.defRepay), 2) + ' % Zins + Tilgung') +
+            tile('Kaufpreis-Budget', eur(b.maxPrice), 'Eigenkapital + Darlehen, abzgl. ~' + fmtInput(b.closingPct, 1) + ' % Nebenkosten · ' + LIMIT_TEXT[b.limit]) +
+            (n(p.netIncome) > 0 ? tile('Max. Warmmiete', eur(b.maxWarmRent), 'Faustregel 30 % vom Netto' + (b.rentsWarm > 0 ? ' + max. ' + eur(b.rentsWarm) + ' der anderen' : '') + (b.affordWarm !== null ? ' · tragen ' + (state.people.length > 1 ? 'könntet ihr' : 'könntest du') + ' bis ' + eur(b.affordWarm) : '')) : '') +
             equityTile(p);
     }
 
@@ -1033,7 +1090,7 @@
      *  wandern zu ihr zurück, sobald für p eigene Angaben da sind; sonst bleiben
      *  sie stehen (dann war nur die falsche Person markiert). */
     function setMe(p) {
-        var old = mePerson(state.people), keys = ['netIncome', 'livingCosts', 'otherDebt'];
+        var old = mePerson(state.people), keys = ['netIncome', 'livingCosts', 'otherDebt', 'keepSaving'];
         var swap = keys.some(function (k) { return WK.isSet(p[k]); });
         if (swap) keys.forEach(function (k) {
             old[k] = state.profile[k];
@@ -1085,8 +1142,9 @@
             if (!p.self) box.appendChild(el('div', { class: 'person-fin' }, [
                 el('div', { class: 'grid' }, [
                     numField(p, 'netIncome', 'Nettoeinkommen', { unit: '€', hint: 'Pflicht, pro Monat.' }),
-                    numField(p, 'livingCosts', 'Lebenshaltung ohne Wohnen', { unit: '€', hint: 'Pflicht: Essen, Mobilität, Versicherungen, Freizeit …' }),
-                    numField(p, 'otherDebt', 'Andere Kreditraten', { unit: '€', hint: 'Pflicht: Auto, Studienkredit, Ratenkäufe. 0, wenn keine.' })
+                    numField(p, 'livingCosts', 'Lebenshaltung ohne Wohnen', { unit: '€', hint: 'Pflicht: Essen, Mobilität, Versicherungen, Freizeit … Ohne Miete und Sparen.' }),
+                    numField(p, 'otherDebt', 'Andere Kreditraten', { unit: '€', hint: 'Pflicht: Auto, Studienkredit, Ratenkäufe. 0, wenn keine.' }),
+                    numField(p, 'keepSaving', 'Will weiter sparen', { unit: '€', hint: 'Optional: geht nicht ins Wohnen.' })
                 ]),
                 el('p', { class: 'small person-limit', 'data-limit': p.id })
             ]));
@@ -1119,10 +1177,10 @@
             return 'Es fehlt noch: ' + WK.andList(l.missing) + '. ' +
                 (l.own !== null ? 'Bis dahin gilt die eingetragene Grenze von ' + eur(l.own) + '.' : 'Bis dahin lässt sich kein Maximum berechnen.');
         }
-        var how = (l.byRest
-            ? eur(n(p.netIncome)) + ' Netto − ' + eur(n(p.livingCosts)) + ' Lebenshaltung'
-            : '35 % von ' + eur(n(p.netIncome)) + ' Netto') +
-            (n(p.otherDebt) > 0 ? ' − ' + eur(n(p.otherDebt)) + ' Kredite' : '');
+        var how = eur(n(p.netIncome)) + ' Netto − ' + eur(n(p.livingCosts)) + ' Lebenshaltung' +
+            (n(p.otherDebt) > 0 ? ' − ' + eur(n(p.otherDebt)) + ' Kredite' : '') +
+            (n(p.keepSaving) > 0 ? ' − ' + eur(n(p.keepSaving)) + ' Sparen' : '') +
+            (l.auto > 0 ? ', davon 10 % Luft' : '');
         if (l.own === null) return 'Maximum: ' + eur(l.auto) + ' im Monat (' + how + ')';
         var diff = l.own - l.auto;
         return 'Es gilt die eingetragene Grenze von ' + eur(l.own) +
@@ -1926,6 +1984,7 @@
                 (n(p.otherDebt) > 0 ? line('Andere Kreditraten', '− ' + eur(n(p.otherDebt))) : '') +
                 line('Netto-Wohnkosten', '− ' + eur(a.netHousing)) +
                 line('Frei verfügbar', eur(a.available), 'sum strong') +
+                (a.affordRate !== null ? line('Tragbare Rate hier (' + (n(p.keepSaving) > 0 ? 'nach ' + eur(n(p.keepSaving)) + ' Sparen und' : 'nach') + ' 10 % Luft)', eur(a.affordRate)) : '') +
                 line('Kreditraten / Netto (ohne WG)', pct(a.burden)) +
                 line('Wohnkosten / Netto (mit WG)', pct(a.burdenNet)) +
                 '</table>';

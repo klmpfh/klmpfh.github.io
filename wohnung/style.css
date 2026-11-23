@@ -832,6 +832,17 @@ table {
 .person-me { display: flex; justify-content: center; }
 .person .input-wrap input { padding-right: 30px; }
 .person .unit { right: 8px; }
+/* Rechenwege unter „Was ist drin?“ */
+.budget-ways {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+    gap: 8px 32px;
+    max-width: 860px;
+    margin: 16px 0 10px;
+}
+
+.budget-ways h4 { font-size: 13.5px; margin-bottom: 6px; }
+
 .person-fin {
     margin: 0 0 8px;
     padding-left: 12px;
