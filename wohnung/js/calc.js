@@ -121,32 +121,139 @@ var WK = (function () {
 
     /* ---------- WG / Untervermietung ---------- */
 
-    /** Warmmiete je Zimmer. Ohne eigenen Betrag gilt, was die Person laut
-     *  "Personen" zahlt (p.personRents) – je Person und Wohnung nur einmal. */
-    function roomRents(rooms, p) {
-        var rents = p.personRents || {}, used = {};
-        rooms.forEach(function (r) { if (r.person && isSet(r.rent)) used[r.person] = true; });
-        return rooms.map(function (r) {
-            if (r.self) return 0;
-            if (isSet(r.rent)) return n(r.rent);
-            if (!r.person || used[r.person]) return 0;
-            used[r.person] = true;
-            return n(rents[r.person]);
-        });
-    }
-
     function sum(list) {
         return list.reduce(function (s, v) { return s + v; }, 0);
     }
 
-    /** WG-Einnahmen. Steuer auf die Untermiete ist bewusst nicht eingerechnet. */
+    /** Was eine Person über mich zahlt (p.personIncludes, abgewählt = false):
+     *  running = Nebenkosten & Heizung bzw. umlegbares Hausgeld, sonst private
+     *  Nebenkosten. Bei "jemand anderes" nur running. */
+    function includes(p, id, key) {
+        if (!id) return key === 'running';
+        return ((p.personIncludes || {})[id] || {})[key] !== false;
+    }
+
+    function sumOther(items) {
+        return sum(items.map(function (c) { return c.other; }));
+    }
+
+    /* ---------- Faire Miete ----------
+       Kaltmiete der Wohnung (bei Kauf: Vergleichsmiete pro m² × Fläche, darin
+       stecken Lage, Baujahr und Ausstattung der Wohnung), verteilt nach Zimmer-
+       größe mit Zu-/Abschlägen für Lage und Ausstattung des Zimmers; die
+       Gemeinschaftsfläche (Küche, Bad, Flur) zählt für alle gleich. Dazu
+       Nebenkosten pro Kopf und der Anteil an den privaten Nebenkosten. */
+
+    // [Schlüssel, Beschriftung, Zu-/Abschlag in %] – Orientierungswerte
+    var FEATURES = [
+        ['bath', 'Eigenes Bad', 10],
+        ['balcony', 'Balkon / Terrasse', 5],
+        ['furnished', 'Möbliert', 10],
+        ['bright', 'Hell & ruhig', 5],
+        ['dark', 'Dunkel oder laut', -5],
+        ['pass', 'Durchgangszimmer', -10]
+    ];
+
+    /** Zu-/Abschlag eines Zimmers in %. */
+    function roomExtra(r) {
+        var f = r.features || {};
+        return n(r.extra) + sum(FEATURES.map(function (x) { return f[x[0]] ? x[2] : 0; }));
+    }
+
+    /** Teil des Hausgelds, den Mitbewohner mittragen (ohne Rücklage & Verwaltung). */
+    function hoaApportioned(flat) {
+        return isSet(flat.hoaApport) ? Math.min(n(flat.hoaApport), n(flat.hoa)) : 0.65 * n(flat.hoa);
+    }
+
+    /** Wer wie viel zahlt. Eine Gruppe = alle Zimmer einer Person.
+     *    due    fair, soweit über mich gezahlt; own: zahlt die Person selbst
+     *    max    Maximum der Person für alles zusammen (null = keins)
+     *    pay    damit wird gerechnet: eingetragene Miete, sonst die faire Miete
+     *           bis zum Maximum; fehlen dafür Angaben, das Maximum
+     *    short  was zur fairen Miete fehlt, weil das Maximum greift */
+    function rentPlan(flat, p) {
+        var rooms = (flat.wg && flat.wg.rooms) || [];
+        var isRent = flat.kind === 'rent';
+        var info = privateCosts(p, flat);
+        var names = p.personNames || {};
+        var area = n(flat.area);
+        var running = (isRent ? n(flat.serviceCharges) + n(flat.heatingCosts) : hoaApportioned(flat) + n(flat.propertyTax) / 12) / info.persons;
+
+        var missing = [];
+        if (!(area > 0)) missing.push('Wohnfläche');
+        if (isRent && !(n(flat.coldRent) > 0)) missing.push('Kaltmiete');
+        if (!isRent && !(n(flat.refRent) > 0)) missing.push('Vergleichsmiete pro m²');
+        rooms.forEach(function (r) {
+            if (!(n(r.size) > 0)) missing.push('Größe von „' + (r.name || 'Zimmer') + '“' + (names[r.person] ? ' (' + names[r.person] + ')' : ''));
+        });
+
+        var groups = [], byKey = {};
+        rooms.forEach(function (r, i) {
+            var key = r.person || '#' + i;
+            var g = byKey[key];
+            if (!g) {
+                g = byKey[key] = { person: r.person || null, name: names[r.person] || '', self: !!r.self, rooms: [], entered: false, rent: 0, weight: 0 };
+                groups.push(g);
+            }
+            g.rooms.push(i);
+            if (isSet(r.rent)) { g.entered = true; g.rent += n(r.rent); }
+            g.weight += n(r.size) * Math.max(0, 1 + roomExtra(r) / 100);
+        });
+        var common = Math.max(0, area - sum(rooms.map(function (r) { return n(r.size); }))) / (groups.length || 1);
+        groups.forEach(function (g) { g.weight += common; });
+        var weights = sum(groups.map(function (g) { return g.weight; }));
+        var ready = !missing.length && weights > 0;
+
+        groups.forEach(function (g) {
+            g.cold = !ready ? null : isRent ? n(flat.coldRent) * g.weight / weights : n(flat.refRent) * g.weight;
+            if (g.self) { g.pay = 0; return; }
+            var withRunning = includes(p, g.person, 'running');
+            g.items = info.items.filter(function (c) { return c.other > 0 && includes(p, g.person, c.id); });
+            g.running = withRunning ? running : 0;
+            g.extra = withRunning ? 0 : running;   // zahlt den Anteil zusätzlich zur Miete
+            g.priv = sumOther(g.items);
+            g.own = g.person ? g.extra + sumOther(info.items) - g.priv : g.extra;
+            g.max = g.person && isSet((p.personRents || {})[g.person]) ? n(p.personRents[g.person]) : null;
+            var limit = g.max === null ? Infinity : Math.max(0, g.max - g.own);
+            g.due = ready ? g.cold + g.running + g.priv : null;
+            g.over = g.entered && g.max !== null ? Math.max(0, g.rent - limit) : 0;
+            g.short = !g.entered && ready ? Math.max(0, g.due - limit) : 0;
+            g.source = g.entered ? 'entered' : !g.person ? 'none' : ready ? 'fair' : g.max !== null ? 'max' : 'none';
+            g.pay = g.entered ? g.rent : g.source === 'fair' ? Math.min(g.due, limit) : g.source === 'max' ? limit : 0;
+        });
+        return { groups: groups, missing: missing, ready: ready, info: info, gross: sum(groups.map(function (g) { return g.pay; })) };
+    }
+
+    /** WG-Einnahmen. Steuer auf die Untermiete ist bewusst nicht eingerechnet.
+     *  Von den privaten Nebenkosten zählt in den Wohnkosten nur mein Anteil –
+     *  steckt der Anteil einer Person in ihrer Miete, geht er hier wieder ab.
+     *    rentCash     gezahlte Mieten nach Leerstand
+     *    rentPrivate  darin enthaltene private Nebenkosten
+     *    rentRunning  darin enthaltener Anteil an Hausgeld bzw. Nebenkosten
+     *    rentExtra    derselbe Anteil, wenn er zusätzlich zur Miete gezahlt wird
+     *    rentEff      was die Wohnkosten senkt
+     *    rentLeft     was für Kredit bzw. Kaltmiete übrig bleibt */
     function sublet(a, flat, p) {
         var wg = flat.wg || {};
         var rooms = wg.rooms || [];
         a.roomsRented = rooms.filter(function (r) { return !r.self; }).length;
         a.persons = rooms.length;
-        a.rentGross = sum(roomRents(rooms, p));
-        a.rentEff = a.rentGross * (1 - Math.min(100, n(wg.vacancyPct)) / 100);
+        a.rentPlan = rentPlan(flat, p);
+        var keep = 1 - Math.min(100, n(wg.vacancyPct)) / 100;
+        var names = {};
+        a.rentGross = a.rentPlan.gross;
+        a.rentCash = a.rentGross * keep;
+        a.rentPrivate = a.rentRunning = a.rentExtra = 0;
+        a.rentPlan.groups.forEach(function (g) {
+            if (!(g.pay > 0)) return;
+            a.rentPrivate += g.priv;
+            a.rentRunning += g.running;
+            a.rentExtra += g.extra * keep;
+            g.items.forEach(function (c) { names[c.name] = true; });
+        });
+        a.rentPrivateNames = Object.keys(names);
+        a.rentEff = a.rentCash - a.rentPrivate + a.rentExtra;
+        a.rentLeft = a.rentCash - a.rentPrivate - a.rentRunning;
     }
 
     /* ---------- Private Nebenkosten ----------
@@ -194,7 +301,10 @@ var WK = (function () {
         var count = personCount(p, flat);
         var items = (p.privateCosts || []).map(function (c) {
             var m = costMonthly(c, count);
-            return { id: c.id, name: c.name, gross: m.gross, mine: m.mine, covered: !!covered[c.id] };
+            // other: was jede andere Person zahlt (0, wenn ich es komplett zahle
+            // oder der Posten in dieser Wohnung schon enthalten ist)
+            var other = count > 1 && !covered[c.id] ? (m.gross - m.mine) / (count - 1) : 0;
+            return { id: c.id, name: (c.name || '').trim() || 'Ohne Namen', gross: m.gross, mine: m.mine, other: other, covered: !!covered[c.id] };
         });
         function sum(key, test) {
             return items.reduce(function (s, c) { return s + (!test || test(c) ? c[key] : 0); }, 0);
@@ -301,6 +411,15 @@ var WK = (function () {
         return a;
     }
 
+    /** Faire Mieten gegen das Maximum der Personen. */
+    function checksFair(a) {
+        a.rentPlan.groups.forEach(function (g) {
+            if (g.self || !g.name) return;
+            if (g.entered && g.over > 0.5) warn(a, 'warn', g.name + ': Die eingetragene Miete liegt ' + eur(g.over) + ' über dem Maximum von ' + eur(g.max) + '.');
+            else if (g.short > 0.5) warn(a, 'warn', g.name + ': Fair wären ' + eur(g.due + g.own) + ' im Monat, das Maximum ist ' + eur(g.max) + ' – ' + eur(g.short) + ' trägst du.');
+        });
+    }
+
     function checksRent(a, p, flat) {
         if (a.coldRent <= 0) { warn(a, 'info', 'Kaltmiete eingeben, um die Wohnung durchzurechnen.'); return; }
         if (a.netIncome > 0) {
@@ -312,6 +431,7 @@ var WK = (function () {
                 warn(a, 'warn', 'Ohne Untermieter geht der Haushalt nicht auf (Leerstand / Auszug einplanen).');
             }
         }
+        checksFair(a);
         if (a.deposit > 3 * a.coldRent + 0.5) warn(a, 'bad', 'Kaution über drei Nettokaltmieten (' + eur(3 * a.coldRent) + ') – das ist gesetzlich nicht zulässig (§ 551 BGB).');
         if (n(p.reserve) > 0 || n(p.cash) > 0) {
             if (a.cashAfter < n(p.reserve)) warn(a, a.cashAfter < 0 ? 'bad' : 'warn', 'Nach Kaution und Einzug bleiben ' + eur(a.cashAfter) + ' – weniger als deine Notreserve von ' + eur(n(p.reserve)) + '.');
@@ -526,21 +646,22 @@ var WK = (function () {
         else if (a.ltv !== null && a.ltv > 0.8) warn(a, 'info', 'Beleihung über 80 % (mehr als ' + eur(0.8 * a.price) + ' Darlehen) – Banken verlangen ab hier oft höhere Zinsen; Konditionen prüfen.');
         if (a.overFinanced > 1) warn(a, 'warn', 'Zusätzliche Darlehen übersteigen den Bedarf um ' + eur(a.overFinanced) + '.');
         if (a.netIncome > 0) {
-            // Banken rechnen Mieteinnahmen meist nur zu ~60–80 % an; hier 70 %.
-            var incomeWg = a.netIncome + 0.7 * a.rentEff;
+            // Banken rechnen Kaltmieten meist nur zu ~60–80 % an; hier 70 %.
+            var incomeWg = a.netIncome + 0.7 * Math.max(0, a.rentLeft);
             var burdenWg = (a.payment + n(p.otherDebt)) / incomeWg;
             // Was die Faustregel für diese Wohnung als Rate übrig lässt
             var ruleRate = function (share) { return Math.max(0, share * incomeWg - n(p.otherDebt)); };
             var besides = n(p.otherDebt) > 0 ? ' neben deinen anderen Krediten' : '';
             if (a.burden <= 0.35) warn(a, 'ok', 'Kreditraten bei ' + pct(a.burden) + ' des Nettoeinkommens – schon ohne WG-Einnahmen.');
-            else if (burdenWg <= 0.35) warn(a, 'warn', 'Kreditraten bei ' + pct(a.burden) + ' des Nettoeinkommens; erst mit 70 % der WG-Miete angerechnet ' + pct(burdenWg) + ' – hängt an den Untermietern.');
-            else if (burdenWg <= 0.4) warn(a, 'warn', 'Kreditraten bei ' + pct(burdenWg) + ' von Netto + 70 % WG-Miete – knapp über der 35-%-Faustregel (max. ' + eur(ruleRate(0.35)) + ' Rate' + besides + ').');
-            else warn(a, 'bad', 'Kreditraten bei ' + pct(burdenWg) + ' von Netto + 70 % WG-Miete (ohne WG ' + pct(a.burden) + ') – Faustregel: max. 35–40 % (' + eurRange(ruleRate(0.35), ruleRate(0.4)) + ' Rate' + besides + ').');
+            else if (burdenWg <= 0.35) warn(a, 'warn', 'Kreditraten bei ' + pct(a.burden) + ' des Nettoeinkommens; erst mit 70 % der WG-Kaltmiete angerechnet ' + pct(burdenWg) + ' – hängt an den Untermietern.');
+            else if (burdenWg <= 0.4) warn(a, 'warn', 'Kreditraten bei ' + pct(burdenWg) + ' von Netto + 70 % WG-Kaltmiete – knapp über der 35-%-Faustregel (max. ' + eur(ruleRate(0.35)) + ' Rate' + besides + ').');
+            else warn(a, 'bad', 'Kreditraten bei ' + pct(burdenWg) + ' von Netto + 70 % WG-Kaltmiete (ohne WG ' + pct(a.burden) + ') – Faustregel: max. 35–40 % (' + eurRange(ruleRate(0.35), ruleRate(0.4)) + ' Rate' + besides + ').');
             if (a.available < 0) warn(a, 'bad', 'Haushalt geht nicht auf: monatlich fehlen ' + eur(-a.available) + '.');
         }
         if (a.roomsRented > 0 && a.netIncome > 0 && a.netIncome - n(p.livingCosts) - n(p.otherDebt) - a.outflow < 0) {
             warn(a, 'warn', 'Ohne Untermieter geht der Haushalt nicht auf (Leerstand / Auszug einplanen).');
         }
+        checksFair(a);
         a.sims.forEach(function (s, idx) {
             if (s.raised) warn(a, 'warn', (flat.loans[idx].name || 'Darlehen') + ': Rate steigt nach der Zinsbindung beim angenommenen Anschlusszins auf ' + eur(s.followPayment) + '.');
         });
@@ -793,8 +914,16 @@ var WK = (function () {
 
     function budget(p) {
         var b = {};
-        // Mieten von Mitbewohnern: Banken rechnen sie nur zu ~70 % an (wie in checks)
-        b.rents = sum(Object.keys(p.personRents || {}).map(function (id) { return n(p.personRents[id]); }));
+        // Was die anderen höchstens zahlen, ohne ihre privaten Nebenkosten (das
+        // Maximum gilt für alles); Banken rechnen Mieten nur zu ~70 % an (wie in
+        // checks). Hausgeld bzw. Nebenkosten hängen an der Wohnung.
+        var info = privateCosts(p, null);
+        b.rentsGross = b.rents = 0;
+        Object.keys(p.personRents || {}).forEach(function (id) {
+            var rent = n(p.personRents[id]);
+            b.rentsGross += rent;
+            b.rents += Math.max(0, rent - sumOther(info.items));
+        });
         b.ruleRate = Math.max(0, 0.35 * (n(p.netIncome) + 0.7 * b.rents) - n(p.otherDebt));
         b.maxWarmRent = 0.3 * n(p.netIncome) + b.rents;
         b.maxRate = n(p.bankMaxRate) > 0 ? n(p.bankMaxRate) : b.ruleRate;
@@ -847,7 +976,10 @@ var WK = (function () {
         COST_SPLIT: COST_SPLIT,
         personCount: personCount,
         costMonthly: costMonthly,
-        roomRents: roomRents,
+        FEATURES: FEATURES,
+        roomExtra: roomExtra,
+        rentPlan: rentPlan,
+        sumOther: sumOther,
         privateCosts: privateCosts,
         coldRentInYear: coldRentInYear,
         analyze: analyze,

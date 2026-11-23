@@ -656,6 +656,41 @@ table {
 
 .room .input-wrap input { padding-right: 30px; }
 .room .unit { right: 8px; }
+.room-fair { margin: -2px 0 14px; line-height: 1.4; }
+.room-fair p:empty { display: none; }
+.room-features { margin-top: 2px; font-size: 12.5px; }
+.room-features > summary { margin-bottom: 0; font-size: 12px; font-weight: 600; }
+.room-features[open] > summary { margin-bottom: 8px; }
+.room-features .field { max-width: 190px; margin-top: 10px; }
+.room-checks { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.room-checks label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.room-checks input { margin: 0; }
+.explain {
+    margin: 4px 0 12px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--theme-surface-muted);
+    font-size: 12.5px;
+    line-height: 1.5;
+}
+
+.explain > summary { margin-bottom: 0; }
+.explain[open] > summary { margin-bottom: 8px; }
+.explain p,
+.explain dl { max-width: 75ch; }
+.explain dt { font-weight: 700; margin-top: 8px; }
+.explain dd { margin: 0; color: var(--muted); }
+.fair-missing {
+    margin: 4px 0 12px;
+    padding: 8px 10px;
+    border: 1px solid var(--theme-warning);
+    border-radius: 8px;
+    background: var(--theme-warning-soft);
+    line-height: 1.45;
+}
+
+.fair-missing:empty { display: none; }
 
 /* Private Nebenkosten (Meine Finanzen) und Staffelmiete */
 .cost-row,
@@ -781,6 +816,23 @@ table {
 .person-me { display: flex; justify-content: center; }
 .person .input-wrap input { padding-right: 30px; }
 .person .unit { right: 8px; }
+.person-incl {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin: 0 0 14px;
+    padding-left: 12px;
+    border-left: 3px solid var(--border);
+    font-size: 12.5px;
+    line-height: 1.4;
+}
+
+.person-incl[hidden] { display: none; }
+.person-incl label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.person-incl label:has(:disabled) { color: var(--muted); cursor: default; }
+.person-incl input { flex: none; margin: 0; }
+.incl-left { flex-basis: 100%; }
+.incl-left:empty { display: none; }
 .people-sum { font-weight: 600; margin-top: 10px; }
 .people-sum:empty { display: none; }
 
@@ -1014,9 +1066,8 @@ summary {
     .tile-value { font-size: 19px; }
     .room {
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px;
-        padding-bottom: 8px;
-        border-bottom: 1px solid var(--border);
     }
+    .room-fair { padding-bottom: 10px; border-bottom: 1px solid var(--border); }
     .room > .icon-btn { grid-column: 3; grid-row: 1; }
     .room > .input-wrap { grid-row: 2; }
     .room.room-head,
