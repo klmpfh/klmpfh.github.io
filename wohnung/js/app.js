@@ -10,7 +10,7 @@
 
     var PROFILE_DEFAULTS = {
         cash: null, equity: null, reserve: null,
-        netIncome: null, livingCosts: null, otherDebt: null, currentRent: null, persons: 2,
+        netIncome: null, livingCosts: null, otherDebt: null, currentRent: null,
         bankMaxLoan: null, bankMaxRate: null,
         altReturn: 2, appreciation: 1.5,
         state: '', notaryPct: 2, brokerPct: 3.57,
@@ -79,7 +79,7 @@
             indexPct: 2,         // angenommene Inflation pro Jahr bei Indexmiete
             steps: [],           // Staffelmiete: [{ year: ab Mietjahr, rent: Kaltmiete }]
             coveredCosts: {},    // { privateCostId: true } – schon in Warmmiete/Hausgeld enthalten
-            persons: null,       // Personen, die sich die privaten Nebenkosten teilen; leer = ich + vermietete Zimmer
+            persons: null,       // Personen, die sich die privaten Nebenkosten teilen; leer = automatisch (personCount in calc.js)
             ratings: {}   // { wishId: { personId: 0–100 } } – wie gut die Wohnung den Wunsch erfüllt
         };
     }
@@ -142,7 +142,14 @@
                 weights: isObj(w.weights) ? Object.assign({}, w.weights) : {}
             };
         });
-        return { profile: profile, flats: flats, people: people, wishes: wishes };
+        return syncPersons({ profile: profile, flats: flats, people: people, wishes: wishes });
+    }
+
+    /** Die Personenzahl für die Kosten (profile.persons, gelesen in calc.js)
+     *  ergibt sich immer aus der Liste der Personen. */
+    function syncPersons(s) {
+        s.profile.persons = s.people.length;
+        return s;
     }
 
     function dataOut() {
@@ -214,6 +221,7 @@
     }
 
     function changed() {
+        syncPersons(state);
         scheduleSave();
         updateHints();
         if (currentUpdate) currentUpdate();
@@ -617,6 +625,14 @@
             el('p', { text: 'Rechnet durch, ob und welche Wohnung sich ausgeht – kaufen oder mieten, mit WG-Untermiete, Kredit und allem drumherum.' })
         ]));
 
+        var peopleBox = el('div', { class: 'people' });
+        var wishBox = el('div');
+        app.appendChild(panel('Personen', [peopleBox], {
+            hint: 'Wer zusammen wohnen will. Alle hier teilen sich die privaten Nebenkosten und geben ihre Wünsche an.'
+        }));
+        renderPeople(peopleBox, function () { renderWishEditor(wishBox); });
+
+        var costPeople = el('p', { class: 'small group-hint' });
         app.appendChild(panel('Meine Finanzen', [
             group('Vermögen', [
                 numField(p, 'cash', 'Cash (liquide Ersparnisse)', { unit: '€', dec: 0 }),
@@ -637,9 +653,7 @@
                     'Betrag so eintragen, wie er auf der Rechnung steht; umgerechnet auf den Monat zählt nur dein Anteil. Geht einzeln oder als eine Summe („Versorgungskosten“) mit eigenem Prozentsatz. ' +
                     'Gilt für jede Wohnung; dort lässt sich ein Posten abwählen, wenn er schon in der Warmmiete oder im Hausgeld steckt. Nicht zusätzlich in der Lebenshaltung zählen.' }),
                 el('p', { class: 'muted small group-hint', text: 'Zahlen Mitbewohner ihren Teil schon mit der Warmmiete ihres WG-Zimmers, „zahle ich komplett“ wählen – sonst wird ihr Anteil doppelt abgezogen.' }),
-                el('div', { class: 'grid cost-persons' }, [
-                    numField(p, 'persons', 'Personen heute', { dec: 0, hint: 'Teilen sich die Kosten. In jeder Wohnung zählen die Personen von dort.' })
-                ]),
+                costPeople,
                 costsBox
             ]),
             group('Kreditwürdigkeit (laut Bank)', [
@@ -665,7 +679,6 @@
             budgetBox
         ], { hint: 'Alles Persönliche, das für jede Wohnung gleich ist. Wird nur in diesem Browser gespeichert.' }));
 
-        var wishBox = el('div');
         var wishStatus = el('div', { class: 'wish-status' });
         app.appendChild(panel('Wünsche & Bedingungen', [wishBox, wishStatus], {
             hint: 'Jede Person ergänzt eigene Wünsche, frei formuliert – z. B. „Balkon“, „max. 30 Minuten zur Arbeit“, „kein Erdgeschoss“. ' +
@@ -707,6 +720,7 @@
         ], { hint: 'Link und Export enthalten „Meine Finanzen“, Personen & Wünsche und alle Wohnungen (Kauf und Miete). Link öffnen oder Gesamt-Datei importieren ersetzt alles auf dem Zielgerät; eine einzeln exportierte Wohnung wird nur hinzugefügt.' }));
 
         currentUpdate = function () {
+            costPeople.textContent = costPeopleText();
             updateCostsEditor(costsBox);
             renderBudget(budgetBox);
             renderWishStatus(wishStatus);
@@ -769,6 +783,15 @@
         updateCostsEditor(box);
     }
 
+    /** Wer sich die Kosten teilt, z. B. "Geteilt durch 2 Personen: Anna und Ben". */
+    function costPeopleText() {
+        var count = state.people.length;
+        var where = ' (änderbar oben unter „Personen“).';
+        if (!count) return 'Noch keine Person angelegt – gerechnet wird mit einer' + where;
+        if (count === 1) return 'Eine Person: ' + peopleNames() + where;
+        return 'Geteilt durch ' + count + ' Personen: ' + peopleNames() + where;
+    }
+
     /** Summe der privaten Nebenkosten: ganze Wohnung und mein Anteil. */
     function costSumText(info) {
         if (!(info.gross > 0)) return '';
@@ -827,6 +850,12 @@
         return name || 'Person ' + (state.people.indexOf(p) + 1);
     }
 
+    /** Alle Namen, z. B. "Anna, Ben und Person 3". */
+    function peopleNames() {
+        var names = state.people.map(personName);
+        return names.length > 1 ? names.slice(0, -1).join(', ') + ' und ' + names[names.length - 1] : names.join('');
+    }
+
     /** Namens-Span, der beim Umbenennen live mitgeändert wird. */
     function nameTag(p) {
         return el('span', { 'data-person': p.id, text: personName(p) });
@@ -859,41 +888,44 @@
         state.people.splice(state.people.indexOf(p), 1);
     }
 
-    /** Personen und Wünsche bearbeiten (Übersicht). Wird nur bei Struktur-
+    /** Personen bearbeiten (Übersicht). onList: wenn jemand dazukommt oder geht. */
+    function renderPeople(box, onList, focusLast) {
+        box.innerHTML = '';
+        state.people.forEach(function (p, idx) {
+            var input = el('input', { type: 'text', autocomplete: 'off', placeholder: 'Person ' + (idx + 1), 'aria-label': 'Name von Person ' + (idx + 1) });
+            input.value = p.name || '';
+            input.addEventListener('input', function () {
+                p.name = input.value;
+                app.querySelectorAll('[data-person="' + p.id + '"]').forEach(function (e) { e.textContent = personName(p); });
+                changed();
+            });
+            var del = el('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Person entfernen', title: 'Person entfernen', text: '×', onclick: function () {
+                var own = state.wishes.filter(function (w) { return w.by === p.id; }).length;
+                if (!confirm(personName(p) + ' entfernen?\n\nDabei gehen ' + (own ? 'ihre ' + own + ' Wünsche sowie ' : '') + 'alle Gewichtungen und Bewertungen dieser Person verloren. Die privaten Nebenkosten werden neu aufgeteilt.')) return;
+                removePerson(p);
+                renderPeople(box, onList);
+                onList();
+                changed();
+            } });
+            box.appendChild(el('div', { class: 'person' }, [input, del]));
+            if (focusLast && idx === state.people.length - 1) setTimeout(function () { input.focus(); }, 0);
+        });
+        box.appendChild(btn('+ Person', 'btn-ghost', function () {
+            state.people.push(newPerson());
+            renderPeople(box, onList, true);
+            onList();
+            changed();
+        }));
+    }
+
+    /** Wünsche bearbeiten (Übersicht). Wird nur bei Struktur-
      *  änderungen neu gezeichnet, nicht bei jeder Eingabe (sonst Fokusverlust). */
     function renderWishEditor(box, focusId) {
         box.innerHTML = '';
         var people = state.people;
 
-        var peopleRow = el('div', { class: 'people' });
-        people.forEach(function (p, idx) {
-            var input = el('input', { type: 'text', autocomplete: 'off', placeholder: 'Person ' + (idx + 1), 'aria-label': 'Name von Person ' + (idx + 1) });
-            input.value = p.name || '';
-            input.addEventListener('input', function () {
-                p.name = input.value;
-                box.querySelectorAll('[data-person="' + p.id + '"]').forEach(function (e) { e.textContent = personName(p); });
-                changed();
-            });
-            var del = el('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Person entfernen', title: 'Person entfernen', text: '×', onclick: function () {
-                var own = state.wishes.filter(function (w) { return w.by === p.id; }).length;
-                if (!confirm(personName(p) + ' entfernen?\n\nDabei gehen ' + (own ? 'ihre ' + own + ' Wünsche sowie ' : '') + 'alle Gewichtungen und Bewertungen dieser Person verloren.')) return;
-                removePerson(p);
-                renderWishEditor(box);
-                changed();
-            } });
-            peopleRow.appendChild(el('div', { class: 'person' }, [input, del]));
-        });
-        peopleRow.appendChild(btn('+ Person', 'btn-ghost', function () {
-            var p = newPerson();
-            state.people.push(p);
-            renderWishEditor(box, 'person:' + p.id);
-            changed();
-        }));
-        box.appendChild(el('h3', { class: 'group-title', text: 'Personen' }));
-        box.appendChild(peopleRow);
-
         if (!people.length) {
-            box.appendChild(el('p', { class: 'muted', text: 'Leg zuerst mindestens eine Person an.' }));
+            box.appendChild(el('p', { class: 'muted', text: 'Leg zuerst oben unter „Personen“ mindestens eine Person an.' }));
             return;
         }
 
@@ -944,16 +976,14 @@
             g.appendChild(el('button', { type: 'button', class: 'btn btn-ghost btn-add', onclick: function () {
                 var w = newWish(author.id);
                 state.wishes.push(w);
-                renderWishEditor(box, 'wish:' + w.id);
+                renderWishEditor(box, w.id);
                 changed();
             } }, ['+ Wunsch von ', nameTag(author)]));
             box.appendChild(g);
         });
 
         if (focusId) {
-            var target = focusId.indexOf('wish:') === 0
-                ? box.querySelector('[data-wish="' + focusId.slice(5) + '"]')
-                : peopleRow.querySelectorAll('.person input')[people.length - 1];
+            var target = box.querySelector('[data-wish="' + focusId + '"]');
             if (target) target.focus();
         }
     }
@@ -1665,9 +1695,11 @@
         var list = el('div', { class: 'cost-checks' });
         var title = el('h3', { class: 'group-title', text: 'Private Nebenkosten' });
         var hint = el('p', { class: 'muted small group-hint' });
+        /** Personenzahl ohne eigene Angabe für diese Wohnung. */
+        function autoCount() { return WK.personCount(state.profile, Object.assign({}, f, { persons: null })); }
         var personsField = numField(f, 'persons', 'Personen in dieser Wohnung', { dec: 0, hint: function () {
-            return 'Teilen sich die Kosten. Leer = ' + (f.wg.rooms.length ? 'du + vermietete Zimmer' : '„Personen heute“ aus „Meine Finanzen“') +
-                ' (' + WK.personCount(state.profile, Object.assign({}, f, { persons: null })) + ').';
+            var count = autoCount(), extra = count - Math.max(1, state.people.length);
+            return 'Teilen sich die Kosten. Leer = ' + (peopleNames() || 'du') + (extra > 0 ? ' + ' + extra + ' aus den WG-Zimmern' : '') + ' (' + count + ').';
         } });
         var personsRow = el('div', { class: 'grid cost-persons' }, [personsField]);
         box.append(title, hint, personsRow, list);
@@ -1704,7 +1736,7 @@
         build();
         box._update = function () {
             var info = WK.privateCosts(state.profile, f);
-            personsField._input.placeholder = String(WK.personCount(state.profile, Object.assign({}, f, { persons: null })));
+            personsField._input.placeholder = String(autoCount());
             var rows = list.querySelectorAll('.cost-check');
             info.items.forEach(function (c, i) {
                 if (!rows[i]) return;

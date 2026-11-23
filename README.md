@@ -64,7 +64,7 @@ relativ, über die eigene `src`-Angabe.
   (Schalter „Von mir“ / „An mich“): was, wann, an wen bzw. von wem, bis wann geplant.
   Status (offen/fällig/überfällig/zurück), Filter und Suche. Daten liegen nur im localStorage des Browsers,
   Backup als JSON-Datei herunterladen und wieder einlesen.
-- `/wohnung/` – Wohnung kaufen oder mieten: persönliche Finanzen (Cash, Eigenkapital, Einkommen, Kreditrahmen der Bank,
+- `/wohnung/` – Wohnung kaufen oder mieten: Personen (gelten für Kostenaufteilung und Wünsche), persönliche Finanzen (Cash, Eigenkapital, Einkommen, Kreditrahmen der Bank,
   private Nebenkosten wie Strom/Internet/Rundfunk – mit Zeitraum (Monat bis Jahr) und Aufteilung (gleichmäßig, Prozent, je Person,
   komplett), je Wohnung abwählbar, wenn schon in Warmmiete/Hausgeld enthalten) auf der
   Übersicht. Mietwohnungen mit Kalt-/Warmmiete, Kaution und fester, Staffel- oder Indexmiete (Mietentwicklung über 10 Jahre),

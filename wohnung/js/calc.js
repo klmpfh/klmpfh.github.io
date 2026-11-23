@@ -152,13 +152,12 @@ var WK = (function () {
     var COST_SPLIT = [['equal', 'gleichmäßig geteilt'], ['percent', 'mein Anteil in %'], ['person', 'Betrag je Person'], ['all', 'zahle ich komplett']];
 
     /** Personen, die sich die Kosten teilen. Je Wohnung überschreibbar, sonst
-     *  ich + vermietete Zimmer; ohne Zimmer bzw. ohne Wohnung (= heute) der
-     *  Wert aus "Meine Finanzen". */
+     *  alle aus "Personen" (p.persons) – in einer Wohnung mindestens ich +
+     *  vermietete Zimmer, falls dort noch weitere Untermieter wohnen. */
     function personCount(p, flat) {
         var rooms = (flat && flat.wg && flat.wg.rooms) || [];
         var v = flat && isSet(flat.persons) ? n(flat.persons)
-            : rooms.length ? 1 + rooms.filter(function (r) { return !r.self; }).length
-            : n(p.persons);
+            : Math.max(n(p.persons), 1 + rooms.filter(function (r) { return !r.self; }).length);
         return Math.max(1, Math.round(v));
     }
 
