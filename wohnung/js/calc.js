@@ -137,6 +137,34 @@ var WK = (function () {
         return sum(items.map(function (c) { return c.other; }));
     }
 
+    /* ---------- Was eine Person höchstens zahlen kann ---------- */
+
+    // [Feld, Beschriftung] – Pflichtangaben, ohne die kein Maximum berechnet wird
+    var PERSON_FIELDS = [['netIncome', 'Nettoeinkommen'], ['livingCosts', 'Lebenshaltung'], ['otherDebt', 'andere Kreditraten']];
+    var LIMIT_SHARE = 0.35;   // vom Netto für Wohnen (alles zusammen) und Kredite
+
+    /** Maximum einer Person für alles zusammen (Miete, Nebenkosten, Strom …).
+     *    missing  Pflichtangaben, die noch fehlen (0 zählt als Angabe)
+     *    byRest   die Lebenshaltung lässt weniger als 35 % vom Netto übrig
+     *    auto     35 % vom Netto bzw. dieser Rest, minus andere Kredite, nie
+     *             unter 0 (null = Angaben fehlen)
+     *    own      von Hand eingetragene Grenze (null = keine), geht vor
+     *    max      was gilt (null = keine Grenze bekannt) */
+    function personLimit(q) {
+        var income = n(q.netIncome), rest = income - n(q.livingCosts);
+        var l = { missing: PERSON_FIELDS.filter(function (f) { return !isSet(q[f[0]]); }).map(function (f) { return f[1]; }) };
+        l.own = isSet(q.rent) ? n(q.rent) : null;
+        l.byRest = rest < LIMIT_SHARE * income;
+        l.auto = l.missing.length ? null : Math.max(0, Math.min(LIMIT_SHARE * income, rest) - n(q.otherDebt));
+        l.max = l.own !== null ? l.own : l.auto;
+        return l;
+    }
+
+    /** Aufzählung, z. B. "Anna, Ben und Person 3". */
+    function andList(names) {
+        return names.length > 1 ? names.slice(0, -1).join(', ') + ' und ' + names[names.length - 1] : names.join('');
+    }
+
     /* ---------- Faire Miete ----------
        Kaltmiete der Wohnung (bei Kauf: Vergleichsmiete pro m² × Fläche, darin
        stecken Lage, Baujahr und Ausstattung der Wohnung), verteilt nach Zimmer-
@@ -169,7 +197,10 @@ var WK = (function () {
      *    due    fair, soweit über mich gezahlt; own: zahlt die Person selbst
      *    max    Maximum der Person für alles zusammen (null = keins)
      *    pay    damit wird gerechnet: eingetragene Miete, sonst die faire Miete
-     *           bis zum Maximum; fehlen dafür Angaben, das Maximum
+     *           bis zum Maximum; fehlen dafür Angaben, vorläufig gleichmäßig
+     *           geteilt (source 'equal'), auch das höchstens bis zum Maximum
+     *    income Nettoeinkommen, wenn die Pflichtangaben da sind (sonst null)
+     *    missing Pflichtangaben, die noch fehlen
      *    short  was zur fairen Miete fehlt, weil das Maximum greift */
     function rentPlan(flat, p) {
         var rooms = (flat.wg && flat.wg.rooms) || [];
@@ -203,6 +234,7 @@ var WK = (function () {
         groups.forEach(function (g) { g.weight += common; });
         var weights = sum(groups.map(function (g) { return g.weight; }));
         var ready = !missing.length && weights > 0;
+        var coldTotal = isRent ? n(flat.coldRent) : n(flat.refRent) * area;
 
         groups.forEach(function (g) {
             g.cold = !ready ? null : isRent ? n(flat.coldRent) * g.weight / weights : n(flat.refRent) * g.weight;
@@ -215,11 +247,14 @@ var WK = (function () {
             g.own = g.person ? g.extra + sumOther(info.items) - g.priv : g.extra;
             g.max = g.person && isSet((p.personRents || {})[g.person]) ? n(p.personRents[g.person]) : null;
             var limit = g.max === null ? Infinity : Math.max(0, g.max - g.own);
+            g.income = g.person && isSet((p.personIncomes || {})[g.person]) ? n(p.personIncomes[g.person]) : null;
+            g.missing = (g.person && (p.personMissing || {})[g.person]) || [];
             g.due = ready ? g.cold + g.running + g.priv : null;
+            var equal = coldTotal > 0 ? coldTotal / info.persons + g.running + g.priv : Infinity;
             g.over = g.entered && g.max !== null ? Math.max(0, g.rent - limit) : 0;
             g.short = !g.entered && ready ? Math.max(0, g.due - limit) : 0;
-            g.source = g.entered ? 'entered' : !g.person ? 'none' : ready ? 'fair' : g.max !== null ? 'max' : 'none';
-            g.pay = g.entered ? g.rent : g.source === 'fair' ? Math.min(g.due, limit) : g.source === 'max' ? limit : 0;
+            g.source = g.entered ? 'entered' : !g.person ? 'none' : ready ? 'fair' : g.max === null ? 'none' : equal < limit ? 'equal' : 'max';
+            g.pay = g.entered ? g.rent : g.source === 'fair' ? Math.min(g.due, limit) : g.source === 'equal' ? equal : g.source === 'max' ? limit : 0;
         });
         return { groups: groups, missing: missing, ready: ready, info: info, gross: sum(groups.map(function (g) { return g.pay; })) };
     }
@@ -232,7 +267,9 @@ var WK = (function () {
      *    rentRunning  darin enthaltener Anteil an Hausgeld bzw. Nebenkosten
      *    rentExtra    derselbe Anteil, wenn er zusätzlich zur Miete gezahlt wird
      *    rentEff      was die Wohnkosten senkt
-     *    rentLeft     was für Kredit bzw. Kaltmiete übrig bleibt */
+     *    rentLeft     was für Kredit bzw. Kaltmiete übrig bleibt
+     *    partners     wer hier wohnt, mitzahlt und seine Finanzen angegeben hat
+     *    partnerEff   deren Teil von rentEff */
     function sublet(a, flat, p) {
         var wg = flat.wg || {};
         var rooms = wg.rooms || [];
@@ -243,9 +280,11 @@ var WK = (function () {
         var names = {};
         a.rentGross = a.rentPlan.gross;
         a.rentCash = a.rentGross * keep;
-        a.rentPrivate = a.rentRunning = a.rentExtra = 0;
+        a.rentPrivate = a.rentRunning = a.rentExtra = a.partnerEff = 0;
+        a.partners = a.rentPlan.groups.filter(function (g) { return !g.self && g.income !== null && g.max > 0; });
         a.rentPlan.groups.forEach(function (g) {
             if (!(g.pay > 0)) return;
+            if (a.partners.indexOf(g) !== -1) a.partnerEff += g.pay * keep - g.priv + g.extra * keep;
             a.rentPrivate += g.priv;
             a.rentRunning += g.running;
             a.rentExtra += g.extra * keep;
@@ -389,20 +428,25 @@ var WK = (function () {
         a.netIncome = n(p.netIncome);
         a.available = a.netIncome - n(p.livingCosts) - n(p.otherDebt) - a.netHousing;
         a.burden = null;
-        a.rentRatio = a.netIncome > 0 ? a.warmRent / a.netIncome : null;
+        // Wer zusammen mietet, stemmt die Miete gemeinsam: Die Faustregel gilt fürs
+        // Einkommen aller, die hier wohnen, und dann noch einmal für meinen Teil.
+        a.jointIncome = isSet(p.netIncome) ? a.netIncome + sum(a.partners.map(function (g) { return g.income; })) : 0;
+        a.rentRatio = a.jointIncome > 0 ? a.warmRent / a.jointIncome : null;
+        a.ownWarm = Math.max(0, a.warmRent - a.rentEff);
+        a.ownRatio = a.netIncome > 0 ? a.ownWarm / a.netIncome : null;
         a.burdenNet = a.netIncome > 0 ? (a.netHousing + n(p.otherDebt)) / a.netIncome : null;
 
         // Mietentwicklung über 10 Jahre (Nebenkosten, WG-Mieten und private Kosten konstant)
         a.rentTimeline = [];
-        var sum = 0;
+        var total = 0;
         for (var y = 1; y <= 10; y++) {
             var cold = coldRentInYear(flat, y);
             var net = a.netHousing + cold - a.coldRent;
             a.rentTimeline.push({ year: y, cold: cold, warm: cold + a.serviceCharges + a.heating, net: net });
-            sum += net;
+            total += net;
         }
         a.coldIn5 = coldRentInYear(flat, 6);
-        a.avgNet10 = sum / 10;
+        a.avgNet10 = total / 10;
         a.rentIncrease5 = a.coldRent > 0 ? a.coldIn5 / a.coldRent - 1 : null;
 
         checksRent(a, p, flat);
@@ -411,24 +455,44 @@ var WK = (function () {
         return a;
     }
 
-    /** Faire Mieten gegen das Maximum der Personen. */
+    /** Mieten gegen das Maximum der Personen, dazu fehlende Pflichtangaben. */
     function checksFair(a) {
         a.rentPlan.groups.forEach(function (g) {
             if (g.self || !g.name) return;
+            if (g.missing.length) warn(a, 'warn', g.name + ': Pflichtangaben fehlen (' + andList(g.missing) + ', auf der Übersicht unter „Personen“). Bis dahin ' +
+                (g.max === null ? 'ist kein Maximum bekannt' : 'gilt das eingetragene Maximum von ' + eur(g.max)) +
+                (a.kind === 'rent' ? ', und das Einkommen zählt hier nicht mit.' : '.'));
             if (g.entered && g.over > 0.5) warn(a, 'warn', g.name + ': Die eingetragene Miete liegt ' + eur(g.over) + ' über dem Maximum von ' + eur(g.max) + '.');
             else if (g.short > 0.5) warn(a, 'warn', g.name + ': Fair wären ' + eur(g.due + g.own) + ' im Monat, das Maximum ist ' + eur(g.max) + ' – ' + eur(g.short) + ' trägst du.');
+            else if (g.income !== null && (g.entered || g.source === 'fair')) warn(a, 'ok', g.name + ': ' + eur(g.pay + g.own) + ' im Monat passen ins Maximum von ' + eur(g.max) + '.');
         });
     }
 
     function checksRent(a, p, flat) {
         if (a.coldRent <= 0) { warn(a, 'info', 'Kaltmiete eingeben, um die Wohnung durchzurechnen.'); return; }
+        var joint = a.partners.length > 0;
+        // Mieten von Leuten, deren Einkommen nicht schon mitzählt
+        var subRent = a.rentEff - a.partnerEff;
+        if (a.jointIncome > 0) {
+            var withWg = joint ? Math.max(0, a.warmRent - subRent) / a.jointIncome : a.burdenNet;
+            var share = pct(a.rentRatio) + (joint ? ' eures gemeinsamen Nettoeinkommens von ' + eur(a.jointIncome) : ' des Nettoeinkommens');
+            if (a.rentRatio <= 0.3) warn(a, 'ok', 'Warmmiete bei ' + share + ' – im Rahmen der 30-%-Faustregel (max. ' + eur(0.3 * a.jointIncome) + ').');
+            else if (a.rentRatio <= 0.4) warn(a, 'warn', 'Warmmiete bei ' + share + ' – über der 30-%-Faustregel (max. ' + eur(0.3 * a.jointIncome) + (subRent > 0.5 ? ' ohne WG-Einnahmen' : '') + ')' + (subRent > 0.5 ? ', mit WG-Einnahmen ' + pct(withWg) + '.' : '.'));
+            else warn(a, subRent > 0.5 && withWg <= 0.35 ? 'warn' : 'bad', 'Warmmiete bei ' + share + (subRent > 0.5 ? ' (mit WG-Einnahmen ' + pct(withWg) + ')' : '') + ' – Faustregel: max. 30–35 % (' + eurRange(0.3 * a.jointIncome, 0.35 * a.jointIncome) + ').');
+        }
         if (a.netIncome > 0) {
-            if (a.rentRatio <= 0.3) warn(a, 'ok', 'Warmmiete bei ' + pct(a.rentRatio) + ' des Nettoeinkommens – im Rahmen der 30-%-Faustregel (max. ' + eur(0.3 * a.netIncome) + ').');
-            else if (a.rentRatio <= 0.4) warn(a, 'warn', 'Warmmiete bei ' + pct(a.rentRatio) + ' des Nettoeinkommens – über der 30-%-Faustregel (max. ' + eur(0.3 * a.netIncome) + (a.rentEff > 0 ? ' ohne WG-Einnahmen' : '') + ')' + (a.rentEff > 0 ? ', mit WG-Einnahmen ' + pct(a.burdenNet) + '.' : '.'));
-            else warn(a, a.rentEff > 0 && a.burdenNet <= 0.35 ? 'warn' : 'bad', 'Warmmiete bei ' + pct(a.rentRatio) + ' des Nettoeinkommens' + (a.rentEff > 0 ? ' (mit WG-Einnahmen ' + pct(a.burdenNet) + ')' : '') + ' – Faustregel: max. 30–35 % (' + eurRange(0.3 * a.netIncome, 0.35 * a.netIncome) + ').');
+            if (joint) {
+                var own = 'Dein Teil der Warmmiete (' + eur(a.ownWarm) + ') bei ' + pct(a.ownRatio) + ' deines Nettoeinkommens';
+                if (a.ownRatio <= 0.3) warn(a, 'ok', own + '.');
+                else warn(a, a.ownRatio <= 0.4 ? 'warn' : 'bad', own + ' – Faustregel: max. 30–35 % (' + eurRange(0.3 * a.netIncome, 0.35 * a.netIncome) + ').');
+            }
             if (a.available < 0) warn(a, 'bad', 'Haushalt geht nicht auf: monatlich fehlen ' + eur(-a.available) + '.');
-            if (a.roomsRented > 0 && a.netIncome - n(p.livingCosts) - n(p.otherDebt) - a.outflow < 0) {
+            var alone = a.netIncome - n(p.livingCosts) - n(p.otherDebt) - a.outflow;
+            if (a.roomsRented > 0 && alone + a.partnerEff < 0 && (!joint || subRent > 0.5)) {
                 warn(a, 'warn', 'Ohne Untermieter geht der Haushalt nicht auf (Leerstand / Auszug einplanen).');
+            }
+            if (joint && a.available >= 0 && alone + subRent < 0) {
+                warn(a, 'info', 'Geht nur gemeinsam: Ohne ' + andList(a.partners.map(function (g) { return g.name; })) + ' fehlen dir ' + eur(-alone - subRent) + ' im Monat (Auszug einplanen).');
             }
         }
         checksFair(a);
@@ -919,13 +983,17 @@ var WK = (function () {
         // checks). Hausgeld bzw. Nebenkosten hängen an der Wohnung.
         var info = privateCosts(p, null);
         b.rentsGross = b.rents = 0;
+        b.rentsWarm = 0;   // davon für die Warmmiete: je Person höchstens 30 % vom Netto
         Object.keys(p.personRents || {}).forEach(function (id) {
             var rent = n(p.personRents[id]);
+            var left = Math.max(0, rent - sumOther(info.items));
+            var income = (p.personIncomes || {})[id];
             b.rentsGross += rent;
-            b.rents += Math.max(0, rent - sumOther(info.items));
+            b.rents += left;
+            b.rentsWarm += isSet(income) ? Math.min(left, 0.3 * n(income)) : left;
         });
         b.ruleRate = Math.max(0, 0.35 * (n(p.netIncome) + 0.7 * b.rents) - n(p.otherDebt));
-        b.maxWarmRent = 0.3 * n(p.netIncome) + b.rents;
+        b.maxWarmRent = 0.3 * n(p.netIncome) + b.rentsWarm;
         b.maxRate = n(p.bankMaxRate) > 0 ? n(p.bankMaxRate) : b.ruleRate;
         var annuity = (n(p.defRate) + n(p.defRepay)) / 100;
         b.loanFromRate = annuity > 0 ? b.maxRate * 12 / annuity : 0;
@@ -976,6 +1044,8 @@ var WK = (function () {
         COST_SPLIT: COST_SPLIT,
         personCount: personCount,
         costMonthly: costMonthly,
+        personLimit: personLimit,
+        andList: andList,
         FEATURES: FEATURES,
         roomExtra: roomExtra,
         rentPlan: rentPlan,

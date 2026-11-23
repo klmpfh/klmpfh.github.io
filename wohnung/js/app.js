@@ -87,16 +87,22 @@
         };
     }
 
-    /** self: das bin ich (genau eine Person), rent: Maximum, das die Person im Monat
-     *  für alles zahlen kann, includes: { Posten: false } = zahlt sie nicht über
+    /** self: das bin ich (genau eine Person, deren Finanzen im Profil stehen).
+     *  netIncome/livingCosts/otherDebt: Pflichtangaben der anderen, daraus folgt
+     *  ihr Maximum im Monat für alles (personLimit in calc.js). rent: eigene
+     *  Grenze, geht dem berechneten Maximum vor. includes: { Posten: false } = zahlt sie nicht über
      *  mich (running = Nebenkosten & Heizung bzw. Hausgeld, sonst privateCostId). */
     function newPerson() {
-        return { id: uid(), name: '', self: false, rent: null, includes: {} };
+        return { id: uid(), name: '', self: false, netIncome: null, livingCosts: null, otherDebt: null, rent: null, includes: {} };
     }
 
     /** Wünsche gelten gemeinsam für alle. weights: { personId: 0–100 } – wie wichtig der Wunsch der jeweiligen Person ist. */
     function newWish() {
         return { id: uid(), text: '', weights: {} };
+    }
+
+    function numOrNull(v) {
+        return WK.isSet(v) ? Number(v) : null;
     }
 
     function isObj(x) {
@@ -137,7 +143,9 @@
         // Ältere Daten ohne Personen: mit zwei leeren Personen starten.
         var people = data && Array.isArray(data.people)
             ? data.people.filter(isObj).map(function (p) {
-                return { id: p.id ? String(p.id) : uid(), name: String(p.name || ''), self: p.self === true, rent: WK.isSet(p.rent) ? Number(p.rent) : null,
+                return { id: p.id ? String(p.id) : uid(), name: String(p.name || ''), self: p.self === true,
+                    netIncome: numOrNull(p.netIncome), livingCosts: numOrNull(p.livingCosts), otherDebt: numOrNull(p.otherDebt),
+                    rent: numOrNull(p.rent),
                     includes: isObj(p.includes) ? Object.assign({}, p.includes) : {} };
             })
             : [newPerson(), newPerson()];
@@ -159,20 +167,26 @@
     }
 
     /** Was calc.js über die Personen braucht, immer aus der Liste abgeleitet:
-     *  Anzahl (profile.persons), Namen, Maximum (profile.personRents), was sie
-     *  über mich zahlen (profile.personIncludes) und welche Zimmer meine sind
-     *  (room.self). */
+     *  Anzahl (profile.persons), Namen, Maximum (profile.personRents), Netto-
+     *  einkommen (profile.personIncomes, nur bei vollständigen Angaben), fehlende
+     *  Pflichtangaben (profile.personMissing), was sie über mich zahlen
+     *  (profile.personIncludes) und welche Zimmer meine sind (room.self). */
     function syncPersons(s) {
         var me = mePerson(s.people);
         s.profile.persons = s.people.length;
         s.profile.personRents = {};
+        s.profile.personIncomes = {};
+        s.profile.personMissing = {};
         s.profile.personIncludes = {};
         s.profile.personNames = {};
         s.people.forEach(function (p, i) {
             s.profile.personNames[p.id] = (p.name || '').trim() || 'Person ' + (i + 1);
             p.self = p === me;
             if (p.self) return;
-            if (WK.isSet(p.rent)) s.profile.personRents[p.id] = Number(p.rent);
+            var limit = WK.personLimit(p);
+            if (limit.max !== null) s.profile.personRents[p.id] = limit.max;
+            if (limit.missing.length) s.profile.personMissing[p.id] = limit.missing;
+            else s.profile.personIncomes[p.id] = Number(p.netIncome);
             s.profile.personIncludes[p.id] = p.includes;
         });
         s.flats.forEach(function (f) { markOwnRooms(f, me); });
@@ -421,7 +435,7 @@
             ]).concat([
                 ['Lage & Ausstattung', 'Macht ein Zimmer teurer oder günstiger als die anderen. Beispiel: 15 m² mit Balkon (+5 %) zählen wie 15,75 m². Die Prozentwerte sind grobe Orientierung. Mit „Weiterer Zu-/Abschlag“ kannst du selbst nachregeln, z. B. −5 für eine Dachschräge oder +5 für einen Keller.'],
                 ['Miete an mich', 'Leer lassen, dann gilt die faire Miete (grau im Feld). Wer etwas anderes vereinbart, trägt hier den Betrag ein; darunter steht, wie weit er von der fairen Miete entfernt ist.'],
-                ['Maximum', 'Was die Person laut „Personen“ auf der Übersicht höchstens für alles zahlen kann. Ist die faire Miete höher, rechnet die Seite mit dem Maximum, und der Rest bleibt bei dir. Fehlen Angaben für die faire Miete, wird vorläufig mit dem Maximum gerechnet.'],
+                ['Maximum', 'Was die Person laut „Personen“ auf der Übersicht höchstens für alles zahlen kann, berechnet aus ihrem Einkommen. Ist die faire Miete höher, rechnet die Seite mit dem Maximum, und der Rest bleibt bei dir. Fehlen Angaben für die faire Miete, wird vorläufig gleichmäßig geteilt, höchstens bis zum Maximum (beim Kauf ohne Vergleichsmiete gilt das Maximum selbst).'],
                 ['Leerstand / Mietausfall', 'Puffer für Monate, in denen ein Zimmer leer steht oder die Miete ausbleibt. Bei einer festen Person (z. B. Partner:in) kannst du 0 % eintragen.']
             ]));
     }
@@ -563,7 +577,7 @@
         box.appendChild(el('p', { class: 'muted small link-note', text:
             (qrOk ? 'QR-Code mit dem anderen Gerät scannen oder den Link dort öffnen' : 'Zu viele Daten für einen QR-Code – den Link auf dem anderen Gerät öffnen') +
             ' (' + new Intl.NumberFormat('de-DE').format(link.length) + ' Zeichen). Beim Öffnen werden alle Daten dort überschrieben. ' +
-            'Wer den Link hat, sieht alle deine Finanzdaten – nur an dich selbst oder Vertraute schicken. Der Link ist ein Schnappschuss: spätere Änderungen sind nicht enthalten.' }));
+            'Wer den Link hat, sieht alle Finanzdaten, auch die der anderen Personen – nur an dich selbst oder Vertraute schicken. Der Link ist ein Schnappschuss: spätere Änderungen sind nicht enthalten.' }));
     }
 
     function importFromLink(code) {
@@ -727,14 +741,16 @@
         var peopleSum = el('p', { class: 'small people-sum' });
         var wishBox = el('div');
         app.appendChild(panel('Personen', [peopleBox, peopleSum, explain('Was bedeuten die Felder?',
-            'Hier steht, wer mit einzieht und wie viel jede Person beitragen kann. Das gilt für alle Wohnungen.', [
+            'Hier steht, wer mit einzieht und wie viel jede Person beitragen kann. Das gilt für alle Wohnungen. Ob eine Mietwohnung passt, prüft die Seite am gemeinsamen Einkommen aller, die dort ein Zimmer haben, und zusätzlich an deinem eigenen Teil.', [
                 ['Ich', 'Die Person, die kauft bzw. den Mietvertrag unterschreibt und deren Finanzen unten stehen. Alle anderen zahlen an sie.'],
-                ['Max. im Monat', 'Die Obergrenze, die sich die Person leisten kann – für alles zusammen: Miete, Nebenkosten, Strom, Internet usw. Leer = keine Grenze. Zahlt jemand nichts, 0 eintragen.'],
+                ['Pflichtangaben', 'Nettoeinkommen, Lebenshaltung ohne Wohnen und andere Kreditraten, jeweils pro Monat. Gibt es einen Posten nicht, 0 eintragen. Erst wenn alle drei da sind, wird das Maximum berechnet, und das Einkommen zählt bei Mietwohnungen mit.'],
+                ['Wie das Maximum entsteht', '35 % vom Netto minus andere Kreditraten, höchstens das, was nach Lebenshaltung und Krediten übrig ist. Das Maximum gilt für alles zusammen: Miete, Nebenkosten, Strom, Internet usw.'],
+                ['Max. im Monat', 'Leer lassen, dann gilt das berechnete Maximum (grau im Feld). Will jemand weniger oder mehr zahlen, hier die eigene Grenze eintragen – sie geht vor. Zahlt jemand nichts, 0 eintragen; dann zählt auch das Einkommen nicht mit.'],
                 ['Zahlt über mich', 'Mit Haken: Du bezahlst die Rechnung, und die Person gibt dir ihren Anteil mit der Miete. Der Anteil ist deshalb kein Geld für Kredit oder Kaltmiete. Ohne Haken: Die Person zahlt ihren Anteil selbst, z. B. direkt an den Anbieter. Bei Nebenkosten & Heizung heißt ohne Haken: Sie zahlt dir den Anteil zusätzlich zur Miete.'],
                 ['Was davon im Budget zählt', '„Was ist drin?“ rechnet mit dem, was vom Maximum nach den privaten Nebenkosten übrig ist. Für die Kreditrate zählen davon nur 70 %, weil Banken Mieteinnahmen meist nicht voll anrechnen. Was eine Person wirklich zahlt, steht in jeder Wohnung.']
             ])], {
             hint: 'Wer zusammen wohnen will. Alle hier teilen sich die privaten Nebenkosten und gewichten die Wünsche. ' +
-                '„Max. im Monat“: was die Person höchstens für alles zusammen zahlen kann. ' +
+                'Für alle außer dir sind Einkommen, Lebenshaltung und Kredite Pflicht: Daraus ergibt sich, was die Person im Monat höchstens für alles zusammen zahlen kann. ' +
                 'Was sie tatsächlich zahlt, ist die faire Miete der jeweiligen Wohnung (dort unter „WG & Untermieter“), höchstens dieses Maximum. Trägst du dort selbst mehr ein, gibt es eine Warnung.'
         }));
         renderPeople(peopleBox, function () { renderWishEditor(wishBox); });
@@ -827,6 +843,7 @@
         ], { hint: 'Link und Export enthalten „Meine Finanzen“, Personen & Wünsche und alle Wohnungen (Kauf und Miete). Link öffnen oder Gesamt-Datei importieren ersetzt alles auf dem Zielgerät; eine einzeln exportierte Wohnung wird nur hinzugefügt.' }));
 
         currentUpdate = function () {
+            updateLimits(peopleBox);
             updateIncludes(peopleBox);
             var b = WK.budget(p), off = b.rentsGross - b.rents;
             peopleSum.textContent = b.rentsGross > 0 ? 'Zusammen höchstens ' + eur(b.rentsGross) + ' im Monat' +
@@ -956,7 +973,7 @@
             tile('Max. Darlehen', eur(b.maxLoan), n(p.bankMaxLoan) > 0 ? (b.loanFromRate < n(p.bankMaxLoan) ? 'begrenzt durch die Rate' : 'laut Bank') : 'aus der Rate bei ' + fmtInput(n(p.defRate) + n(p.defRepay), 2) + ' % Zins + Tilgung') +
             tile('Max. Monatsrate', eur(b.maxRate), n(p.bankMaxRate) > 0 ? 'laut Bank' : 'Faustregel 35 % vom Netto' + rentsText(b) + (n(p.otherDebt) > 0 ? ' minus andere Kredite' : '')) +
             tile('Kaufpreis-Budget', eur(b.maxPrice), 'Eigenkapital + Darlehen, abzgl. ~' + fmtInput(b.closingPct, 1) + ' % Nebenkosten') +
-            (n(p.netIncome) > 0 ? tile('Max. Warmmiete', eur(b.maxWarmRent), 'Faustregel 30 % vom Netto' + (b.rents > 0 ? ' + max. ' + eur(b.rents) + ' der anderen' : '')) : '') +
+            (n(p.netIncome) > 0 ? tile('Max. Warmmiete', eur(b.maxWarmRent), 'Faustregel 30 % vom Netto' + (b.rentsWarm > 0 ? ' + max. ' + eur(b.rentsWarm) + ' der anderen' : '')) : '') +
             equityTile(p);
     }
 
@@ -969,8 +986,7 @@
 
     /** Alle Namen, z. B. "Anna, Ben und Person 3". */
     function peopleNames() {
-        var names = state.people.map(personName);
-        return names.length > 1 ? names.slice(0, -1).join(', ') + ' und ' + names[names.length - 1] : names.join('');
+        return WK.andList(state.people.map(personName));
     }
 
     /** Namens-Span, der beim Umbenennen live mitgeändert wird. */
@@ -1013,6 +1029,21 @@
         });
     }
 
+    /** p wird "Ich". Die Finanzen im Profil gehören der bisherigen Person und
+     *  wandern zu ihr zurück, sobald für p eigene Angaben da sind; sonst bleiben
+     *  sie stehen (dann war nur die falsche Person markiert). */
+    function setMe(p) {
+        var old = mePerson(state.people), keys = ['netIncome', 'livingCosts', 'otherDebt'];
+        var swap = keys.some(function (k) { return WK.isSet(p[k]); });
+        if (swap) keys.forEach(function (k) {
+            old[k] = state.profile[k];
+            state.profile[k] = p[k];
+            p[k] = null;
+        });
+        state.people.forEach(function (q) { q.self = q === p; });
+        return swap;
+    }
+
     /** Personen bearbeiten (Übersicht). onList: wenn jemand dazukommt oder geht. */
     function renderPeople(box, onList, focusLast) {
         box.innerHTML = '';
@@ -1030,22 +1061,35 @@
             var me = el('input', { type: 'radio', name: 'me', 'aria-label': 'Das bin ich' });
             me.checked = p.self;
             me.addEventListener('change', function () {
-                state.people.forEach(function (q) { q.self = q === p; });
+                var swapped = setMe(p);
                 renderPeople(box, onList);
                 changed();
+                if (!swapped) return;
+                var y = window.scrollY;
+                renderMain();   // zeigt unter „Meine Finanzen“ jetzt andere Werte
+                window.scrollTo(0, y);
             });
             var rent = numField(p, 'rent', '', { unit: '€' });
-            rent._input.setAttribute('aria-label', 'Kann höchstens zahlen pro Monat');
+            rent._input.setAttribute('aria-label', 'Eigene Grenze pro Monat, leer = berechnetes Maximum');
+            if (!p.self) rent._input.setAttribute('data-max', p.id);
             if (p.self) { rent._input.disabled = true; rent._input.placeholder = 'ich'; rent._input.value = ''; }
             // Ich bleibe immer in der Liste.
             var del = p.self ? null : el('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Person entfernen', title: 'Person entfernen', text: '×', onclick: function () {
-                if (!confirm(personName(p) + ' entfernen?\n\nDabei gehen alle Gewichtungen, Bewertungen und das Maximum dieser Person verloren. Ein Zimmer mit Angaben bleibt in der Wohnung als „jemand anderes“ stehen. Die privaten Nebenkosten werden neu aufgeteilt.')) return;
+                if (!confirm(personName(p) + ' entfernen?\n\nDabei gehen alle Gewichtungen, Bewertungen und Finanzangaben dieser Person verloren. Ein Zimmer mit Angaben bleibt in der Wohnung als „jemand anderes“ stehen. Die privaten Nebenkosten werden neu aufgeteilt.')) return;
                 removePerson(p);
                 renderPeople(box, onList);
                 onList();
                 changed();
             } });
             box.appendChild(el('div', { class: 'person' }, [input, el('span', { class: 'person-me' }, [me]), rent.querySelector('.input-wrap'), del]));
+            if (!p.self) box.appendChild(el('div', { class: 'person-fin' }, [
+                el('div', { class: 'grid' }, [
+                    numField(p, 'netIncome', 'Nettoeinkommen', { unit: '€', hint: 'Pflicht, pro Monat.' }),
+                    numField(p, 'livingCosts', 'Lebenshaltung ohne Wohnen', { unit: '€', hint: 'Pflicht: Essen, Mobilität, Versicherungen, Freizeit …' }),
+                    numField(p, 'otherDebt', 'Andere Kreditraten', { unit: '€', hint: 'Pflicht: Auto, Studienkredit, Ratenkäufe. 0, wenn keine.' })
+                ]),
+                el('p', { class: 'small person-limit', 'data-limit': p.id })
+            ]));
             box.appendChild(el('div', { class: 'person-incl', 'data-incl': p.id, hidden: true }));
             if (focusLast && idx === state.people.length - 1) setTimeout(function () { input.focus(); }, 0);
         });
@@ -1055,6 +1099,35 @@
             onList();
             changed();
         }));
+    }
+
+    /** Je Person: fehlende Pflichtangaben oder wie das Maximum zustande kommt. */
+    function updateLimits(box) {
+        box.querySelectorAll('[data-limit]').forEach(function (line) {
+            var p = state.people.find(function (q) { return q.id === line.getAttribute('data-limit'); });
+            if (!p) return;
+            var l = WK.personLimit(p);
+            var input = box.querySelector('[data-max="' + p.id + '"]');
+            if (input) input.placeholder = l.auto === null ? '?' : fmtInput(Math.round(l.auto), 0);
+            line.classList.toggle('is-warn', l.missing.length > 0 || (l.own !== null && l.own - l.auto > 0.5));
+            line.textContent = limitText(l, p);
+        });
+    }
+
+    function limitText(l, p) {
+        if (l.missing.length) {
+            return 'Es fehlt noch: ' + WK.andList(l.missing) + '. ' +
+                (l.own !== null ? 'Bis dahin gilt die eingetragene Grenze von ' + eur(l.own) + '.' : 'Bis dahin lässt sich kein Maximum berechnen.');
+        }
+        var how = (l.byRest
+            ? eur(n(p.netIncome)) + ' Netto − ' + eur(n(p.livingCosts)) + ' Lebenshaltung'
+            : '35 % von ' + eur(n(p.netIncome)) + ' Netto') +
+            (n(p.otherDebt) > 0 ? ' − ' + eur(n(p.otherDebt)) + ' Kredite' : '');
+        if (l.own === null) return 'Maximum: ' + eur(l.auto) + ' im Monat (' + how + ')';
+        var diff = l.own - l.auto;
+        return 'Es gilt die eingetragene Grenze von ' + eur(l.own) +
+            (diff > 0.5 ? ' – ' + eur(diff) + ' mehr, als das Einkommen hergibt.' : '.') +
+            ' Berechnet wären ' + eur(l.auto) + ' (' + how + ').';
     }
 
     /** Häkchen je zahlender Person: was sie über mich zahlt. Neu gebaut
@@ -1092,8 +1165,9 @@
                 text.textContent = c.name + (all ? ' (zahlst du komplett)' : c.other > 0 ? ' (' + euro2(c.other) + ')' : '');
             });
             var off = WK.sumOther(info.items);
-            line.lastChild.textContent = (n(p.rent) > 0
-                ? 'Nach privaten Nebenkosten bleiben höchstens ' + eur(Math.max(0, n(p.rent) - off)) + ', davon geht in jeder Wohnung noch der Anteil an Hausgeld bzw. Nebenkosten ab. '
+            var max = n(state.profile.personRents[p.id]);
+            line.lastChild.textContent = (max > 0
+                ? 'Nach privaten Nebenkosten bleiben höchstens ' + eur(Math.max(0, max - off)) + ', davon geht in jeder Wohnung noch der Anteil an Hausgeld bzw. Nebenkosten ab. '
                 : '') + 'Ohne Haken zahlt die Person ihren Anteil selbst – auch das zählt zum Maximum.';
         });
     }
@@ -1360,6 +1434,7 @@
                 }).join('') + '</tr>' +
                 '</tbody></table></div>' +
                 (results.length >= 2 ? '<p class="muted small">Markiert = bester Wert der Zeile. „Echte Kosten“ = beim Kauf Zinsen + Nebenkosten + entgangene Rendite aufs Eigenkapital − WG-Einnahmen (Tilgung zählt als Sparen), bei Miete Netto-Wohnkosten + entgangene Rendite auf die Kaution. „ggü. heute“ vergleicht mit deiner aktuellen Warmmiete plus privaten Nebenkosten.' +
+                    (results.some(function (a) { return isRent(a) && a.partners.length; }) ? ' „Warmmiete / Netto-Einkommen“ rechnet mit dem Einkommen aller, die dort wohnen und mitzahlen.' : '') +
                     (hasWishes ? ' „Passt zu …“ = wie gut die Wohnung die Wünsche erfüllt, gewichtet nach Wichtigkeit; gemeinsam = Durchschnitt aller Personen.' : '') + '</p>' : '');
         }
         box.innerHTML = cards + table;
@@ -1460,7 +1535,7 @@
             return 'Was ähnliche Wohnungen dort kosten, siehe Mietspiegel deiner Stadt' + result(n(f.refRent) * n(f.area), eur(n(f.refRent) * n(f.area)) + ' für die ganze Wohnung') + '.';
         } }));
         var wgPanel = panel('WG & Untermieter', [explainFair(rent), fairMissing, roomsBox, group('Annahmen', wgAssumptions)],
-            { hint: 'Leere Miete = faire Miete nach Größe, Lage und Ausstattung, höchstens das Maximum aus „Personen“. ' +
+            { hint: 'Leere Miete = faire Miete nach Größe, Lage und Ausstattung, höchstens das Maximum aus „Personen“ (dort aus dem Einkommen berechnet). ' +
                 'Für weitere Untermieter „jemand anderes“ wählen und die Warmmiete eintragen.' +
                 (rent ? ' Als Hauptmieter brauchst du die Erlaubnis des Vermieters zur Untervermietung.' : '') });
 
@@ -1723,7 +1798,8 @@
         function fairText(g) {
             if (g.self) return g.cold === null || !rent ? '' : 'Dein fairer Anteil an der Kaltmiete: ' + eur(g.cold);
             var max = g.max !== null ? 'Maximum ' + eur(g.max) : '';
-            if (g.due === null) return g.source === 'max' ? 'Gerechnet mit ' + eur(g.pay) + ' (' + max + '), bis alle Angaben für die faire Miete da sind.' : '';
+            if (g.due === null) return g.source === 'equal' ? 'Vorläufig gleichmäßig geteilt: ' + eur(g.pay) + ' (' + max + '), bis alle Angaben für die faire Miete da sind.'
+                : g.source === 'max' ? 'Gerechnet mit ' + eur(g.pay) + ' (' + max + '), bis alle Angaben für die faire Miete da sind.' : '';
             var parts = [eur(g.cold) + ' kalt'];
             if (g.running > 0) parts.push(eur(g.running) + (rent ? ' Nebenkosten' : ' Hausgeld & Grundsteuer'));
             if (g.priv > 0) parts.push(eur(g.priv) + ' ' + g.items.map(function (c) { return c.name; }).join(', '));
@@ -1927,7 +2003,11 @@
                 (n(p.otherDebt) > 0 ? line('Andere Kreditraten', '− ' + eur(n(p.otherDebt))) : '') +
                 line('Netto-Wohnkosten', '− ' + eur(a.netHousing)) +
                 line('Frei verfügbar', eur(a.available), 'sum strong') +
-                line('Warmmiete / Netto', pct(a.rentRatio)) +
+                (a.partners.length
+                    ? line('Gemeinsames Netto mit ' + esc(WK.andList(a.partners.map(function (g) { return g.name; }))), eur(a.jointIncome)) +
+                        line('Warmmiete / gemeinsames Netto', pct(a.rentRatio)) +
+                        line('Dein Teil der Warmmiete / dein Netto', pct(a.ownRatio))
+                    : line('Warmmiete / Netto', pct(a.rentRatio))) +
                 line('Wohnkosten / Netto (mit WG)', pct(a.burdenNet)) +
                 '</table>';
         }
