@@ -953,6 +953,30 @@ table {
     min-width: 0;
 }
 
+/* Zweite Zeile je Wunsch: für alle gleich oder Ort je Person */
+.wish-scope {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    margin-bottom: 6px;
+    font-size: 12.5px;
+    color: var(--muted);
+}
+
+.wish-scope select {
+    width: auto;
+    max-width: 100%;
+    min-height: 32px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    font-size: 12.5px;
+}
+
+.wish-place { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+.wish-place select { min-width: 0; }
+
 .wish-row .input-wrap input { padding-right: 30px; }
 .wish-row .unit { right: 8px; }
 

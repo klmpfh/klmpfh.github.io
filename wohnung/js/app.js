@@ -89,7 +89,7 @@
             steps: [],           // Staffelmiete: [{ year: ab Mietjahr, rent: Kaltmiete }]
             coveredCosts: {},    // { privateCostId: true } – schon in Warmmiete/Hausgeld enthalten
             persons: null,       // Personen, die sich die privaten Nebenkosten teilen; leer = automatisch (personCount in calc.js)
-            wishHints: {},   // { wishId: { score, text } } – Einschätzung der KI aus dem Angebot
+            wishHints: {},   // { Kennung aus wishTasks: { score, text } } – Einschätzung der KI aus dem Angebot
             ratings: {}   // { wishId: { personId: 0–100 } } – wie gut die Wohnung den Wunsch erfüllt
         };
     }
@@ -110,9 +110,11 @@
         return { id: uid(), name: '', address: '' };
     }
 
-    /** Wünsche gelten gemeinsam für alle. weights: { personId: 0–100 } – wie wichtig der Wunsch der jeweiligen Person ist. */
+    /** Wünsche gelten gemeinsam für alle. weights: { personId: 0–100 } – wie wichtig der Wunsch der jeweiligen Person ist.
+     *  scope: 'flat' = betrifft die Wohnung, Antwort für alle gleich; 'person' = hängt vom Ort der Person ab (places:
+     *  { personId: placeId }); '' = automatisch aus dem Text. Aufgelöst von wishScope und wishPlace. */
     function newWish() {
-        return { id: uid(), text: '', weights: {} };
+        return { id: uid(), text: '', weights: {}, scope: '', places: {} };
     }
 
     function numOrNull(v) {
@@ -182,7 +184,9 @@
             return {
                 id: w.id ? String(w.id) : uid(),
                 text: String(w.text || ''),
-                weights: isObj(w.weights) ? Object.assign({}, w.weights) : {}
+                weights: isObj(w.weights) ? Object.assign({}, w.weights) : {},
+                scope: w.scope === 'flat' || w.scope === 'person' ? w.scope : '',
+                places: isObj(w.places) ? Object.assign({}, w.places) : {}
             };
         });
         return syncPersons({ profile: profile, flats: flats, people: people, wishes: wishes });
@@ -586,21 +590,34 @@
 
     /** Was offer.js zum Schreiben des Prompts und Lesen der Antwort braucht. */
     function offerContext() {
-        return { parseNum: parseNum, places: allPlaces(), wishes: state.wishes };
+        return { parseNum: parseNum, places: allPlaces(), wishes: wishTasks() };
     }
 
-    /** Einschätzung der KI merken und damit alle noch offenen Bewertungen füllen –
-     *  eigene Bewertungen bleiben. Liefert die Wünsche, bei denen etwas gefüllt wurde. */
-    function applyWishes(f, hints) {
-        return state.wishes.filter(function (w) {
-            var h = hints[w.id];
+    /** Einschätzung der KI merken und damit alle noch offenen Bewertungen füllen: bei
+     *  Wünschen zur Wohnung für alle, sonst nur für die eine Person. Eigene Bewertungen
+     *  bleiben, außer mit replace. Liefert, wo sich etwas geändert hat (aus wishTasks). */
+    function applyWishes(f, hints, replace) {
+        return wishTasks().filter(function (t) {
+            var h = hints[t.id];
             if (!h) return false;
-            f.wishHints[w.id] = h;
-            var r = f.ratings[w.id] = f.ratings[w.id] || {};
-            var open = state.people.filter(function (p) { return !WK.isSet(r[p.id]); });
-            open.forEach(function (p) { r[p.id] = h.score; });
-            return open.length > 0;
+            f.wishHints[t.id] = h;
+            var r = f.ratings[t.wish.id] = f.ratings[t.wish.id] || {};
+            var todo = taskPeople(t).filter(function (p) { return !WK.isSet(r[p.id]) || (replace && Number(r[p.id]) !== h.score); });
+            todo.forEach(function (p) { r[p.id] = h.score; });
+            return todo.length > 0;
         });
+    }
+
+    /** Eigene Bewertungen, die von der Einschätzung der KI abweichen ("„Balkon“ (Anna): 50 → 100 %"). */
+    function wishConflicts(f, hints) {
+        return wishTasks().reduce(function (out, t) {
+            var h = hints[t.id], r = f.ratings[t.wish.id] || {};
+            return h ? out.concat(taskPeople(t).filter(function (p) {
+                return wants(t.wish, p) && WK.isSet(r[p.id]) && Number(r[p.id]) !== h.score;
+            }).map(function (p) {
+                return '„' + t.text.trim() + '“ (' + personName(p) + '): ' + fmtInput(r[p.id], 0) + ' → ' + h.score + ' %';
+            })) : out;
+        }, []);
     }
 
     /** Überträgt gelesene Angaben. Ein selbst vergebener Name bleibt, Notizen werden ergänzt. */
@@ -650,17 +667,17 @@
     }
 
     /** Übernimmt die Angaben und merkt sich, was danach oben auf der Seite steht. */
-    function takeOffer(f, read) {
+    function takeOffer(f, read, replaceRatings) {
         applyOffer(f, read.flat);
-        var filled = applyWishes(f, read.flat.wishes || {});
+        var filled = applyWishes(f, read.flat.wishes || {}, replaceRatings);
         var count = Object.keys(read.flat).filter(function (k) { return k !== 'kind' && k !== 'wishes'; }).length;
         var openWishes = OFFER.written(state.wishes).filter(function (w) {
-            return state.people.some(function (p) { return !(f.ratings[w.id] && WK.isSet(f.ratings[w.id][p.id])); });
+            return state.people.some(function (p) { return wants(w, p) && !(f.ratings[w.id] && WK.isSet(f.ratings[w.id][p.id])); });
         }).length;
         var missing = OFFER.missing(f).concat(OFFER.located(allPlaces()).filter(function (x) { return !WK.isSet(f.distances[x.id]); })
             .map(function (x) { return 'Entfernung zu ' + x.label; }));
         offerStatus = { id: f.id, text: (count ? count + (count === 1 ? ' Angabe' : ' Angaben') + ' übernommen' : 'Übernommen') + ' – bitte kurz prüfen.' +
-            (filled.length ? ' Wünsche vorausgefüllt: ' + filled.map(function (w) { return '„' + w.text.trim() + '“ ' + read.flat.wishes[w.id].score + ' %'; }).join(', ') + '.' : '') +
+            (filled.length ? ' Wünsche vorausgefüllt: ' + filled.map(function (t) { return '„' + t.text.trim() + '“ ' + (t.person && state.people.length > 1 ? '(' + personName(t.person) + ') ' : '') + read.flat.wishes[t.id].score + ' %'; }).join(', ') + '.' : '') +
             (openWishes ? ' ' + (openWishes === 1 ? 'Ein Wunsch ist' : openWishes + ' Wünsche sind') + ' noch zu bewerten.' : '') +
             (missing.length ? ' Es fehlen noch: ' + missing.join(', ') + '.' : '') +
             (read.ignored.length ? ' Nicht lesbar: ' + read.ignored.join(', ') + '.' : '') };
@@ -685,7 +702,7 @@
                 if (!read.error) fn(read);
             };
         }
-        var places = OFFER.located(allPlaces()), wishCount = OFFER.written(state.wishes).length;
+        var places = OFFER.located(allPlaces()), wishCount = OFFER.written(wishTasks()).length;
         var included = [places.length ? 'die Adressen eurer wichtigen Orte (' + places.map(function (x) { return (x.name || '').trim() || 'Ort'; }).join(', ') + ')' : '',
             wishCount ? 'eure Wünsche (ohne Wichtigkeit)' : ''].filter(Boolean);
         var preview = el('pre', { class: 'offer-prompt', tabindex: '0', text: OFFER.prompt(offerContext()) });
@@ -698,12 +715,12 @@
                 el('summary', { text: 'Anleitung, Prompt & Antwort einfügen' }),
                 el('ol', { class: 'offer-steps' }, [
                     el('li', { text: 'Prompt kopieren und in eine KI einfügen (z. B. ChatGPT, Claude, Gemini). Er enthält ' + (included.length
-                        ? included.join(' und ') + ', aber keine Namen aus „Personen“ und keine Finanzen.'
+                        ? included.join(' und ') + ', aber keine Namen aus „Personen“ ' + (state.people.length > 1 ? '(dort steht „Person 1“, „Person 2“ …) ' : '') + 'und keine Finanzen.'
                         : 'keine Daten von dir.') +
                         (places.length ? '' : ' Mit wichtigen Orten unter „Personen“ (Übersicht) ermittelt die KI auch die Entfernungen.') +
                         (wishCount ? '' : ' Mit Wünschen (Übersicht) bewertet sie auch, was eindeutig ist.') }),
                     el('li', { text: 'Den Text des Angebots dahinter einfügen, oder PDF bzw. Screenshots anhängen, und abschicken.' }),
-                    el('li', { text: 'Die Antwort unten einfügen und übernehmen.' + (wishCount ? ' Bei Wünschen werden nur offene Bewertungen gefüllt.' : '') })
+                    el('li', { text: 'Die Antwort unten einfügen und übernehmen.' + (wishCount ? ' Bei Wünschen werden offene Bewertungen gefüllt; weicht eine eigene ab, wirst du gefragt.' : '') })
                 ]),
                 el('div', { class: 'actions' }, [
                     btn('Prompt kopieren', 'btn-primary', function (e) { copyText(OFFER.prompt(offerContext()), e.currentTarget); }),
@@ -719,7 +736,9 @@
                     btn('In diese Wohnung übernehmen', 'btn-primary', withAnswer(function (read) {
                         var conflicts = offerConflicts(f, read.flat);
                         if (conflicts.length && !confirm('Diese Angaben werden überschrieben:\n\n' + conflicts.join('\n') + '\n\nÜbernehmen?')) return;
-                        takeOffer(f, read);
+                        var differing = wishConflicts(f, read.flat.wishes || {});
+                        takeOffer(f, read, differing.length > 0 && confirm('Diese Bewertungen weichen von der KI ab:\n\n' + differing.join('\n') +
+                            '\n\nDurch die Werte der KI ersetzen?\n\nAbbrechen = eigene Bewertungen behalten, alles andere wird übernommen.'));
                         saveNow();
                         renderDetail(f);
                     }, f.kind)),
@@ -731,11 +750,21 @@
 
     /* ---------- Wichtige Orte & Entfernungen ---------- */
 
+    /** Orte einer Person, die nicht ganz leer sind. */
+    function filledPlaces(p) {
+        return p.places.filter(function (x) { return x.name.trim() || x.address.trim(); });
+    }
+
+    /** Bezeichnung einer Person im Prompt – ohne Namen. */
+    function promptOwner(p) {
+        return state.people.length > 1 ? 'Person ' + (state.people.indexOf(p) + 1) : '';
+    }
+
     /** Alle Orte aller Personen; label nennt bei mehreren Personen auch den Namen. */
     function allPlaces() {
         return state.people.reduce(function (out, p) {
-            return out.concat(p.places.filter(function (x) { return x.name.trim() || x.address.trim(); }).map(function (x) {
-                return { id: x.id, name: x.name, address: x.address, label: (x.name.trim() || 'Ort') + (state.people.length > 1 ? ' (' + personName(p) + ')' : '') };
+            return out.concat(filledPlaces(p).map(function (x) {
+                return { id: x.id, name: x.name, address: x.address, owner: promptOwner(p), label: (x.name.trim() || 'Ort') + (state.people.length > 1 ? ' (' + personName(p) + ')' : '') };
             }));
         }, []);
     }
@@ -757,15 +786,15 @@
         }));
     }
 
-    /** Wichtige Orte einer Person (Übersicht). */
-    function renderPlaces(box, p, focusLast) {
+    /** Wichtige Orte einer Person (Übersicht). onPlaces: wenn sich ein Ort ändert. */
+    function renderPlaces(box, p, onPlaces, focusLast) {
         box.innerHTML = '';
         box.appendChild(el('span', { class: 'muted', text: 'Wichtige Orte:' }));
         p.places.forEach(function (x, idx) {
             function input(key, placeholder, label) {
                 var i = el('input', { type: 'text', autocomplete: 'off', placeholder: placeholder, 'aria-label': label, list: key === 'name' ? 'place-names' : null });
                 i.value = x[key];
-                i.addEventListener('input', function () { x[key] = i.value; changed(); });
+                i.addEventListener('input', function () { x[key] = i.value; onPlaces(); changed(); });
                 return i;
             }
             var name = input('name', 'z. B. Arbeit', 'Bezeichnung des Ortes');
@@ -776,7 +805,8 @@
                     var used = state.flats.some(function (f) { return WK.isSet(f.distances[x.id]); });
                     if (used && !confirm('„' + (x.name.trim() || 'Ort') + '“ entfernen?\n\nDie Entfernungen dorthin gehen in allen Wohnungen verloren.')) return;
                     removePlace(p, x);
-                    renderPlaces(box, p);
+                    renderPlaces(box, p, onPlaces);
+                    onPlaces();
                     changed();
                 } })
             ]));
@@ -784,13 +814,15 @@
         });
         box.appendChild(btn('+ Ort', 'btn-ghost', function () {
             p.places.push(newPlace());
-            renderPlaces(box, p, true);
+            renderPlaces(box, p, onPlaces, true);
+            onPlaces();
             changed();
         }));
     }
 
     function removePlace(p, x) {
         state.flats.forEach(function (f) { delete f.distances[x.id]; });
+        state.wishes.forEach(function (w) { if (w.places[p.id] === x.id) delete w.places[p.id]; });
         p.places.splice(p.places.indexOf(x), 1);
     }
 
@@ -984,6 +1016,7 @@
         var wishStatus = el('div', { class: 'wish-status' });
         app.appendChild(panel('Wünsche & Bedingungen', [wishBox, wishStatus], {
             hint: 'Eine gemeinsame Liste, frei formuliert – z. B. „Balkon“, „max. 30 Minuten zur Arbeit“, „kein Erdgeschoss“. ' +
+                'Hängt ein Wunsch vom Ort einer Person ab (Arbeitsweg …), stell ihn auf „Ort je Person“, dann beurteilt ihn die KI für jede Person einzeln. ' +
                 'Danach gibt jede Person bei jedem Wunsch an, wie wichtig er ihr ist (0 % = egal). ' +
                 '100 % heißt Muss: Erfüllt eine Wohnung das nicht voll, kommt sie nicht in Frage. ' +
                 'In jeder Wohnung bewerten dann alle, wie gut sie die Wünsche erfüllt.'
@@ -1214,15 +1247,89 @@
         return v === null || v === undefined || !isFinite(v) ? '–' : Math.round(v * 100) + ' %';
     }
 
+    /* Wünsche zur Wohnung (Balkon …) haben für alle dieselbe Antwort, Wünsche mit
+       Ort (Arbeitsweg …) je Person eine eigene. Nur für den KI-Prompt und die
+       Übernahme der Antwort wichtig – bewertet wird immer je Person. */
+
+    /** Ob der Wunsch für die Person zählt; noch nicht gewichtet zählt mit. */
+    function wants(w, p) {
+        return !WK.isSet(w.weights[p.id]) || Number(w.weights[p.id]) > 0;
+    }
+
+    /** Kommt die Bezeichnung des Ortes (oder ein längeres Wort daraus) als Wort
+     *  im Wunsch vor? "Arbeit" passt zu "Weg zur Arbeit" und "Arbeitsweg",
+     *  nicht zu "Arbeitszimmer". */
+    function mentions(w, place) {
+        var name = place.name.trim();
+        return [name].concat(name.split(/\s+/).filter(function (x) { return x.length >= 4; })).some(function (x) {
+            if (x.length < 3) return false;
+            var word = x.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&');
+            return new RegExp('(^|[^\\p{L}])' + word + '(s?weg)?($|[^\\p{L}])', 'iu').test(w.text);
+        });
+    }
+
+    function wishScope(w) {
+        return w.scope || (state.people.some(function (p) {
+            return p.places.some(function (x) { return mentions(w, x); });
+        }) ? 'person' : 'flat');
+    }
+
+    /** Ort der Person, auf den sich der Wunsch bezieht: gewählt, sonst der einzige,
+     *  der im Text vorkommt, sonst der einzige überhaupt. Mehrdeutig → null. */
+    function wishPlace(w, p) {
+        var places = filledPlaces(p);
+        var chosen = places.find(function (x) { return x.id === w.places[p.id]; });
+        if (chosen) return chosen;
+        var named = places.filter(function (x) { return mentions(w, x); });
+        if (named.length) return named.length === 1 ? named[0] : null;
+        return places.length === 1 ? places[0] : null;
+    }
+
+    /** Wem bei einem Wunsch mit Ort noch ein Ort mit Adresse fehlt. */
+    function wishPlaceMissing(w) {
+        return wishScope(w) === 'person' ? state.people.filter(function (p) {
+            var x = wishPlace(w, p);
+            return wants(w, p) && !(x && x.address.trim());
+        }) : [];
+    }
+
+    function taskId(w, p) {
+        return p ? w.id + '-' + p.id : w.id;
+    }
+
+    /** Was die KI beurteilen soll: je Wunsch zur Wohnung eine Kennung, je Wunsch mit
+     *  Ort eine pro Person. Wünsche, die niemandem wichtig sind, fallen weg. */
+    function wishTasks() {
+        return state.wishes.reduce(function (out, w) {
+            var people = state.people.filter(function (p) { return wants(w, p); });
+            if (!people.length) return out;
+            if (wishScope(w) === 'flat') return out.concat([{ id: taskId(w), text: w.text, wish: w }]);
+            var missing = wishPlaceMissing(w);
+            return out.concat(people.filter(function (p) { return missing.indexOf(p) === -1; }).map(function (p) {
+                return { id: taskId(w, p), text: w.text, wish: w, person: p, owner: promptOwner(p), placeId: wishPlace(w, p).id };
+            }));
+        }, []);
+    }
+
+    /** Für wen die Antwort gilt. */
+    function taskPeople(t) {
+        return t.person ? [t.person] : state.people;
+    }
+
     function removeWish(w) {
         state.wishes.splice(state.wishes.indexOf(w), 1);
-        state.flats.forEach(function (f) { delete f.ratings[w.id]; delete f.wishHints[w.id]; });
+        state.flats.forEach(function (f) {
+            delete f.ratings[w.id];
+            delete f.wishHints[w.id];
+            state.people.forEach(function (p) { delete f.wishHints[taskId(w, p)]; });
+        });
     }
 
     function removePerson(p) {
-        state.wishes.forEach(function (w) { delete w.weights[p.id]; });
         p.places.slice().forEach(function (x) { removePlace(p, x); });
+        state.wishes.forEach(function (w) { delete w.weights[p.id]; delete w.places[p.id]; });
         state.flats.forEach(function (f) {
+            state.wishes.forEach(function (w) { delete f.wishHints[taskId(w, p)]; });
             Object.keys(f.ratings).forEach(function (wid) { delete f.ratings[wid][p.id]; });
             // Zimmer mit Angaben bleiben stehen, dort wohnt dann jemand anderes.
             f.wg.rooms = f.wg.rooms.filter(function (r) {
@@ -1261,7 +1368,7 @@
         return swap;
     }
 
-    /** Personen bearbeiten (Übersicht). onList: wenn jemand dazukommt oder geht. */
+    /** Personen bearbeiten (Übersicht). onList: wenn jemand dazukommt oder geht oder sich Orte ändern. */
     function renderPeople(box, onList, focusLast) {
         box.innerHTML = '';
         box.appendChild(el('div', { class: 'person room-head' }, [
@@ -1310,7 +1417,7 @@
             ]));
             box.appendChild(el('div', { class: 'person-incl', 'data-incl': p.id, hidden: true }));
             var places = el('div', { class: 'person-places' });
-            renderPlaces(places, p);
+            renderPlaces(places, p, onList);
             box.appendChild(places);
             if (focusLast && idx === state.people.length - 1) setTimeout(function () { input.focus(); }, 0);
         });
@@ -1410,7 +1517,9 @@
         state.wishes.forEach(function (w) {
             var text = el('input', { type: 'text', class: 'wish-text', autocomplete: 'off', 'data-wish': w.id, 'aria-label': 'Wunsch', placeholder: 'z. B. Balkon, ruhige Lage, max. 30 min zur Arbeit' });
             text.value = w.text || '';
-            text.addEventListener('input', function () { w.text = text.value; changed(); });
+            var scopeBox = el('div', { class: 'wish-scope' });
+            text.addEventListener('input', function () { w.text = text.value; renderWishScope(scopeBox, w); changed(); });
+            renderWishScope(scopeBox, w);
 
             var cells = people.map(function (p) {
                 var cell = el('div', { class: 'wish-cell' });
@@ -1436,7 +1545,7 @@
                 changed();
             } });
 
-            g.appendChild(el('div', { class: 'wish-row' }, [text].concat(cells).concat([del])));
+            g.appendChild(el('div', { class: 'wish-row' }, [text].concat(cells).concat([del, scopeBox])));
         });
 
         g.appendChild(btn('+ Wunsch', 'btn-ghost btn-add', function () {
@@ -1451,6 +1560,30 @@
             var target = box.querySelector('[data-wish="' + focusId + '"]');
             if (target) target.focus();
         }
+    }
+
+    /** Ob ein Wunsch für alle gleich ist oder vom Ort der Person abhängt, und von welchem. */
+    function renderWishScope(box, w) {
+        function pick(label, set) {
+            return function (v) {
+                set(v);
+                renderWishScope(box, w);
+                var again = Array.prototype.find.call(box.querySelectorAll('select'), function (s) { return s.getAttribute('aria-label') === label; });
+                if (again) again.focus();
+                changed();
+            };
+        }
+        var scope = wishScope(w), what = 'Wovon der Wunsch abhängt';
+        box.innerHTML = '';
+        box.appendChild(selectBox([['flat', 'Für alle gleich'], ['person', 'Ort je Person']], scope, what, pick(what, function (v) { w.scope = v; })));
+        if (scope !== 'person') return;
+        state.people.forEach(function (p) {
+            var x = wishPlace(w, p), places = filledPlaces(p), label = 'Ort von ' + personName(p);
+            box.appendChild(el('span', { class: 'wish-place' }, [nameTag(p), places.length
+                ? selectBox((x ? [] : [['', 'Ort wählen']]).concat(places.map(function (q) { return [q.id, q.name.trim() || q.address.trim()]; })),
+                    x ? x.id : '', label, pick(label, function (v) { w.places[p.id] = v; }))
+                : el('span', { text: '(noch kein Ort)' })]));
+        });
     }
 
     function checkItem(level, text) {
@@ -1469,6 +1602,11 @@
                 allWeighted = false;
                 items.push(checkItem('warn', personName(p) + ' hat ' + (missing === 1 ? 'einen Wunsch' : missing + ' Wünsche') + ' noch nicht gewichtet.'));
             }
+        });
+        wishes.forEach(function (w) {
+            var missing = wishPlaceMissing(w);
+            if (missing.length) items.push(checkItem('info', '„' + (w.text.trim() || 'Wunsch') + '“: Für ' + WK.andList(missing.map(personName)) +
+                ' fehlt ein Ort mit Adresse. Beim Übernehmen mit KI bleibt der Wunsch dort offen.'));
         });
         if (allWeighted) items.push(checkItem('ok', 'Alle Wünsche sind von ' + (people.length > 1 ? 'allen Personen' : personName(people[0])) + ' gewichtet.'));
         var scored = state.flats.map(function (f) { return { f: f, s: WK.wishScore(f, people, wishes) }; });
@@ -1507,7 +1645,11 @@
             .concat(people.map(function (p) { return el('span', { text: personName(p) }); }))));
 
         wishes.forEach(function (w) {
-            var hint = f.wishHints[w.id];
+            var byPerson = wishScope(w) === 'person';
+            function hintText(h) {
+                return h ? 'KI: ' + fmtInput(h.score, 0) + ' %' + (h.text ? ' – ' + h.text : '') : '';
+            }
+            var hint = byPerson ? '' : hintText(f.wishHints[taskId(w)]);
             var cells = people.map(function (p) {
                 var r = f.ratings[w.id] || {};
                 var imp = w.weights[p.id];
@@ -1540,12 +1682,18 @@
                 cell.appendChild(el('span', { class: 'cell-label', text: personName(p) }));
                 cell.appendChild(sel);
                 cell.appendChild(el('small', { class: 'field-hint', text: !WK.isSet(imp) ? 'Wichtigkeit noch offen' : must ? 'Muss – nur „voll“ reicht' : Number(imp) > 0 ? 'wichtig: ' + fmtInput(Math.min(100, Number(imp)), 0) + ' %' : 'egal – zählt nicht' }));
+                if (byPerson) {
+                    var place = wishPlace(w, p), km = place ? f.distances[place.id] : null;
+                    var own = hintText(f.wishHints[taskId(w, p)]);
+                    if (place) cell.appendChild(el('small', { class: 'field-hint', text: 'Ort: ' + (place.name.trim() || place.address.trim()) + (WK.isSet(km) ? ', ' + approx(f, fmtKm(km)) : '') }));
+                    if (own) cell.appendChild(el('small', { class: 'field-hint', text: own }));
+                }
                 return cell;
             });
             list.appendChild(el('div', { class: 'rate-row' }, [
                 el('div', { class: 'rate-text' }, [
                     w.text || '(ohne Text)',
-                    hint ? el('small', { class: 'field-hint', text: 'KI: ' + fmtInput(hint.score, 0) + ' %' + (hint.text ? ' – ' + hint.text : '') }) : null
+                    hint ? el('small', { class: 'field-hint', text: hint }) : null
                 ])
             ].concat(cells)));
         });
