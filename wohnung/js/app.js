@@ -94,9 +94,9 @@
         return { id: uid(), name: '', self: false, rent: null, includes: {} };
     }
 
-    /** weights: { personId: 0–100 } – wie wichtig der Wunsch der jeweiligen Person ist. */
-    function newWish(by) {
-        return { id: uid(), text: '', by: by, weights: {} };
+    /** Wünsche gelten gemeinsam für alle. weights: { personId: 0–100 } – wie wichtig der Wunsch der jeweiligen Person ist. */
+    function newWish() {
+        return { id: uid(), text: '', weights: {} };
     }
 
     function isObj(x) {
@@ -143,13 +143,10 @@
             : [newPerson(), newPerson()];
         if (!people.length) people = [newPerson()];
         flats.forEach(function (f) { linkRooms(f, people); });
-        var ids = people.map(function (p) { return p.id; });
         var wishes = (data && Array.isArray(data.wishes) ? data.wishes : []).filter(isObj).map(function (w) {
-            var by = w.by ? String(w.by) : null;
             return {
                 id: w.id ? String(w.id) : uid(),
                 text: String(w.text || ''),
-                by: ids.indexOf(by) !== -1 ? by : (ids[0] || null),
                 weights: isObj(w.weights) ? Object.assign({}, w.weights) : {}
             };
         });
@@ -736,7 +733,7 @@
                 ['Zahlt über mich', 'Mit Haken: Du bezahlst die Rechnung, und die Person gibt dir ihren Anteil mit der Miete. Der Anteil ist deshalb kein Geld für Kredit oder Kaltmiete. Ohne Haken: Die Person zahlt ihren Anteil selbst, z. B. direkt an den Anbieter. Bei Nebenkosten & Heizung heißt ohne Haken: Sie zahlt dir den Anteil zusätzlich zur Miete.'],
                 ['Was davon im Budget zählt', '„Was ist drin?“ rechnet mit dem, was vom Maximum nach den privaten Nebenkosten übrig ist. Für die Kreditrate zählen davon nur 70 %, weil Banken Mieteinnahmen meist nicht voll anrechnen. Was eine Person wirklich zahlt, steht in jeder Wohnung.']
             ])], {
-            hint: 'Wer zusammen wohnen will. Alle hier teilen sich die privaten Nebenkosten und geben ihre Wünsche an. ' +
+            hint: 'Wer zusammen wohnen will. Alle hier teilen sich die privaten Nebenkosten und gewichten die Wünsche. ' +
                 '„Max. im Monat“: was die Person höchstens für alles zusammen zahlen kann. ' +
                 'Was sie tatsächlich zahlt, ist die faire Miete der jeweiligen Wohnung (dort unter „WG & Untermieter“), höchstens dieses Maximum. Trägst du dort selbst mehr ein, gibt es eine Warnung.'
         }));
@@ -791,7 +788,7 @@
 
         var wishStatus = el('div', { class: 'wish-status' });
         app.appendChild(panel('Wünsche & Bedingungen', [wishBox, wishStatus], {
-            hint: 'Jede Person ergänzt eigene Wünsche, frei formuliert – z. B. „Balkon“, „max. 30 Minuten zur Arbeit“, „kein Erdgeschoss“. ' +
+            hint: 'Eine gemeinsame Liste, frei formuliert – z. B. „Balkon“, „max. 30 Minuten zur Arbeit“, „kein Erdgeschoss“. ' +
                 'Danach gibt jede Person bei jedem Wunsch an, wie wichtig er ihr ist (0 % = egal). ' +
                 '100 % heißt Muss: Erfüllt eine Wohnung das nicht voll, kommt sie nicht in Frage. ' +
                 'In jeder Wohnung bewerten dann alle, wie gut sie die Wünsche erfüllt.'
@@ -985,22 +982,12 @@
         return v === null || v === undefined || !isFinite(v) ? '–' : Math.round(v * 100) + ' %';
     }
 
-    function wishesInOrder() {
-        // Gruppiert nach Person (Reihenfolge der Personen), innerhalb in Eingabereihenfolge.
-        var out = [];
-        state.people.forEach(function (p) {
-            state.wishes.forEach(function (w) { if (w.by === p.id) out.push(w); });
-        });
-        return out;
-    }
-
     function removeWish(w) {
         state.wishes.splice(state.wishes.indexOf(w), 1);
         state.flats.forEach(function (f) { delete f.ratings[w.id]; });
     }
 
     function removePerson(p) {
-        state.wishes.filter(function (w) { return w.by === p.id; }).forEach(removeWish);
         state.wishes.forEach(function (w) { delete w.weights[p.id]; });
         state.flats.forEach(function (f) {
             Object.keys(f.ratings).forEach(function (wid) { delete f.ratings[wid][p.id]; });
@@ -1052,8 +1039,7 @@
             if (p.self) { rent._input.disabled = true; rent._input.placeholder = 'ich'; rent._input.value = ''; }
             // Ich bleibe immer in der Liste.
             var del = p.self ? null : el('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Person entfernen', title: 'Person entfernen', text: '×', onclick: function () {
-                var own = state.wishes.filter(function (w) { return w.by === p.id; }).length;
-                if (!confirm(personName(p) + ' entfernen?\n\nDabei gehen ' + (own ? 'ihre ' + own + ' Wünsche sowie ' : '') + 'alle Gewichtungen, Bewertungen und das Maximum dieser Person verloren. Ein Zimmer mit Angaben bleibt in der Wohnung als „jemand anderes“ stehen. Die privaten Nebenkosten werden neu aufgeteilt.')) return;
+                if (!confirm(personName(p) + ' entfernen?\n\nDabei gehen alle Gewichtungen, Bewertungen und das Maximum dieser Person verloren. Ein Zimmer mit Angaben bleibt in der Wohnung als „jemand anderes“ stehen. Die privaten Nebenkosten werden neu aufgeteilt.')) return;
                 removePerson(p);
                 renderPeople(box, onList);
                 onList();
@@ -1118,58 +1104,52 @@
         box.innerHTML = '';
         var people = state.people;
 
-        var cols = String(people.length);
-        people.forEach(function (author) {
-            var mine = state.wishes.filter(function (w) { return w.by === author.id; });
-            var g = el('div', { class: 'wish-group', style: '--cols:' + cols });
-            g.appendChild(el('h3', { class: 'group-title' }, ['Wünsche von ', nameTag(author)]));
+        var g = el('div', { class: 'wish-group', style: '--cols:' + people.length });
+        if (state.wishes.length) {
+            g.appendChild(el('div', { class: 'wish-row wish-head' }, [el('span', { text: 'Wunsch / Bedingung' })]
+                .concat(people.map(function (p) { return el('span', null, ['Wichtig für ', nameTag(p)]); }))
+                .concat([el('span')])));
+        }
 
-            if (mine.length) {
-                g.appendChild(el('div', { class: 'wish-row wish-head' }, [el('span', { text: 'Wunsch / Bedingung' })]
-                    .concat(people.map(function (p) { return el('span', null, ['Wichtig für ', nameTag(p)]); }))
-                    .concat([el('span')])));
-            }
+        state.wishes.forEach(function (w) {
+            var text = el('input', { type: 'text', class: 'wish-text', autocomplete: 'off', 'data-wish': w.id, 'aria-label': 'Wunsch', placeholder: 'z. B. Balkon, ruhige Lage, max. 30 min zur Arbeit' });
+            text.value = w.text || '';
+            text.addEventListener('input', function () { w.text = text.value; changed(); });
 
-            mine.forEach(function (w) {
-                var text = el('input', { type: 'text', class: 'wish-text', autocomplete: 'off', 'data-wish': w.id, 'aria-label': 'Wunsch', placeholder: 'z. B. Balkon, ruhige Lage, max. 30 min zur Arbeit' });
-                text.value = w.text || '';
-                text.addEventListener('input', function () { w.text = text.value; changed(); });
-
-                var cells = people.map(function (p) {
-                    var cell = el('div', { class: 'wish-cell' });
-                    var mark = function () {
-                        var v = w.weights[p.id];
-                        cell.classList.toggle('missing', !WK.isSet(v));
-                        cell.classList.toggle('must', WK.isSet(v) && Number(v) >= WK.MUST);
-                        cell.title = WK.isSet(v) && Number(v) >= WK.MUST ? 'Muss-Kriterium: nicht voll erfüllt = Wohnung kommt nicht in Frage' : '';
-                    };
-                    var f = numField(w.weights, p.id, '', { unit: '%', dec: 0, placeholder: '?', onchange: mark });
-                    f._input.setAttribute('aria-label', 'Wie wichtig für ' + personName(p));
-                    cell.appendChild(el('span', { class: 'cell-label' }, ['Wichtig für ', nameTag(p)]));
-                    cell.appendChild(f.querySelector('.input-wrap'));
-                    mark();
-                    return cell;
-                });
-
-                var del = el('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Wunsch entfernen', title: 'Wunsch entfernen', text: '×', onclick: function () {
-                    var rated = state.flats.some(function (f) { return f.ratings[w.id] && Object.keys(f.ratings[w.id]).length; });
-                    if ((w.text || rated) && !confirm('„' + (w.text || 'Wunsch') + '“ entfernen?' + (rated ? '\n\nDie Bewertungen in den Wohnungen gehen dabei verloren.' : ''))) return;
-                    removeWish(w);
-                    renderWishEditor(box);
-                    changed();
-                } });
-
-                g.appendChild(el('div', { class: 'wish-row' }, [text].concat(cells).concat([del])));
+            var cells = people.map(function (p) {
+                var cell = el('div', { class: 'wish-cell' });
+                var mark = function () {
+                    var v = w.weights[p.id];
+                    cell.classList.toggle('missing', !WK.isSet(v));
+                    cell.classList.toggle('must', WK.isSet(v) && Number(v) >= WK.MUST);
+                    cell.title = WK.isSet(v) && Number(v) >= WK.MUST ? 'Muss-Kriterium: nicht voll erfüllt = Wohnung kommt nicht in Frage' : '';
+                };
+                var f = numField(w.weights, p.id, '', { unit: '%', dec: 0, placeholder: '?', onchange: mark });
+                f._input.setAttribute('aria-label', 'Wie wichtig für ' + personName(p));
+                cell.appendChild(el('span', { class: 'cell-label' }, ['Wichtig für ', nameTag(p)]));
+                cell.appendChild(f.querySelector('.input-wrap'));
+                mark();
+                return cell;
             });
 
-            g.appendChild(el('button', { type: 'button', class: 'btn btn-ghost btn-add', onclick: function () {
-                var w = newWish(author.id);
-                state.wishes.push(w);
-                renderWishEditor(box, w.id);
+            var del = el('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Wunsch entfernen', title: 'Wunsch entfernen', text: '×', onclick: function () {
+                var rated = state.flats.some(function (f) { return f.ratings[w.id] && Object.keys(f.ratings[w.id]).length; });
+                if ((w.text || rated) && !confirm('„' + (w.text || 'Wunsch') + '“ entfernen?' + (rated ? '\n\nDie Bewertungen in den Wohnungen gehen dabei verloren.' : ''))) return;
+                removeWish(w);
+                renderWishEditor(box);
                 changed();
-            } }, ['+ Wunsch von ', nameTag(author)]));
-            box.appendChild(g);
+            } });
+
+            g.appendChild(el('div', { class: 'wish-row' }, [text].concat(cells).concat([del])));
         });
+
+        g.appendChild(btn('+ Wunsch', 'btn-ghost btn-add', function () {
+            var w = newWish();
+            state.wishes.push(w);
+            renderWishEditor(box, w.id);
+            changed();
+        }));
+        box.appendChild(g);
 
         if (focusId) {
             var target = box.querySelector('[data-wish="' + focusId + '"]');
@@ -1215,7 +1195,7 @@
 
     /** Bewertung der Wünsche in einer Wohnung (Detailansicht). */
     function wishRatingPanel(f) {
-        var people = state.people, wishes = wishesInOrder();
+        var people = state.people, wishes = state.wishes;
         var summary = el('div', { class: 'tiles' });
         if (!people.length || !wishes.length) {
             return { el: panel('Wünsche & Bedingungen', [el('p', { class: 'muted' }, [
@@ -1231,7 +1211,6 @@
             .concat(people.map(function (p) { return el('span', { text: personName(p) }); }))));
 
         wishes.forEach(function (w) {
-            var author = people.find(function (p) { return p.id === w.by; });
             var cells = people.map(function (p) {
                 var r = f.ratings[w.id] || {};
                 var imp = w.weights[p.id];
@@ -1267,15 +1246,12 @@
                 return cell;
             });
             list.appendChild(el('div', { class: 'rate-row' }, [
-                el('div', { class: 'rate-text' }, [
-                    el('div', { text: w.text || '(ohne Text)' }),
-                    author ? el('small', { class: 'field-hint', text: 'von ' + personName(author) }) : null
-                ])
+                el('div', { class: 'rate-text', text: w.text || '(ohne Text)' })
             ].concat(cells)));
         });
 
         return {
-            el: panel('Wünsche & Bedingungen', [summary, list], { hint: 'Jede Person bewertet, wie gut diese Wohnung ihre und die Wünsche der anderen erfüllt. Daraus und aus der Wichtigkeit ergibt sich die Passung.' }),
+            el: panel('Wünsche & Bedingungen', [summary, list], { hint: 'Jede Person bewertet, wie gut diese Wohnung die Wünsche erfüllt. Daraus und aus der Wichtigkeit ergibt sich die Passung.' }),
             update: function () { renderWishSummary(summary, f); }
         };
     }
@@ -1396,39 +1372,38 @@
         app.innerHTML = '';
         window.scrollTo(0, 0);
         var rent = f.kind === 'rent';
-        document.title = (f.name || 'Wohnung') + ' – Wohnung';
 
-        var nameInput = el('input', { type: 'text', class: 'name-input', 'aria-label': 'Name der Wohnung', autocomplete: 'off' });
-        nameInput.value = f.name || '';
-        nameInput.addEventListener('input', function () {
-            f.name = nameInput.value;
+        var nameTitle = el('h1', { class: 'detail-name' });
+        function showName() {
+            nameTitle.textContent = f.name || 'Ohne Namen';
             document.title = (f.name || 'Wohnung') + ' – Wohnung';
-            changed();
-        });
+        }
+        showName();
 
-        app.appendChild(el('div', { class: 'detail-top' }, [
+        // Bleibt beim Scrollen unter dem Kopfmenü stehen (position: sticky), deshalb direktes Kind von #app.
+        app.appendChild(el('div', { class: 'detail-bar' }, [
             el('a', { class: 'back', href: '#', text: '← Übersicht' }),
-            nameInput,
-            el('div', { class: 'actions' }, [
-                btn('Duplizieren', 'btn-ghost', function () {
-                    var copy = normalizeFlat(JSON.parse(JSON.stringify(f)), p);
-                    copy.id = uid();
-                    copy.loans.forEach(function (l) { l.id = uid(); });
-                    copy.wg.rooms.forEach(function (r) { r.id = uid(); });
-                    copy.steps.forEach(function (s) { s.id = uid(); });
-                    copy.name = (f.name || 'Wohnung') + ' (Kopie)';
-                    state.flats.splice(state.flats.indexOf(f) + 1, 0, copy);
-                    saveNow();
-                    location.hash = 'w=' + copy.id;
-                }, 'Kopie anlegen, z. B. um eine andere Finanzierung durchzuspielen'),
-                btn('Exportieren', 'btn-ghost', function () { exportFlat(f); }, 'Nur diese Wohnung als JSON speichern'),
-                btn('Löschen', 'btn-ghost btn-danger', function () {
-                    if (!confirm('„' + (f.name || 'Wohnung') + '“ wirklich löschen?')) return;
-                    state.flats.splice(state.flats.indexOf(f), 1);
-                    saveNow();
-                    location.hash = '';
-                })
-            ])
+            nameTitle
+        ]));
+        app.appendChild(el('div', { class: 'actions detail-actions' }, [
+            btn('Duplizieren', 'btn-ghost', function () {
+                var copy = normalizeFlat(JSON.parse(JSON.stringify(f)), p);
+                copy.id = uid();
+                copy.loans.forEach(function (l) { l.id = uid(); });
+                copy.wg.rooms.forEach(function (r) { r.id = uid(); });
+                copy.steps.forEach(function (s) { s.id = uid(); });
+                copy.name = (f.name || 'Wohnung') + ' (Kopie)';
+                state.flats.splice(state.flats.indexOf(f) + 1, 0, copy);
+                saveNow();
+                location.hash = 'w=' + copy.id;
+            }, 'Kopie anlegen, z. B. um eine andere Finanzierung durchzuspielen'),
+            btn('Exportieren', 'btn-ghost', function () { exportFlat(f); }, 'Nur diese Wohnung als JSON speichern'),
+            btn('Löschen', 'btn-ghost btn-danger', function () {
+                if (!confirm('„' + (f.name || 'Wohnung') + '“ wirklich löschen?')) return;
+                state.flats.splice(state.flats.indexOf(f), 1);
+                saveNow();
+                location.hash = '';
+            })
         ]));
 
         // --- Eingaben ---
@@ -1492,6 +1467,7 @@
         var objectPanel = panel('Objekt', [
                 group(null, [
                     fieldWrap('Art', kindSel, rent ? 'Mietwohnung – zum Vergleich mit Kaufwohnungen.' : 'Kaufwohnung mit Finanzierung.'),
+                    textField(f, 'name', 'Spitzname', { placeholder: 'z. B. Altbau am Park', cls: 'span-2', onchange: showName, hint: 'So heißt die Wohnung in der Übersicht und im Vergleich.' }),
                     textField(f, 'address', 'Adresse / Lage', { cls: 'span-2' }),
                     textField(f, 'link', 'Link zum Exposé', { placeholder: 'https://…', cls: 'span-2' }),
                     numField(f, 'area', 'Wohnfläche', { unit: 'm²', dec: 1 }),

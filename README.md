@@ -72,7 +72,7 @@ relativ, über die eigene `src`-Angabe.
   (ohne Steuer), Annuitätendarlehen mit Zinsbindung/Anschlusszins/Sondertilgung. Monatsbilanz, Checks,
   Tilgungsplan, Diagramm und Vergleichstabelle. Objekt-Bewertung gegen Faustwerte (Hausgeld/m², Baujahr, Grundsteuer,
   Makler, Inventar, WG-Eignung) mit Rückfragen an Makler/Verwaltung zum Kopieren und Unterlagen-Checkliste. Wünsche & Bedingungen:
-  Personen ergänzen frei formulierte Wünsche, jede Person gewichtet jeden Wunsch (0–100 %) und bewertet ihn in jeder Wohnung;
+  gemeinsame Liste frei formulierter Wünsche, jede Person gewichtet jeden Wunsch (0–100 %) und bewertet ihn in jeder Wohnung;
   daraus Passung je Person und gemeinsam (offene Gewichtungen/Bewertungen werden angezeigt). `js/calc.js` ist die Rechenlogik, `js/app.js` die Oberfläche. Daten im
   localStorage, Übertragung zwischen Geräten per JSON-Export/-Import (alles oder einzelne Wohnung) oder per Link/QR-Code
   (`#import=…`, Daten deflate-komprimiert im Hash, überschreibt nach Rückfrage alles auf dem Zielgerät).

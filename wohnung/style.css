@@ -34,6 +34,9 @@ button, input, select, textarea {
     font-family: inherit;
 }
 
+/* Fokussierte Felder nicht unter Kopfmenü und angehefteter Leiste verstecken. */
+html { scroll-padding-top: calc(var(--theme-nav-height) + 70px); }
+
 body {
     padding: calc(var(--theme-nav-height) + 30px) 16px 60px;
     min-height: 100vh;
@@ -452,31 +455,50 @@ table {
 
 /* ── Detailansicht ── */
 
-.detail-top {
+/* Bleibt beim Scrollen unter dem Kopfmenü angeheftet. */
+.detail-bar {
+    position: sticky;
+    top: calc(var(--theme-nav-height) + 8px);
+    z-index: 10;
     display: flex;
     align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin-bottom: 18px;
+    gap: 14px;
+    padding: 7px 14px 7px 7px;
+    margin-bottom: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--theme-shadow-sm);
 }
 
 .back {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 14px;
+    border-radius: 8px;
+    background: var(--primary);
+    color: #fff;
+    font-size: 13px;
     font-weight: 700;
     text-decoration: none;
     white-space: nowrap;
 }
 
-.name-input {
-    flex: 1 1 240px;
-    font-size: 22px !important;
+.back:hover { background: var(--primary-strong); color: #fff; }
+
+.detail-name {
+    min-width: 0;
+    font-size: 18px;
     font-weight: 800;
-    color: var(--primary-strong) !important;
-    background: transparent !important;
-    border-color: transparent !important;
+    color: var(--primary-strong);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.name-input:hover { border-color: var(--border) !important; }
-.name-input:focus { border-color: var(--primary) !important; }
+.detail-actions { margin-bottom: 18px; }
 
 .detail-layout {
     display: grid;
