@@ -203,6 +203,8 @@ textarea { resize: vertical; line-height: 1.4; }
     font-variant-numeric: tabular-nums;
 }
 
+.input-wrap.unit-wide input { padding-right: 68px; }
+
 .unit {
     position: absolute;
     right: 10px;
@@ -707,6 +709,24 @@ table {
 }
 
 .fair-missing:empty { display: none; }
+
+/* Angebot mit KI übernehmen */
+.offer > summary { margin-bottom: 0; }
+.offer[open] > summary { margin-bottom: 8px; }
+.offer-steps { margin: 0 0 12px; padding-left: 20px; list-style: decimal; line-height: 1.5; }
+.offer-preview { margin: 12px 0; }
+.offer-prompt {
+    max-height: 320px;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: var(--theme-font-mono);
+    font-size: 12px;
+}
+.offer textarea { font-family: var(--theme-font-mono); font-size: 12px; margin-bottom: 8px; }
+.offer-error { margin-bottom: 8px; color: var(--theme-danger); }
+.offer-error:empty { display: none; }
+.offer-status { margin-bottom: 8px; line-height: 1.45; }
 
 /* Private Nebenkosten (Meine Finanzen) und Staffelmiete */
 .cost-row,

@@ -393,6 +393,39 @@ var WK = (function () {
         return base;
     }
 
+    /* ---------- Energie & Heizung ----------
+       Angaben aus Exposé oder Energieausweis. Heizkosten werden grob geschätzt:
+       Kennwert × Wohnfläche × 1,2 (der Ausweis rechnet pro m² Gebäudenutzfläche,
+       die etwa 20 % größer ist) × Preis. Der Kennwert gilt fürs ganze Haus. */
+
+    var ENERGY_SOURCES = [['gas', 'Gas'], ['oel', 'Öl'], ['fern', 'Fernwärme'], ['strom', 'Strom / Umweltwärme'], ['pellets', 'Pellets / Holz'], ['andere', 'Andere / mehrere']];
+    var HEATING_TYPES = [['zentral', 'Zentralheizung'], ['etage', 'Etagenheizung (Therme in der Wohnung)'], ['fern', 'Fernwärme'], ['wp', 'Wärmepumpe'], ['nacht', 'Nachtspeicher / Elektroheizung'], ['ofen', 'Einzelöfen']];
+    var ENERGY_CERTS = [['verbrauch', 'Verbrauchsausweis'], ['bedarf', 'Bedarfsausweis']];
+
+    // €/kWh inkl. Grundpreis, grobe Mittelwerte (Stand November 2026)
+    var ENERGY_PRICE = { gas: 0.12, oel: 0.15, fern: 0.16, pellets: 0.09, andere: 0.12 };
+    var PRICE_HEATPUMP = 0.25, PRICE_DIRECT = 0.30;
+    var ENERGY_AREA = 1.2;
+
+    // Obergrenzen der Effizienzklassen A+ bis G in kWh/(m²·a), darüber H
+    var ENERGY_CLASSES = [['A+', 30], ['A', 50], ['B', 75], ['C', 100], ['D', 130], ['E', 160], ['F', 200], ['G', 250]];
+
+    function energyInfo(flat) {
+        var type = flat.heatingType || '';
+        var source = type === 'fern' ? 'fern' : type === 'wp' || type === 'nacht' ? 'strom' : flat.energySource || '';
+        // Heizung, die man meist selbst beim Versorger bezahlt
+        var direct = type === 'etage' || type === 'nacht' || type === 'ofen';
+        var price = source === 'strom' ? (direct ? PRICE_DIRECT : PRICE_HEATPUMP) : ENERGY_PRICE[source] || ENERGY_PRICE.gas;
+        var use = n(flat.energyUse), area = n(flat.area);
+        var cls = ENERGY_CLASSES.find(function (c) { return use <= c[1]; });
+        return {
+            use: use, type: type, source: source, direct: direct, price: price,
+            need: flat.energyCert === 'bedarf',
+            cls: use > 0 ? (cls ? cls[0] : 'H') : null,
+            cost: use > 0 && area > 0 ? use * area * ENERGY_AREA * price / 12 : null   // geschätzt, pro Monat
+        };
+    }
+
     /* ---------- Gesamtanalyse einer Wohnung ---------- */
 
     function analyze(flat, profile, peers) {
@@ -403,6 +436,7 @@ var WK = (function () {
         var p = profile;
         var a = { flat: flat, kind: 'rent', warnings: [] };
         a.area = n(flat.area);
+        a.energy = energyInfo(flat);
         a.coldRent = n(flat.coldRent);
         a.serviceCharges = n(flat.serviceCharges);
         a.heating = n(flat.heatingCosts);
@@ -558,7 +592,7 @@ var WK = (function () {
         var ncQuestions = [
             'Letzte Betriebskostenabrechnung zeigen lassen – passen die Vorauszahlungen zum tatsächlichen Verbrauch?',
             'Was ist in den Nebenkosten enthalten (Wasser, Müll, Hausmeister, Aufzug, Garten …)?',
-            'Wie wird geheizt, und wie alt ist die Heizung? Energieausweis zeigen lassen.'
+            a.energy.type ? 'Wie alt ist die Heizung?' : 'Wie wird geheizt, und wie alt ist die Heizung?'
         ];
         if (a.extrasPerSqm !== null) {
             var q = fmt2(a.extrasPerSqm) + ' €/m²';
@@ -570,6 +604,8 @@ var WK = (function () {
         } else if (a.serviceCharges + a.heating <= 0) {
             review(a, 'info', 'Nebenkosten fehlen', 'Ohne Nebenkosten und Heizung ist die Monatsbilanz zu optimistisch – üblich sind rund 2,50–4,00 €/m²' + forArea(a, 2.5, 4) + '.', ncQuestions.slice(0, 2));
         }
+
+        assessEnergy(a, flat);
 
         // Kaltmiete pro m² im Vergleich zu den anderen Mietwohnungen
         if (a.coldPerSqm && peers && peers.length) {
@@ -618,6 +654,7 @@ var WK = (function () {
         // Kaufkosten
         a.price = n(flat.price);
         a.area = n(flat.area);
+        a.energy = energyInfo(flat);
         a.pricePerSqm = a.area > 0 ? a.price / a.area : null;
         a.inventory = Math.min(n(flat.inventory), a.price);
         a.transferTax = Math.max(0, a.price - a.inventory) * n(flat.transferTaxPct) / 100;
@@ -778,7 +815,7 @@ var WK = (function () {
 
     /* ---------- Objekt-Bewertung & Rückfragen ----------
        Prüft die Angaben zur Wohnung selbst gegen Faustwerte (Deutschland,
-       Stand 2025) und sammelt Fragen an Makler, Verwalter oder Verkäufer.
+       Stand 2025, Energie 2026) und sammelt Fragen an Makler, Verwalter oder Verkäufer.
        Faustwerte sind Orientierung, keine Grenzwerte – Lage, Baujahr und
        Ausstattung (Aufzug, Tiefgarage, Concierge) verschieben sie deutlich. */
 
@@ -864,27 +901,28 @@ var WK = (function () {
         }
 
         // Baujahr
-        var heating = 'Welche Heizung gibt es, wie alt ist sie, und ist ein Austausch (Gebäudeenergiegesetz) geplant?';
-        var energy = 'Energieausweis anfordern: Verbrauch oder Bedarf, Energieklasse?';
+        var heating = (a.energy.type ? 'Wie alt ist die Heizung' : 'Welche Heizung gibt es, wie alt ist sie') + ', und ist ein Austausch geplant oder absehbar?';
         if (year === null) {
             if (a.price > 0) review(a, 'info', 'Baujahr fehlt', 'Das Baujahr verrät viel über anstehende Sanierungen.', ['Baujahr und Jahr der letzten größeren Sanierungen?']);
         } else if (year < 1949) {
             review(a, 'info', 'Altbau (' + year + ')',
                 'Charme, aber typische Baustellen: alte Strom- und Wasserleitungen, Holzbalkendecken, Feuchte im Keller, eventuell Denkmalschutz (Auflagen, aber auch Steuervorteile).',
-                ['Wann wurden Elektrik, Steigleitungen und Dach zuletzt erneuert?', 'Steht das Gebäude unter Denkmalschutz?', heating, energy]);
+                ['Wann wurden Elektrik, Steigleitungen und Dach zuletzt erneuert?', 'Steht das Gebäude unter Denkmalschutz?', heating]);
         } else if (year < 1979) {
             review(a, 'warn', 'Baujahr vor 1979 (' + year + ')',
                 'Gebaut vor der ersten Wärmeschutzverordnung: oft schwache Dämmung und mögliche Schadstoffe (z. B. Asbest). Fassade, Dach, Fenster und Heizung stehen häufig zur Sanierung an – das zahlt die Gemeinschaft über Rücklage oder Sonderumlage.',
-                ['Welche Sanierungen wurden schon gemacht, welche sind geplant (Fassade, Dach, Fenster, Leitungen)?', 'Reicht die Erhaltungsrücklage dafür, oder sind Sonderumlagen zu erwarten?', heating, energy]);
+                ['Welche Sanierungen wurden schon gemacht, welche sind geplant (Fassade, Dach, Fenster, Leitungen)?', 'Reicht die Erhaltungsrücklage dafür, oder sind Sonderumlagen zu erwarten?', heating]);
         } else if (year < 2000) {
             review(a, 'info', 'Baujahr ' + year,
                 'Heizung, Fenster und Leitungen kommen in das Alter, in dem sie erneuert werden.',
-                ['Wann wurden Heizung und Fenster zuletzt erneuert?', heating, energy]);
+                ['Wann wurden Heizung und Fenster zuletzt erneuert?', heating]);
         } else if (age !== null && age <= 5) {
             review(a, 'info', 'Neubau / junges Gebäude (' + year + ')',
                 'Die Gewährleistung des Bauträgers läuft meist 5 Jahre ab Abnahme – Mängel am Gemeinschaftseigentum sollten bis dahin gemeldet sein.',
                 ['Wurde das Gemeinschaftseigentum abgenommen, gibt es eine Mängelliste?', 'Bis wann läuft die Gewährleistung?']);
         }
+
+        if (a.price > 0) assessEnergy(a, flat);
 
         // Eigene Rücklage
         var ownReserve = area > 0 ? a.maintenance / area : null;
@@ -935,6 +973,94 @@ var WK = (function () {
             if (a.utilities <= 0 && a.private <= 0) {
                 review(a, 'info', 'Strom & Internet fehlen', 'In einer WG zahlst du diese meist vor und legst sie über die Warmmiete um oder teilst sie auf – trag sie ein, sonst wirkt die Bilanz zu gut.', []);
             }
+        }
+    }
+
+    /** Energie & Heizung, für Kauf und Miete. */
+    function assessEnergy(a, flat) {
+        var e = a.energy, rent = a.kind === 'rent';
+        var year = isSet(flat.year) ? Math.round(n(flat.year)) : null;
+        var kwh = fmtArea.format(e.use) + ' kWh/m²';
+        var validQ = 'Ist der Energieausweis noch gültig (10 Jahre ab Ausstellung)?';
+        var certQ = flat.energyCert ? [] : ['Ist es ein Verbrauchs- oder ein Bedarfsausweis?'];
+        var needNote = e.need && (year === null || year < 1979) ? ' Der Wert ist berechnet (Bedarfsausweis) – bei unsanierten Altbauten liegt der echte Verbrauch oft darunter.' : '';
+        var estimate = e.cost === null ? '' : 'Geschätzt aus dem Energieausweis: etwa ' + eur(e.cost) + ' im Monat (' + kwh + ', ' + fmtArea.format(a.area) + ' m² × 1,2 Gebäudenutzfläche, ' +
+            (e.source ? '' : 'angenommen ') + Math.round(e.price * 100) + ' ct/kWh).' + needNote;
+
+        // Verbrauch
+        if (e.use <= 0) {
+            review(a, 'info', 'Energieverbrauch fehlt', 'Steht im Exposé oder Energieausweis in kWh/(m²·a). Damit schätzt die Seite die Heizkosten und warnt vor hohem Verbrauch.',
+                ['Energieausweis zeigen lassen: Verbrauch oder Bedarf, wie viele kWh/m² im Jahr, welcher Energieträger?']);
+        } else if (e.use > 160) {
+            var high = e.use > 200;
+            review(a, high ? 'warn' : 'info', (high ? 'Energieverbrauch hoch' : 'Energieverbrauch erhöht') + ' (' + kwh + ', Klasse ' + e.cls + ')',
+                (rent ? 'Du zahlst das über die Heizkosten, und steigende Energiepreise treffen dich stärker. Wird das Haus saniert, kann der Vermieter einen Teil der Kosten auf die Miete umlegen.'
+                    : 'Schwache Dämmung oder alte Heizung: Die Heizkosten sind hoch, und eine Sanierung von Fassade, Dach, Fenstern oder Heizung wird wahrscheinlicher – bezahlt aus Rücklage oder Sonderumlage.') + needNote,
+                (rent ? ['Sind energetische Sanierungen geplant oder angekündigt (Mieterhöhung nach Modernisierung)?']
+                    : ['Welche energetischen Sanierungen sind geplant oder beschlossen, und reicht die Erhaltungsrücklage dafür?']).concat([validQ], certQ));
+        } else if (e.use < 90 && year !== null && year < 1979 && !e.need && e.source !== 'strom') {
+            review(a, 'info', 'Verbrauch für den Altbau auffällig niedrig (' + kwh + ')',
+                'Für Baujahr ' + year + ' ist das wenig. Entweder wurde saniert, oder der Ausweis bildet nur sparsame Bewohner oder Leerstand ab – dann zahlst du später mehr als geschätzt.',
+                ['Wurde energetisch saniert (Dämmung, Fenster, Heizung), und wann?', validQ].concat(certQ));
+        } else {
+            review(a, 'ok', (e.use <= 100 ? 'Energieverbrauch niedrig' : 'Energieverbrauch im üblichen Rahmen') + ' (' + kwh + ', Klasse ' + e.cls + ')',
+                'Unter 100 kWh/m² ist gut, bis etwa 160 kWh/m² üblich.' + needNote, [validQ].concat(certQ));
+        }
+
+        // Heizkosten in der Monatsrechnung
+        var billQ = 'Letzte Heizkostenabrechnung (oder Rechnungen des Versorgers) der Wohnung zeigen lassen.';
+        if (e.direct) {
+            var own = a.privateInfo.items.reduce(function (s, c) {
+                return s + (!c.covered && /\bgas|heiz|fernw|pellet|nachtspeicher/i.test(c.name) ? c.gross : 0);
+            }, 0);
+            var entered = (rent ? a.heating : 0) + a.utilities + own;
+            if (entered <= 0) {
+                review(a, 'warn', 'Heizkosten fehlen in der Rechnung',
+                    'Bei dieser Heizungsart zahlst du meist direkt an den Versorger, zusätzlich ' + (rent ? 'zu Miete und Nebenkosten' : 'zum Hausgeld') + '. Ohne sie ist die Monatsbilanz zu optimistisch – trag sie unter „Weitere laufende Kosten“ ein. ' + estimate, [billQ]);
+            } else if (e.cost !== null && e.cost > 1.4 * entered) {
+                review(a, 'info', 'Heizkosten eher knapp angesetzt (' + eur(entered) + ' im Monat)',
+                    'Gezählt sind ' + (rent ? 'Heizkosten-Vorauszahlung, ' : '') + '„Weitere laufende Kosten“ und passende private Nebenkosten. ' + estimate, [billQ]);
+            }
+        } else if (e.cost !== null && rent && a.heating > 0) {
+            var gap = e.cost - a.heating;
+            if (gap > 15 && e.cost > (e.need ? 1.6 : 1.25) * a.heating) {
+                review(a, e.need ? 'info' : 'warn', 'Heizkosten-Vorauszahlung wohl zu niedrig (' + eur(a.heating) + ')',
+                    estimate + ' Dann droht mit der Abrechnung eine Nachzahlung von rund ' + eur(gap * 12) + ' im Jahr. Sparsames Heizen oder eine gut gelegene Wohnung kann das ändern.', [billQ]);
+            } else {
+                review(a, 'ok', 'Heizkosten-Vorauszahlung plausibel (' + eur(a.heating) + ')', estimate, [billQ]);
+            }
+        } else if (e.cost !== null && rent && a.serviceCharges > 0) {
+            var left = (a.serviceCharges - e.cost) / a.area;
+            if (left < 1) review(a, left < 0 && !e.need ? 'warn' : 'info', 'Nebenkosten decken die Heizung wohl nicht (' + eur(a.serviceCharges) + ')',
+                estimate + ' Für Wasser, Müll, Hausmeister und Co. ' + (left < 0 ? 'bleibt nichts übrig' : 'bleiben nur ' + fmt2(left) + ' €/m²') + ' (üblich etwa 1,20–2,00 €/m²). Entweder kommt die Heizung noch dazu, oder es droht eine Nachzahlung.',
+                ['Ist die Heizung in der Nebenkosten-Vorauszahlung enthalten?', billQ]);
+        } else if (e.cost !== null && !rent && a.hoa > 0 && e.cost > 0.5 * a.hoa) {
+            review(a, 'info', 'Heizkosten im Hausgeld prüfen (geschätzt ' + eur(e.cost) + ')',
+                estimate + ' Das wäre mehr als die Hälfte des Hausgelds von ' + eur(a.hoa) + '. Entweder ist die Heizung nicht enthalten, oder für die Rücklage bleibt wenig.',
+                ['Sind Heizung und Warmwasser im Hausgeld enthalten?', billQ]);
+        }
+
+        // Heizungsart
+        var fossil = e.source === 'gas' || e.source === 'oel';
+        var fossilText = !fossil ? '' : rent
+            ? ' Gas und Öl können durch den CO₂-Preis teurer werden. Einen Teil der CO₂-Kosten trägt der Vermieter, je schlechter das Gebäude, desto mehr' + (e.direct ? ' – mit eigenem Liefervertrag musst du ihn dir selbst erstatten lassen.' : '; das steht in der Heizkostenabrechnung.')
+            : ' Gas und Öl können durch den CO₂-Preis teurer werden. Vorhandene Heizungen dürfen nach derzeitigem Stand weiterlaufen; für neu eingebaute Gas- und Ölheizungen ist ab 2029 ein Bio-Anteil vorgesehen (Stand November 2026, vor dem Kauf prüfen).';
+        var ageQ = 'Wie alt ist die Heizung, und ist ein Austausch geplant oder absehbar?';
+        if (e.type === 'nacht') {
+            review(a, 'warn', 'Strom-Direktheizung', 'Heizen mit Nachtspeicher oder Elektroheizung gehört zu den teuersten Arten, und der Strompreis trifft dich voll.' +
+                (rent ? '' : ' Ein Umbau auf ein anderes System ist in einer einzelnen Wohnung oft schwierig.'),
+                ['Gibt es einen eigenen Zähler und einen Heizstrom-Tarif?', billQ].concat(rent ? [] : [ageQ]));
+        } else if (e.source === 'fern') {
+            review(a, 'info', 'Fernwärme', 'Wartungsarm, aber den Anbieter kannst du nicht wechseln – den Preis bestimmt der örtliche Versorger.',
+                ['Welcher Versorger, welcher Preis pro kWh, und wie lange läuft der Liefervertrag?']);
+        } else if (e.type === 'etage') {
+            review(a, rent ? 'info' : 'warn', e.source === 'gas' ? 'Gasetagenheizung' : 'Etagenheizung',
+                (rent ? 'Die Therme hängt in der Wohnung, du hast meist einen eigenen Liefervertrag. Reparaturen und Austausch zahlt der Vermieter, die Wartung wird oft umgelegt.'
+                    : 'Die Therme gehört meist zur Wohnung: Wartung und Austausch zahlst du selbst, nicht die Gemeinschaft. Plane dafür Rücklage ein.') + fossilText,
+                [rent ? 'Wie alt ist die Therme, und wer zahlt die jährliche Wartung?' : 'Wie alt ist die Therme, und gehört sie laut Teilungserklärung zum Sondereigentum?'].concat(
+                    rent ? [] : ['Plant die Gemeinschaft eine Umstellung auf eine Zentralheizung?']));
+        } else if (fossil) {
+            review(a, 'info', e.source === 'gas' ? 'Gasheizung' : 'Ölheizung', 'Der Brennstoffpreis schwankt stark.' + fossilText, [ageQ]);
         }
     }
 
@@ -1127,6 +1253,10 @@ var WK = (function () {
         sumOther: sumOther,
         privateCosts: privateCosts,
         coldRentInYear: coldRentInYear,
+        ENERGY_SOURCES: ENERGY_SOURCES,
+        HEATING_TYPES: HEATING_TYPES,
+        ENERGY_CERTS: ENERGY_CERTS,
+        energyInfo: energyInfo,
         analyze: analyze,
         wishScore: wishScore,
         MUST: MUST,

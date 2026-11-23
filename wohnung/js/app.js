@@ -70,6 +70,8 @@
         return {
             id: uid(), kind: kind === 'rent' ? 'rent' : 'buy', name: 'Neue Wohnung', address: '', link: '', notes: '',
             area: null, year: null, price: null, inventory: null,
+            energyUse: null,     // kWh/(m²·a) laut Energieausweis
+            energySource: '', heatingType: '', energyCert: '',   // Schlüssel aus WK.ENERGY_SOURCES, HEATING_TYPES, ENERGY_CERTS; '' = unbekannt
             state: p.state, transferTaxPct: WK.transferTaxFor(p.state),
             notaryPct: p.notaryPct, brokerPct: p.brokerPct,
             renovation: null, otherOneOff: null,
@@ -118,6 +120,9 @@
         out.id = out.id ? String(out.id) : uid();
         out.kind = out.kind === 'rent' ? 'rent' : 'buy';
         if (['fixed', 'staffel', 'index'].indexOf(out.rentType) === -1) out.rentType = 'fixed';
+        [['energySource', WK.ENERGY_SOURCES], ['heatingType', WK.HEATING_TYPES], ['energyCert', WK.ENERGY_CERTS]].forEach(function (x) {
+            if (!x[1].some(function (o) { return o[0] === out[x[0]]; })) out[x[0]] = '';
+        });
         out.steps = Array.isArray(out.steps) ? out.steps.filter(isObj).map(function (s) {
             return Object.assign(newStep(), s, { id: s.id ? String(s.id) : uid() });
         }) : [];
@@ -356,7 +361,7 @@
             changed();
         });
         input.addEventListener('blur', function () { input.value = fmtInput(obj[key], dec, o.noGroup); });
-        var wrap = el('span', { class: 'input-wrap' }, [input, o.unit ? el('span', { class: 'unit', text: o.unit }) : null]);
+        var wrap = el('span', { class: 'input-wrap' + (o.unit && o.unit.length > 4 ? ' unit-wide' : '') }, [input, o.unit ? el('span', { class: 'unit', text: o.unit }) : null]);
         var f = fieldWrap(label, wrap, o.hint, o.cls);
         f._input = input;
         return f;
@@ -499,6 +504,11 @@
                 saveNow();
                 location.hash = '';
                 route();
+            } else if (data && isObj(data.flat) && !data.flat.id && !data.exported) {
+                // Antwort einer KI als Datei (siehe offer.js), kein Export dieser Seite
+                var read = OFFER.read(data, parseNum);
+                if (read.error) alert(read.error);
+                else addOfferFlat(read);
             } else if (data && data.flat && typeof data.flat === 'object') {
                 var f = linkRooms(normalizeFlat(data.flat, state.profile), state.people);
                 var idx = state.flats.findIndex(function (x) { return x.id === f.id; });
@@ -521,6 +531,111 @@
             }
         });
     });
+
+    /* ---------- Angebot per KI übernehmen ----------
+       Prompt und Einlesen der Antwort stehen in offer.js (OFFER). */
+
+    var offerStatus = null;   // { id, text } – Ergebnis der letzten Übernahme, bis zur Rückkehr auf die Übersicht
+
+    /** Überträgt gelesene Angaben. Ein selbst vergebener Name bleibt, Notizen werden ergänzt. */
+    function applyOffer(f, offer) {
+        var stateBefore = f.state;
+        Object.keys(offer).forEach(function (k) {
+            if (k === 'name') { if (autoName(f.name)) f.name = offer.name; }
+            else if (k === 'notes') { if ((f.notes || '').indexOf(offer.notes) === -1) f.notes = (f.notes ? f.notes + '\n\n' : '') + offer.notes; }
+            else if (k === 'steps') f.steps = offer.steps.map(function (s) { return Object.assign(newStep(), s); });
+            else f[k] = offer[k];
+        });
+        if (f.state !== stateBefore) f.transferTaxPct = WK.transferTaxFor(f.state);
+        return f;
+    }
+
+    function autoName(name) {
+        return !name || /^(Neue Wohnung|(Mietw|W)ohnung \d+)$/.test(name);
+    }
+
+    /** Eigene Angaben, die sich durch das Angebot ändern würden ("Kaltmiete: 800 → 890"). */
+    function offerConflicts(f, offer) {
+        var base = newFlat(state.profile, f.kind);
+        var out = [];
+        if (f.kind !== offer.kind) out.push('Art: ' + (f.kind === 'rent' ? 'Miete → Kauf' : 'Kauf → Miete'));
+        function show(field, v) {
+            if (field.type === 'steps') return v.length + (v.length === 1 ? ' Stufe' : ' Stufen');
+            if (field.type === 'enum') return (field.options.find(function (o) { return o[0] === v; }) || ['', v])[1];
+            return field.type === 'num' ? fmtInput(v, 2, field.key === 'year') : '„' + v + '“';
+        }
+        OFFER.FIELDS.forEach(function (field) {
+            var k = field.key, now = f[k], next = offer[k];
+            if (next === undefined || k === 'name' || k === 'notes') return;
+            if (k === 'steps') {
+                if (!now.length || JSON.stringify(now.map(function (s) { return [s.year, s.rent]; })) === JSON.stringify(next.map(function (s) { return [s.year, s.rent]; }))) return;
+            } else if (now === null || now === undefined || now === '' || now === next || now === base[k]) return;
+            out.push(field.label + ': ' + show(field, now) + ' → ' + show(field, next));
+        });
+        return out;
+    }
+
+    function offerDone(f, read) {
+        var count = Object.keys(read.flat).length - 1;   // ohne "kind"
+        var missing = OFFER.missing(f);
+        offerStatus = { id: f.id, text: count + (count === 1 ? ' Angabe' : ' Angaben') + ' aus dem Angebot übernommen – bitte kurz prüfen.' +
+            (missing.length ? ' Es fehlen noch: ' + missing.join(', ') + '.' : '') +
+            (read.ignored.length ? ' Nicht lesbar: ' + read.ignored.join(', ') + '.' : '') };
+    }
+
+    function addOfferFlat(read) {
+        var f = linkRooms(newFlat(state.profile, read.flat.kind), state.people);
+        f.name = (f.kind === 'rent' ? 'Mietwohnung ' : 'Wohnung ') + (state.flats.length + 1);
+        applyOffer(f, read.flat);
+        state.flats.push(f);
+        offerDone(f, read);
+        saveNow();
+        location.hash = 'w=' + f.id;
+    }
+
+    function offerPanel(f) {
+        var answer = el('textarea', { rows: 5, spellcheck: 'false', placeholder: '{ "app": "wohnungskauf", … }' });
+        var error = el('p', { class: 'small offer-error', role: 'alert' });
+        function withAnswer(fn) {
+            return function () {
+                var read = OFFER.parse(answer.value, parseNum);
+                error.textContent = read.error || '';
+                if (!read.error) fn(read);
+            };
+        }
+        var preview = el('pre', { class: 'offer-prompt', tabindex: '0', text: OFFER.prompt() });
+        var open = f.kind === 'rent' ? !(n(f.coldRent) > 0) : !(n(f.price) > 0);
+        var status = offerStatus && offerStatus.id === f.id ? offerStatus.text : null;
+
+        return panel('Angebot mit KI übernehmen', [
+            status ? el('p', { class: 'small offer-status', role: 'status', text: status }) : null,
+            el('details', { class: 'offer', open: open && !status }, [
+                el('summary', { text: 'Anleitung, Prompt & Antwort einfügen' }),
+                el('ol', { class: 'offer-steps' }, [
+                    el('li', { text: 'Prompt kopieren und in eine KI einfügen (z. B. ChatGPT, Claude, Gemini). Er enthält keine Daten von dir.' }),
+                    el('li', { text: 'Den Text des Angebots dahinter einfügen, oder PDF bzw. Screenshots anhängen, und abschicken.' }),
+                    el('li', { text: 'Die Antwort unten einfügen und übernehmen.' })
+                ]),
+                el('div', { class: 'actions' }, [
+                    btn('Prompt kopieren', 'btn-primary', function (e) { copyText(OFFER.prompt(), e.currentTarget); })
+                ]),
+                el('details', { class: 'explain offer-preview' }, [el('summary', { text: 'Prompt ansehen' }), preview]),
+                fieldWrap('Antwort der KI', answer),
+                error,
+                el('div', { class: 'actions' }, [
+                    btn('In diese Wohnung übernehmen', 'btn-primary', withAnswer(function (read) {
+                        var conflicts = offerConflicts(f, read.flat);
+                        if (conflicts.length && !confirm('Diese Angaben werden überschrieben:\n\n' + conflicts.join('\n') + '\n\nÜbernehmen?')) return;
+                        applyOffer(f, read.flat);
+                        offerDone(f, read);
+                        saveNow();
+                        renderDetail(f);
+                    })),
+                    btn('Als neue Wohnung anlegen', 'btn-ghost', withAnswer(addOfferFlat))
+                ])
+            ])
+        ]);
+    }
 
     /* ---------- Übersicht ---------- */
 
@@ -721,7 +836,7 @@
                 btn('Alles exportieren (JSON)', 'btn-ghost', exportAll),
                 btn('Importieren …', 'btn-ghost', function () { importInput.click(); })
             ])
-        ], { hint: 'Der Export enthält „Meine Finanzen“, Personen & Wünsche und alle Wohnungen (Kauf und Miete). Eine Gesamt-Datei importieren ersetzt alles auf dem Zielgerät; eine einzeln exportierte Wohnung wird nur hinzugefügt.' }));
+        ], { hint: 'Der Export enthält „Meine Finanzen“, Personen & Wünsche und alle Wohnungen (Kauf und Miete). Eine Gesamt-Datei importieren ersetzt alles auf dem Zielgerät; eine einzelne Wohnung (exportiert oder von einer KI aus einem Angebot gelesen) wird nur hinzugefügt.' }));
 
         currentUpdate = function () {
             updateLimits(peopleBox);
@@ -1466,6 +1581,10 @@
                 'Für weitere Untermieter „jemand anderes“ wählen und die Warmmiete eintragen.' +
                 (rent ? ' Als Hauptmieter brauchst du die Erlaubnis des Vermieters zur Untervermietung.' : '') });
 
+        function energySelect(key, label, options, hint) {
+            return fieldWrap(label, selectBox([['', 'unbekannt']].concat(options), f[key], label, function (v) { f[key] = v; changed(); }), hint);
+        }
+
         var objectPanel = panel('Objekt', [
                 group(null, [
                     fieldWrap('Art', kindSel, rent ? 'Mietwohnung – zum Vergleich mit Kaufwohnungen.' : 'Kaufwohnung mit Finanzierung.'),
@@ -1475,11 +1594,22 @@
                     numField(f, 'area', 'Wohnfläche', { unit: 'm²', dec: 1 }),
                     numField(f, 'year', 'Baujahr', { dec: 0, noGroup: true }),
                     textField(f, 'notes', 'Notizen', { multiline: true, cls: 'span-2' })
+                ]),
+                group('Energie & Heizung', [
+                    numField(f, 'energyUse', 'Energieverbrauch', { unit: 'kWh/m²', dec: 1, hint: function () {
+                        var e = WK.energyInfo(f);
+                        return e.cls ? 'Entspricht Klasse ' + e.cls + (e.cost !== null ? ', geschätzt ' + eur(e.cost) + ' Heizkosten im Monat.' : '.')
+                            : 'Pro Jahr, laut Exposé oder Energieausweis.';
+                    } }),
+                    energySelect('energyCert', 'Art des Energieausweises', WK.ENERGY_CERTS, 'Verbrauch = gemessen, hängt von den Bewohnern ab. Bedarf = berechnet.'),
+                    energySelect('energySource', 'Wesentlicher Energieträger', WK.ENERGY_SOURCES),
+                    energySelect('heatingType', 'Heizungsart', WK.HEATING_TYPES, 'Fußbodenheizung sagt nur, wie die Wärme verteilt wird.')
                 ])
             ]);
 
         var rentTypeBox = el('div');
         var rentInputs = rent ? [
+            offerPanel(f),
             objectPanel,
             wishPanel.el,
             panel('Miete (monatlich)', [
@@ -1503,6 +1633,7 @@
         ] : null;
 
         var inputs = el('div', { class: 'detail-inputs' }, rentInputs || [
+            offerPanel(f),
             objectPanel,
             wishPanel.el,
             panel('Kaufpreis & Nebenkosten', [
@@ -2240,7 +2371,7 @@
         var id = m ? decodeURIComponent(m[1]) : null;
         var f = id ? state.flats.find(function (x) { return x.id === id; }) : null;
         if (f) renderDetail(f);
-        else renderMain();
+        else { offerStatus = null; renderMain(); }
     }
 
     window.addEventListener('hashchange', route);
