@@ -485,13 +485,7 @@ table {
     align-items: start;
 }
 
-.detail-aside {
-    position: sticky;
-    top: calc(var(--theme-nav-height) + 14px);
-    max-height: calc(100vh - var(--theme-nav-height) - 28px);
-    overflow-y: auto;
-    border-radius: 12px;
-}
+.detail-aside { min-width: 0; }
 
 .results-panel h3 {
     font-size: 12px;
@@ -1056,7 +1050,6 @@ summary {
 
 @media (max-width: 900px) {
     .detail-layout { grid-template-columns: minmax(0, 1fr); }
-    .detail-aside { position: static; max-height: none; overflow: visible; }
 }
 
 @media (max-width: 520px) {
