@@ -226,7 +226,8 @@ textarea::placeholder {
     color: var(--theme-gray-400);
 }
 
-input[type="checkbox"] {
+input[type="checkbox"],
+input[type="radio"] {
     width: 18px;
     height: 18px;
     accent-color: var(--primary);
@@ -638,7 +639,7 @@ table {
 /* WG-Zimmer */
 .room {
     display: grid;
-    grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.9fr) minmax(0, 1fr) 36px 32px;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.1fr) minmax(0, 0.8fr) minmax(0, 1fr) 32px;
     gap: 8px;
     align-items: center;
     margin-bottom: 8px;
@@ -653,7 +654,6 @@ table {
     margin-bottom: 4px;
 }
 
-.room-self { display: flex; justify-content: center; }
 .room .input-wrap input { padding-right: 30px; }
 .room .unit { right: 8px; }
 
@@ -768,20 +768,21 @@ table {
 .calc.rent-plan td { text-align: right; }
 
 /* Wünsche & Bedingungen */
-.people {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px 14px;
-    align-items: center;
-}
+.people { max-width: 620px; }
 
 .person {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) 36px minmax(0, 1fr) 32px;
+    gap: 8px;
     align-items: center;
-    gap: 4px;
-    flex: 0 1 220px;
-    min-width: 0;
+    margin-bottom: 8px;
 }
+
+.person-me { display: flex; justify-content: center; }
+.person .input-wrap input { padding-right: 30px; }
+.person .unit { right: 8px; }
+.people-sum { font-weight: 600; margin-top: 10px; }
+.people-sum:empty { display: none; }
 
 .wish-group { margin-top: 18px; }
 
@@ -1011,9 +1012,16 @@ summary {
     .span-2 { grid-column: auto; }
     .tiles-2 { grid-template-columns: minmax(0, 1fr); }
     .tile-value { font-size: 19px; }
-    .room { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 30px 28px; }
-    .room > input[type="text"] { grid-column: 1 / -1; }
-    .room-head { display: none; }
+    .room {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--border);
+    }
+    .room > .icon-btn { grid-column: 3; grid-row: 1; }
+    .room > .input-wrap { grid-row: 2; }
+    .room.room-head,
+    .step.room-head { display: none; }
+    .person { grid-template-columns: minmax(0, 1.2fr) 28px minmax(0, 1fr) 28px; }
     .page-head h1 { font-size: 24px; }
 }
 

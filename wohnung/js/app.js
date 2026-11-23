@@ -29,8 +29,10 @@
         };
     }
 
-    function newRoom(self) {
-        return { id: uid(), name: self ? 'Mein Zimmer' : 'Zimmer', size: null, rent: null, self: !!self };
+    /** person: wer darin wohnt (null = jemand anderes), self folgt daraus
+     *  (linkRooms/syncPersons). rent leer = was die Person laut "Personen" zahlt. */
+    function newRoom(person) {
+        return { id: uid(), name: 'Zimmer', size: null, rent: null, self: false, person: person };
     }
 
     /** every: Zeitraum des Betrags in Monaten, split: Aufteilung (siehe calc.js). */
@@ -72,7 +74,7 @@
             hoa: null, propertyTax: null, maintenance: null, utilities: null,
             equity: null, appreciation: null,
             loans: [newLoan(p, true)],
-            wg: { rooms: [newRoom(true), newRoom(false)], vacancyPct: 5 },
+            wg: { rooms: [], vacancyPct: 5 },   // Zimmer der Personen ergänzt linkRooms
             // Miete
             coldRent: null, serviceCharges: null, heatingCosts: null, deposit: null,
             rentType: 'fixed',   // 'fixed' | 'staffel' | 'index'
@@ -84,8 +86,9 @@
         };
     }
 
+    /** self: das bin ich (genau eine Person), rent: zahlt mir so viel Miete im Monat. */
     function newPerson() {
-        return { id: uid(), name: '' };
+        return { id: uid(), name: '', self: false, rent: null };
     }
 
     /** weights: { personId: 0–100 } – wie wichtig der Wunsch der jeweiligen Person ist. */
@@ -113,7 +116,7 @@
         }) : base.loans;
         out.wg = Object.assign({}, base.wg, out.wg || {});
         out.wg.rooms = Array.isArray(out.wg.rooms) ? out.wg.rooms.map(function (r) {
-            return Object.assign(newRoom(false), r, { id: r && r.id ? String(r.id) : uid() });
+            return Object.assign(newRoom(), r, { id: r && r.id ? String(r.id) : uid() });
         }) : base.wg.rooms;
         out.ratings = {};
         if (isObj(f && f.ratings)) Object.keys(f.ratings).forEach(function (wid) {
@@ -130,8 +133,12 @@
         var flats = (data && Array.isArray(data.flats) ? data.flats : []).map(function (f) { return normalizeFlat(f, profile); });
         // Ältere Daten ohne Personen: mit zwei leeren Personen starten.
         var people = data && Array.isArray(data.people)
-            ? data.people.filter(isObj).map(function (p) { return { id: p.id ? String(p.id) : uid(), name: String(p.name || '') }; })
+            ? data.people.filter(isObj).map(function (p) {
+                return { id: p.id ? String(p.id) : uid(), name: String(p.name || ''), self: p.self === true, rent: WK.isSet(p.rent) ? Number(p.rent) : null };
+            })
             : [newPerson(), newPerson()];
+        if (!people.length) people = [newPerson()];
+        flats.forEach(function (f) { linkRooms(f, people); });
         var ids = people.map(function (p) { return p.id; });
         var wishes = (data && Array.isArray(data.wishes) ? data.wishes : []).filter(isObj).map(function (w) {
             var by = w.by ? String(w.by) : null;
@@ -145,11 +152,60 @@
         return syncPersons({ profile: profile, flats: flats, people: people, wishes: wishes });
     }
 
-    /** Die Personenzahl für die Kosten (profile.persons, gelesen in calc.js)
-     *  ergibt sich immer aus der Liste der Personen. */
+    /** Ich – ohne Markierung die erste Person. */
+    function mePerson(people) {
+        return people.find(function (p) { return p.self; }) || people[0];
+    }
+
+    /** Was calc.js über die Personen braucht, immer aus der Liste abgeleitet:
+     *  Anzahl (profile.persons), Mieten an mich (profile.personRents) und
+     *  welche Zimmer meine sind (room.self). */
     function syncPersons(s) {
+        var me = mePerson(s.people);
         s.profile.persons = s.people.length;
+        s.profile.personRents = {};
+        s.people.forEach(function (p) {
+            p.self = p === me;
+            if (!p.self && WK.isSet(p.rent)) s.profile.personRents[p.id] = Number(p.rent);
+        });
+        s.flats.forEach(function (f) { markOwnRooms(f, me); });
         return s;
+    }
+
+    function markOwnRooms(f, me) {
+        f.wg.rooms.forEach(function (r) { r.self = r.person === me.id; });
+    }
+
+    /** Ordnet die Zimmer einer Wohnung den Personen zu. Ältere Daten kennen nur
+     *  "Ich" und freie Namen: erst nach Namen, dann der Reihe nach. Wer dann
+     *  noch kein Zimmer hat, bekommt beim ersten Mal eines (später kann es
+     *  bewusst entfernt worden sein). Die Mieten bleiben dabei unverändert. */
+    function linkRooms(f, people) {
+        var me = mePerson(people), wg = f.wg, rooms = wg.rooms;
+        var known = function (r) { return people.some(function (p) { return p.id === r.person; }); };
+        var open = rooms.filter(function (r) {
+            if (r.person === null || known(r)) return false;
+            if (r.self) { r.person = me.id; return false; }
+            r.person = null;
+            return true;
+        });
+        var free = people.filter(function (p) {
+            return p !== me && !rooms.some(function (r) { return r.person === p.id; });
+        });
+        var assign = function (r, p) { r.person = p.id; free.splice(free.indexOf(p), 1); };
+        open.forEach(function (r) {
+            var name = String(r.name || '').trim().toLowerCase();
+            var match = name && free.find(function (p) { return p.name.trim().toLowerCase() === name; });
+            if (match) assign(r, match);
+        });
+        open.forEach(function (r) { if (r.person === null && free.length) assign(r, free[0]); });
+        if (!wg.linked) {
+            if (!rooms.length) rooms.push(newRoom(me.id));
+            free.forEach(function (p) { rooms.push(newRoom(p.id)); });
+            wg.linked = true;
+        }
+        markOwnRooms(f, me);
+        return f;
     }
 
     function dataOut() {
@@ -511,7 +567,7 @@
                 location.hash = '';
                 route();
             } else if (data && data.flat && typeof data.flat === 'object') {
-                var f = normalizeFlat(data.flat, state.profile);
+                var f = linkRooms(normalizeFlat(data.flat, state.profile), state.people);
                 var idx = state.flats.findIndex(function (x) { return x.id === f.id; });
                 if (idx !== -1) {
                     if (confirm('„' + state.flats[idx].name + '“ gibt es hier schon. Mit der Version aus der Datei überschreiben?\n\nAbbrechen = als Kopie hinzufügen.')) {
@@ -626,9 +682,12 @@
         ]));
 
         var peopleBox = el('div', { class: 'people' });
+        var peopleSum = el('p', { class: 'small people-sum' });
         var wishBox = el('div');
-        app.appendChild(panel('Personen', [peopleBox], {
-            hint: 'Wer zusammen wohnen will. Alle hier teilen sich die privaten Nebenkosten und geben ihre Wünsche an.'
+        app.appendChild(panel('Personen', [peopleBox, peopleSum], {
+            hint: 'Wer zusammen wohnen will. Alle hier teilen sich die privaten Nebenkosten und geben ihre Wünsche an. ' +
+                '„Miete an mich“: was die Person dir im Monat zahlt (warm), egal ob du Eigentum kaufst oder Hauptmieter bist. ' +
+                'Zählt in „Was ist drin?“ und in jeder Wohnung, dort unter „WG & Untermieter“ anpassbar.'
         }));
         renderPeople(peopleBox, function () { renderWishEditor(wishBox); });
 
@@ -652,14 +711,14 @@
                 el('p', { class: 'muted small group-hint', text: 'Was zusätzlich zu Miete bzw. Hausgeld anfällt – z. B. Strom, Internet, Rundfunkbeitrag (derzeit 55,08 € pro Quartal), Hausratversicherung. ' +
                     'Betrag so eintragen, wie er auf der Rechnung steht; umgerechnet auf den Monat zählt nur dein Anteil. Geht einzeln oder als eine Summe („Versorgungskosten“) mit eigenem Prozentsatz. ' +
                     'Gilt für jede Wohnung; dort lässt sich ein Posten abwählen, wenn er schon in der Warmmiete oder im Hausgeld steckt. Nicht zusätzlich in der Lebenshaltung zählen.' }),
-                el('p', { class: 'muted small group-hint', text: 'Zahlen Mitbewohner ihren Teil schon mit der Warmmiete ihres WG-Zimmers, „zahle ich komplett“ wählen – sonst wird ihr Anteil doppelt abgezogen.' }),
+                el('p', { class: 'muted small group-hint', text: 'Zahlen Mitbewohner ihren Teil schon mit ihrer Miete an dich, „zahle ich komplett“ wählen – sonst wird ihr Anteil doppelt abgezogen.' }),
                 costPeople,
                 costsBox
             ]),
             group('Kreditwürdigkeit (laut Bank)', [
                 numField(p, 'bankMaxLoan', 'Max. Darlehen', { unit: '€', dec: 0, hint: 'Was die Bank dir maximal leihen würde.' }),
                 numField(p, 'bankMaxRate', 'Max. Monatsrate', { unit: '€', hint: function () {
-                    return 'Leer = Faustregel 35 % vom Netto minus andere Kredite' + result(p.netIncome, eur(WK.budget(p).ruleRate)) + '.';
+                    return 'Leer = Faustregel 35 % vom Netto' + (WK.budget(p).rents > 0 ? ' + 70 % der Mieten an dich' : '') + ' minus andere Kredite' + result(p.netIncome, eur(WK.budget(p).ruleRate)) + '.';
                 } })
             ]),
             group('Annahmen', [
@@ -689,7 +748,7 @@
         renderWishEditor(wishBox);
 
         function addFlat(kind) {
-            var f = newFlat(state.profile, kind);
+            var f = linkRooms(newFlat(state.profile, kind), state.people);
             f.name = (kind === 'rent' ? 'Mietwohnung ' : 'Wohnung ') + (state.flats.length + 1);
             state.flats.push(f);
             saveNow();
@@ -720,6 +779,8 @@
         ], { hint: 'Link und Export enthalten „Meine Finanzen“, Personen & Wünsche und alle Wohnungen (Kauf und Miete). Link öffnen oder Gesamt-Datei importieren ersetzt alles auf dem Zielgerät; eine einzeln exportierte Wohnung wird nur hinzugefügt.' }));
 
         currentUpdate = function () {
+            var rents = WK.budget(p).rents;
+            peopleSum.textContent = rents > 0 ? 'Mieten an dich: zusammen ' + eur(rents) + ' im Monat' : '';
             costPeople.textContent = costPeopleText();
             updateCostsEditor(costsBox);
             renderBudget(budgetBox);
@@ -787,7 +848,6 @@
     function costPeopleText() {
         var count = state.people.length;
         var where = ' (änderbar oben unter „Personen“).';
-        if (!count) return 'Noch keine Person angelegt – gerechnet wird mit einer' + where;
         if (count === 1) return 'Eine Person: ' + peopleNames() + where;
         return 'Geteilt durch ' + count + ' Personen: ' + peopleNames() + where;
     }
@@ -838,8 +898,9 @@
         }
         box.innerHTML =
             tile('Max. Darlehen', eur(b.maxLoan), n(p.bankMaxLoan) > 0 ? (b.loanFromRate < n(p.bankMaxLoan) ? 'begrenzt durch die Rate' : 'laut Bank') : 'aus der Rate bei ' + fmtInput(n(p.defRate) + n(p.defRepay), 2) + ' % Zins + Tilgung') +
-            tile('Max. Monatsrate', eur(b.maxRate), n(p.bankMaxRate) > 0 ? 'laut Bank' : 'Faustregel 35 % vom Netto' + (n(p.otherDebt) > 0 ? ' minus andere Kredite' : '')) +
+            tile('Max. Monatsrate', eur(b.maxRate), n(p.bankMaxRate) > 0 ? 'laut Bank' : 'Faustregel 35 % vom Netto' + (b.rents > 0 ? ' + 70 % der Mieten an dich' : '') + (n(p.otherDebt) > 0 ? ' minus andere Kredite' : '')) +
             tile('Kaufpreis-Budget', eur(b.maxPrice), 'Eigenkapital + Darlehen, abzgl. ~' + fmtInput(b.closingPct, 1) + ' % Nebenkosten') +
+            (n(p.netIncome) > 0 ? tile('Max. Warmmiete', eur(b.maxWarmRent), 'Faustregel 30 % vom Netto' + (b.rents > 0 ? ' + ' + eur(b.rents) + ' Mieten an dich' : '')) : '') +
             equityTile(p);
     }
 
@@ -884,13 +945,34 @@
         state.wishes.forEach(function (w) { delete w.weights[p.id]; });
         state.flats.forEach(function (f) {
             Object.keys(f.ratings).forEach(function (wid) { delete f.ratings[wid][p.id]; });
+            // Zimmer mit Angaben bleiben stehen, dort wohnt dann jemand anderes.
+            f.wg.rooms = f.wg.rooms.filter(function (r) {
+                if (r.person !== p.id) return true;
+                r.person = null;
+                return WK.isSet(r.rent) || WK.isSet(r.size);
+            });
         });
         state.people.splice(state.people.indexOf(p), 1);
+    }
+
+    /** Neue Person samt Zimmer in jeder Wohnung; ein leeres, noch niemandem
+     *  zugeordnetes Zimmer wird dabei übernommen. */
+    function addPerson() {
+        var p = newPerson();
+        state.people.push(p);
+        state.flats.forEach(function (f) {
+            var empty = f.wg.rooms.find(function (r) { return !r.person && !WK.isSet(r.rent) && !WK.isSet(r.size); });
+            if (empty) empty.person = p.id;
+            else f.wg.rooms.push(newRoom(p.id));
+        });
     }
 
     /** Personen bearbeiten (Übersicht). onList: wenn jemand dazukommt oder geht. */
     function renderPeople(box, onList, focusLast) {
         box.innerHTML = '';
+        box.appendChild(el('div', { class: 'person room-head' }, [
+            el('span', { text: 'Name' }), el('span', { class: 'person-me', text: 'Ich' }), el('span', { text: 'Miete an mich' }), el('span')
+        ]));
         state.people.forEach(function (p, idx) {
             var input = el('input', { type: 'text', autocomplete: 'off', placeholder: 'Person ' + (idx + 1), 'aria-label': 'Name von Person ' + (idx + 1) });
             input.value = p.name || '';
@@ -899,19 +981,30 @@
                 app.querySelectorAll('[data-person="' + p.id + '"]').forEach(function (e) { e.textContent = personName(p); });
                 changed();
             });
-            var del = el('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Person entfernen', title: 'Person entfernen', text: '×', onclick: function () {
+            var me = el('input', { type: 'radio', name: 'me', 'aria-label': 'Das bin ich' });
+            me.checked = p.self;
+            me.addEventListener('change', function () {
+                state.people.forEach(function (q) { q.self = q === p; });
+                renderPeople(box, onList);
+                changed();
+            });
+            var rent = numField(p, 'rent', '', { unit: '€' });
+            rent._input.setAttribute('aria-label', 'Miete an mich pro Monat');
+            if (p.self) { rent._input.disabled = true; rent._input.placeholder = 'ich'; rent._input.value = ''; }
+            // Ich bleibe immer in der Liste.
+            var del = p.self ? null : el('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Person entfernen', title: 'Person entfernen', text: '×', onclick: function () {
                 var own = state.wishes.filter(function (w) { return w.by === p.id; }).length;
-                if (!confirm(personName(p) + ' entfernen?\n\nDabei gehen ' + (own ? 'ihre ' + own + ' Wünsche sowie ' : '') + 'alle Gewichtungen und Bewertungen dieser Person verloren. Die privaten Nebenkosten werden neu aufgeteilt.')) return;
+                if (!confirm(personName(p) + ' entfernen?\n\nDabei gehen ' + (own ? 'ihre ' + own + ' Wünsche sowie ' : '') + 'alle Gewichtungen, Bewertungen und die Miete dieser Person verloren. Ein Zimmer mit Angaben bleibt in der Wohnung als „jemand anderes“ stehen. Die privaten Nebenkosten werden neu aufgeteilt.')) return;
                 removePerson(p);
                 renderPeople(box, onList);
                 onList();
                 changed();
             } });
-            box.appendChild(el('div', { class: 'person' }, [input, del]));
+            box.appendChild(el('div', { class: 'person' }, [input, el('span', { class: 'person-me' }, [me]), rent.querySelector('.input-wrap'), del]));
             if (focusLast && idx === state.people.length - 1) setTimeout(function () { input.focus(); }, 0);
         });
         box.appendChild(btn('+ Person', 'btn-ghost', function () {
-            state.people.push(newPerson());
+            addPerson();
             renderPeople(box, onList, true);
             onList();
             changed();
@@ -923,11 +1016,6 @@
     function renderWishEditor(box, focusId) {
         box.innerHTML = '';
         var people = state.people;
-
-        if (!people.length) {
-            box.appendChild(el('p', { class: 'muted', text: 'Leg zuerst oben unter „Personen“ mindestens eine Person an.' }));
-            return;
-        }
 
         var cols = String(people.length);
         people.forEach(function (author) {
@@ -1283,12 +1371,12 @@
 
         var wgAssumptions = [
             numField(f.wg, 'vacancyPct', 'Leerstand / Mietausfall', { unit: '%', hint: function () {
-                var gross = f.wg.rooms.reduce(function (s, r) { return s + (r.self ? 0 : n(r.rent)); }, 0);
+                var gross = WK.roomRents(f.wg.rooms, p).reduce(function (s, v) { return s + v; }, 0);
                 return 'Wechsel, Suche, Ausfälle – 5 % ≈ 2–3 Wochen pro Jahr' + result(gross, eur(0.05 * gross) + ' im Monat') + '.';
             } })
         ];
         var wgPanel = panel('WG & Untermieter', [roomsBox, group('Annahmen', wgAssumptions)],
-            { hint: 'Zimmer mit Warmmiete. Dein eigenes Zimmer als „Ich“ markieren – es bringt keine Miete ein.' +
+            { hint: 'Wer wohnt wo, und was zahlt die Person dir im Monat (warm)? Leer = Betrag aus „Personen“. Für weitere Untermieter „jemand anderes“ wählen; dein eigenes Zimmer bringt keine Miete ein.' +
                 (rent ? ' Als Hauptmieter brauchst du die Erlaubnis des Vermieters zur Untervermietung.' : '') });
 
         var objectPanel = panel('Objekt', [
@@ -1428,26 +1516,36 @@
         function renderRooms() {
             roomsBox.innerHTML = '';
             var head = el('div', { class: 'room room-head' }, [
-                el('span', { text: 'Zimmer' }), el('span', { text: 'Größe' }), el('span', { text: 'Warmmiete' }), el('span', { text: 'Ich' }), el('span')
+                el('span', { text: 'Wer' }), el('span', { text: 'Zimmer' }), el('span', { text: 'Größe' }), el('span', { text: 'Miete an mich' }), el('span')
             ]);
             roomsBox.appendChild(head);
             f.wg.rooms.forEach(function (r, idx) {
+                var who = selectBox(state.people.map(function (q) {
+                    return [q.id, q.self ? 'Ich (' + personName(q) + ')' : personName(q)];
+                }).concat([['', 'jemand anderes']]), r.person || '', 'Wer wohnt hier', function (v) {
+                    r.person = v || null;
+                    syncPersons(state);
+                    renderRooms();
+                    changed();
+                });
                 var name = el('input', { type: 'text', autocomplete: 'off', 'aria-label': 'Zimmername' });
                 name.value = r.name || '';
                 name.addEventListener('input', function () { r.name = name.value; changed(); });
                 var size = numField(r, 'size', '', { unit: 'm²', dec: 1 });
                 var rent = numField(r, 'rent', '', { unit: '€' });
-                if (r.self) { rent._input.disabled = true; rent._input.placeholder = 'selbst'; rent._input.value = ''; }
-                var self = el('input', { type: 'checkbox', 'aria-label': 'Mein Zimmer' });
-                self.checked = !!r.self;
-                self.addEventListener('change', function () { r.self = self.checked; renderRooms(); changed(); });
+                rent._input.setAttribute('aria-label', 'Miete an mich pro Monat');
+                rent._input.setAttribute('data-room-rent', '');
+                if (r.self) { rent._input.disabled = true; rent._input.value = ''; }
                 var del = el('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Zimmer entfernen', text: '×', onclick: function () {
                     f.wg.rooms.splice(idx, 1); renderRooms(); changed();
                 } });
-                roomsBox.appendChild(el('div', { class: 'room' }, [name, size.querySelector('.input-wrap'), rent.querySelector('.input-wrap'), el('span', { class: 'room-self' }, [self]), del]));
+                roomsBox.appendChild(el('div', { class: 'room' }, [who, name, size.querySelector('.input-wrap'), rent.querySelector('.input-wrap'), del]));
             });
             roomsBox.appendChild(btn('+ Zimmer', 'btn-ghost btn-add', function () {
-                f.wg.rooms.push(newRoom(false));
+                // Erst wer noch kein Zimmer hat, sonst jemand anderes
+                var free = state.people.find(function (q) { return !f.wg.rooms.some(function (r) { return r.person === q.id; }); });
+                f.wg.rooms.push(newRoom(free ? free.id : null));
+                syncPersons(state);
                 renderRooms();
                 changed();
             }));
@@ -1497,6 +1595,14 @@
             });
         }
 
+        /** Zeigt in leeren Mietfeldern, welcher Betrag aus „Personen“ gilt. */
+        function updateRooms() {
+            var rents = WK.roomRents(f.wg.rooms, p);
+            roomsBox.querySelectorAll('[data-room-rent]').forEach(function (input, i) {
+                input.placeholder = f.wg.rooms[i].self ? 'ich' : rents[i] > 0 ? fmtInput(rents[i], 2) : '';
+            });
+        }
+
         renderRooms();
         renderLoans();
 
@@ -1504,6 +1610,7 @@
             var a = WK.analyze(f, state.profile, state.flats);
             wishPanel.update();
             costsPanel._update();
+            updateRooms();
             if (rent) { renderRentResults(results, a); return; }
             renderDetailResults(results, a);
             loansBox.querySelectorAll('[data-auto]').forEach(function (e) { e.textContent = eur(a.loanAmounts[0]); });
