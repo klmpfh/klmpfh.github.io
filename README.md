@@ -74,7 +74,8 @@ relativ, über die eigene `src`-Angabe.
   Makler, Inventar, WG-Eignung) mit Rückfragen an Makler/Verwaltung zum Kopieren und Unterlagen-Checkliste. Wünsche & Bedingungen:
   gemeinsame Liste frei formulierter Wünsche (für alle gleich oder bezogen auf einen Ort je Person), jede Person gewichtet jeden Wunsch (0–100 %) und bewertet ihn in jeder Wohnung;
   daraus Passung je Person und gemeinsam (offene Gewichtungen/Bewertungen werden angezeigt). `js/calc.js` ist die Rechenlogik, `js/app.js` die Oberfläche. Daten im
-  localStorage, Übertragung zwischen Geräten per JSON-Export/-Import (alles oder einzelne Wohnung). Angebote lassen sich per KI übernehmen:
+  localStorage, Übertragung zwischen Geräten per Einmal-Link oder JSON-Export/-Import (alles oder einzelne Wohnung). Der Einmal-Link überträgt per WebRTC alles genau einmal,
+  wahlweise nur in eine Richtung oder als Abgleich in beide (je Feld gewinnt die neuere Änderung; `js/sync.js` führt zusammen, `js/transfer.js` verbindet, PeerJS und QR-Code kommen aus `fileshare/vendor/`). Angebote lassen sich per KI übernehmen:
   Prompt auf der Wohnungsseite kopieren, Antwort (JSON) dort einfügen (`js/offer.js`: Felder, Prompt und Einlesen). Wichtige Orte der Personen (Arbeit, Familie …) und die Wünsche gehen in den Prompt (eindeutig Erfülltes wird vorausgefüllt; Wünsche mit Ort je Person haben dort je Person eine Kennung, Namen stehen nicht darin);
   Entfernungen zu den Orten und zur nächsten U-/S-Bahn stehen je Wohnung und im Vergleich.
 - `/zauberkloppen/` – Szenario-Generator für Fantasy-Rollenspiele.
