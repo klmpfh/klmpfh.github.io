@@ -5,7 +5,7 @@ var SYNC = (function () {
     'use strict';
 
     // Wird in app.js (syncPersons) immer aus den Personen abgeleitet.
-    var DERIVED = ['persons', 'personRents', 'personIncludes', 'personNames', 'ownMax'];
+    var DERIVED = ['persons', 'personRents', 'personIncludes', 'personNames', 'ownMax', 'meName'];
 
     var CORE = SYNC_CORE;
     var isObj = CORE.isObj, isEmpty = CORE.isEmpty, has = CORE.has, copy = CORE.copy, keys = CORE.keys, byId = CORE.byId, same = CORE.same;
@@ -92,9 +92,19 @@ var SYNC = (function () {
         return CORE.mergeFields(a, sa, b, sb);
     }
 
+    /** Koordinaten folgen aus der Adresse und sind für sich keine Änderung, die man sehen will. */
+    function withoutGeo(data) {
+        var d = copy(data);
+        d.flats.forEach(function (f) { delete f.geo; });
+        d.people.forEach(function (p) { p.places.forEach(function (x) { delete x.geo; }); });
+        return d;
+    }
+
     /** Was sich ändert, zum Anzeigen: [{ label, added, changed, removed }] mit Namen;
      *  Finanzierung und Nebenkosten nur als Ganzes. */
     function diff(before, after) {
+        before = withoutGeo(before);
+        after = withoutGeo(after);
         function list(label, key, name) {
             return CORE.diffList(label, before[key], after[key], name);
         }

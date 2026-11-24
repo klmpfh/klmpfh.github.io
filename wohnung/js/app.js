@@ -86,7 +86,7 @@
      *  damit beim Umschalten der Art nichts verloren geht. */
     function newFlat(p, kind) {
         return {
-            id: uid(), kind: kind === 'rent' ? 'rent' : 'buy', name: 'Neue Wohnung', address: '', link: '', notes: '',
+            id: uid(), kind: kind === 'rent' ? 'rent' : 'buy', name: 'Neue Wohnung', address: '', geo: null, link: '', notes: '',   // geo: Koordinaten zur Adresse, siehe geo.js
             status: '', diary: [],   // siehe diary.js
             area: null, year: null, price: null, inventory: null,
             energyUse: null,     // kWh/(m²·a) laut Energieausweis
@@ -133,7 +133,7 @@
 
     /** Entfernungen dorthin stehen je Wohnung in flat.distances. */
     function newPlace() {
-        return { id: uid(), name: '', address: '' };
+        return { id: uid(), name: '', address: '', geo: null };
     }
 
     /** Wünsche gelten gemeinsam für alle. weights: { personId: 0–100 } – wie wichtig der Wunsch der jeweiligen Person ist.
@@ -161,6 +161,7 @@
         [['energySource', WK.ENERGY_SOURCES], ['heatingType', WK.HEATING_TYPES], ['energyCert', WK.ENERGY_CERTS], ['heatPay', WK.HEAT_PAY], ['distanceBasis', OFFER.BASIS]].forEach(function (x) {
             if (!x[1].some(function (o) { return o[0] === out[x[0]]; })) out[x[0]] = '';
         });
+        out.geo = GEO.valid(out.geo);
         out.status = DIARY.known(out.status);
         out.diary = DIARY.normalize(out.diary, uid, stamp());
         out.steps = Array.isArray(out.steps) ? out.steps.filter(isObj).map(function (s) {
@@ -224,7 +225,7 @@
                     rent: mine ? legacyMax(null, raw) : legacyMax(p.rent, p),
                     includes: isObj(p.includes) ? Object.assign({}, p.includes) : {},
                     places: (Array.isArray(p.places) ? p.places : []).filter(isObj).map(function (x) {
-                        return { id: x.id ? String(x.id) : uid(), name: String(x.name || ''), address: String(x.address || '') };
+                        return { id: x.id ? String(x.id) : uid(), name: String(x.name || ''), address: String(x.address || ''), geo: GEO.valid(x.geo) };
                     }) };
             })
             : [newPerson(), newPerson()];
@@ -249,7 +250,7 @@
 
     /** Was calc.js über die Personen braucht, immer aus der Liste abgeleitet:
      *  Anzahl (profile.persons), Namen, Maximum (profile.personRents, meins:
-     *  profile.ownMax), was sie über mich zahlen (profile.personIncludes) und
+     *  profile.ownMax und profile.meName), was sie über mich zahlen (profile.personIncludes) und
      *  welche Zimmer meine sind (room.self). */
     function syncPersons(s) {
         var me = mePerson(s.people);
@@ -260,7 +261,11 @@
         s.people.forEach(function (p, i) {
             s.profile.personNames[p.id] = (p.name || '').trim() || 'Person ' + (i + 1);
             p.self = p === me;
-            if (p.self) { s.profile.ownMax = numOrNull(p.rent); return; }
+            if (p.self) {
+                s.profile.ownMax = numOrNull(p.rent);
+                s.profile.meName = (p.name || '').trim();
+                return;
+            }
             if (WK.isSet(p.rent)) s.profile.personRents[p.id] = Number(p.rent);
             s.profile.personIncludes[p.id] = p.includes;
         });
@@ -594,7 +599,7 @@
                 ['Davon auf Mitbewohner umlegbar', 'Das Hausgeld zahlst du als Eigentümer:in an die Gemeinschaft. Ein Teil ist Verbrauch, den alle nutzen (Heizung, Wasser, Müll, Hausmeister) und der fair geteilt werden kann. Rücklage, Verwaltung und Reparaturen bleiben bei dir. In der Hausgeldabrechnung oder im Wirtschaftsplan steht dieser Teil als „umlagefähig“. Das Feld steht unter „Laufende Kosten“; leer rechnet die Seite mit 65 %.']
             ]).concat([
                 ['Lage & Ausstattung', 'Macht ein Zimmer teurer oder günstiger als die anderen. Beispiel: 15 m² mit Balkon (+5 %) zählen wie 15,75 m². Die Prozentwerte sind grobe Orientierung. Mit „Weiterer Zu-/Abschlag“ kannst du selbst nachregeln, z. B. −5 für eine Dachschräge oder +5 für einen Keller.'],
-                ['Miete an mich', 'Leer lassen, dann gilt die faire Miete (grau im Feld). Wer etwas anderes vereinbart, trägt hier den Betrag ein; darunter steht, wie weit er von der fairen Miete entfernt ist.'],
+                ['Miete ' + words().toMe, 'Leer lassen, dann gilt die faire Miete (grau im Feld). Wer etwas anderes vereinbart, trägt hier den Betrag ein; darunter steht, wie weit er von der fairen Miete entfernt ist.'],
                 ['Maximum', 'Was die Person laut „Personen“ auf der Übersicht höchstens für alles zahlen kann, als ein Betrag pro Monat. Ist die faire Miete höher, rechnet die Seite mit dem Maximum, und der Rest bleibt bei dir. Fehlen Angaben für die faire Miete, wird vorläufig gleichmäßig geteilt, höchstens bis zum Maximum (beim Kauf ohne Vergleichsmiete nur die Nebenkosten).'],
                 ['Leerstand / Mietausfall', 'Puffer für Monate, in denen ein Zimmer leer steht oder die Miete ausbleibt. Bei einer festen Person (z. B. Partner:in) kannst du 0 % eintragen.']
             ]));
@@ -1195,6 +1200,16 @@
 
     /* ---------- Karte (map.js) ---------- */
 
+    /** Koordinaten von der Karte: [[kind, id, geo]]. */
+    function saveGeo(list) {
+        list.forEach(function (g) {
+            var x = g[0] === 'flat' ? state.flats.find(function (f) { return f.id === g[1]; })
+                : state.people.reduce(function (out, p) { return out.concat(p.places); }, []).find(function (q) { return q.id === g[1]; });
+            if (x) x.geo = g[2];
+        });
+        scheduleSave();
+    }
+
     /** Wohnungen (Nummer wie in der Liste, Aussortierte zuletzt) und Orte mit Adresse. */
     function mapItems() {
         function away(near, name) {
@@ -1207,9 +1222,9 @@
         var flats = state.flats.filter(function (f) { return !DIARY.isOut(f); }).concat(state.flats.filter(DIARY.isOut));
         var items = flats.map(function (f, i) {
             var rent = f.kind === 'rent', cost = rent ? n(f.coldRent) + n(f.serviceCharges) + n(f.heatingCosts) : n(f.price);
-            var price = cost > 0 ? eur(cost) + (rent ? ' warm' : '') : '';
+            var price = cost > 0 ? eur(cost) + (rent ? ' warm ' + whoText('all') : '') : '';
             return {
-                id: f.id, kind: 'flat', mark: String(i + 1), title: f.name || 'Ohne Namen', out: DIARY.isOut(f), address: (f.address || '').trim(),
+                id: f.id, kind: 'flat', mark: String(i + 1), title: f.name || 'Ohne Namen', out: DIARY.isOut(f), address: (f.address || '').trim(), geo: f.geo,
                 sub: (rent ? 'Miete' : 'Kauf') + (price ? ' · ' + price : '') + (DIARY.isOut(f) ? ' · ' + DIARY.label(f.status) : ''),
                 href: '#w=' + encodeURIComponent(f.id),
                 popup: function (near) {
@@ -1219,7 +1234,7 @@
                         el('div', { class: 'card-sub', text: f.address }),
                         f.status ? el('div', { html: statusTag(f.status) }) : null,
                         el('div', { class: 'small', text: (rent ? 'Miete' : 'Kauf') + (price ? ' · ' + price : '') + (a.area ? ' · ' + fmtInput(a.area, 1) + ' m²' : '') }),
-                        started(a) ? el('div', { class: 'small' + (overLevel(a) ? ' ' + overLevel(a) + '-text' : ''), text: 'Netto-Wohnkosten ' + eur(a.netHousing) + ' / Monat' }) : null,
+                        started(a) ? el('div', { class: 'small' + (overLevel(a) ? ' ' + overLevel(a) + '-text' : ''), text: 'Netto-Wohnkosten ' + words().forMe + ': ' + eur(a.netHousing) + ' / Monat' }) : null,
                         near.length ? el('div', { class: 'map-away', text: 'Luftlinie' }) : null, away(near, placeName)
                     ]);
                 }
@@ -1229,7 +1244,7 @@
             filledPlaces(p).forEach(function (x) {
                 items.push({
                     id: x.id, kind: 'place', mark: personName(p).charAt(0).toUpperCase(), title: x.name.trim() || 'Ort', out: false,
-                    sub: state.people.length > 1 ? personName(p) : '', address: x.address.trim(),
+                    sub: state.people.length > 1 ? personName(p) : '', address: x.address.trim(), geo: x.geo,
                     popup: function (near) {
                         return el('div', null, [
                             el('div', { class: 'map-title', text: placeName(this) }),
@@ -1265,6 +1280,30 @@
     function buyOnly(get) { var fn = function (a) { return isRent(a) ? null : get(a); }; fn.only = 'buy'; return fn; }
     function rentOnly(get) { var fn = function (a) { return isRent(a) ? get(a) : null; }; fn.only = 'rent'; return fn; }
 
+    /* Bezugsgröße: "für alle" = für die ganze Wohnung, bevor die anderen ihren Teil zahlen,
+       "für Anna" = was davon bei der Person "Ich" bleibt (Name aus „Personen“, sonst "für dich").
+       Wer allein wohnt, liest überall den eigenen Namen. */
+    function words() { return WK.wording(state.profile); }
+
+    function anyShared() {
+        return state.people.length > 1 || state.flats.some(function (f) { return f.wg.rooms.some(function (r) { return !r.self; }); });
+    }
+
+    /** kind: 'me' oder 'all', a: nur für diese Wohnung. */
+    function whoText(kind, a) {
+        return kind === 'me' || !(a ? a.shared : anyShared()) ? words().forMe : 'für alle';
+    }
+
+    function whoTag(kind, a) {
+        return kind ? ' <span class="who who-' + (whoText(kind, a) === 'für alle' ? 'all' : 'me') + '">' + esc(whoText(kind, a)) + '</span>' : '';
+    }
+
+    /** Ein Satz, was die beiden Marken heißen. */
+    function whoLegend() {
+        return '<p class="muted small who-legend">' + whoTag('all').trim() + ' ist der Betrag für die ganze Wohnung. ' + whoTag('me').trim() +
+            ' ist, was davon übrig bleibt, wenn die anderen ihren Teil gezahlt haben.</p>';
+    }
+
     function kindLabel(a) {
         return isRent(a) ? 'Miete' + (a.flat.rentType !== 'fixed' ? ' (' + RENT_TYPE[a.flat.rentType] + ')' : '') : 'Kauf';
     }
@@ -1294,34 +1333,35 @@
     var COMPARE = [
         { label: 'Art', get: function () { return null; }, f: function (v, a) { return kindLabel(a); }, always: true },
         { label: 'Status', get: function (a) { return DIARY.label(a.flat.status) || null; }, f: function (v) { return v || '–'; } },
-        { label: 'Kaufpreis', get: buyOnly(function (a) { return a.price; }), f: eur },
-        { label: 'Kaltmiete', get: rentOnly(function (a) { return a.coldRent; }), f: eur, best: 'min' },
-        { label: 'Warmmiete', get: rentOnly(function (a) { return a.warmRent; }), f: eur, best: 'min' },
+        { label: 'Kaufpreis', who: 'all', get: buyOnly(function (a) { return a.price; }), f: eur },
+        { label: 'Kaltmiete', who: 'all', get: rentOnly(function (a) { return a.coldRent; }), f: eur, best: 'min' },
+        { label: 'Warmmiete', who: 'all', get: rentOnly(function (a) { return a.warmRent; }), f: eur, best: 'min' },
         { label: 'Wohnfläche', get: function (a) { return a.area || null; }, f: function (v) { return v === null ? '–' : fmtInput(v, 1) + ' m²'; } },
         { label: 'Preis pro m²', get: buyOnly(function (a) { return a.pricePerSqm; }), f: eur, best: 'min' },
         { label: 'Kaltmiete pro m²', get: rentOnly(function (a) { return a.coldPerSqm; }), f: perSqm, best: 'min' },
-        { label: 'Kaufnebenkosten', get: buyOnly(function (a) { return a.closing; }), f: eur, best: 'min' },
-        { label: 'Gesamtkosten', get: buyOnly(function (a) { return a.total; }), f: eur, best: 'min' },
-        { label: 'Eigenkapital-Einsatz', get: buyOnly(function (a) { return a.equity; }), f: eur },
-        { label: 'Darlehen', get: buyOnly(function (a) { return a.loanTotal; }), f: eur, best: 'min' },
+        { label: 'Kaufnebenkosten', who: 'all', get: buyOnly(function (a) { return a.closing; }), f: eur, best: 'min' },
+        { label: 'Gesamtkosten', who: 'all', get: buyOnly(function (a) { return a.total; }), f: eur, best: 'min' },
+        { label: 'Eigenkapital-Einsatz', who: 'me', get: buyOnly(function (a) { return a.equity; }), f: eur },
+        { label: 'Darlehen', who: 'all', get: buyOnly(function (a) { return a.loanTotal; }), f: eur, best: 'min' },
         { label: 'Beleihung', get: buyOnly(function (a) { return a.ltv; }), f: pct, best: 'min' },
-        { label: 'Kaution & Einzug', get: rentOnly(function (a) { return a.moveIn; }), f: eur, best: 'min' },
-        { label: 'Kreditrate / Monat', get: buyOnly(function (a) { return a.payment; }), f: eur, sep: true },
-        { label: 'davon Zinsen (Ø 1. Jahr)', get: buyOnly(function (a) { return a.interestMonth; }), f: eur, best: 'min' },
-        { label: 'davon Tilgung (Ø 1. Jahr)', get: buyOnly(function (a) { return a.repayMonth; }), f: eur, best: 'max' },
-        { label: 'Laufende Kosten / Monat', get: function (a) { return a.runningCosts; }, f: eur, best: 'min', sep: true },
-        { label: 'davon feste Kosten (mein Anteil)', get: function (a) { return a.privateInfo.fixed; }, f: eur, best: 'min' },
-        { label: 'davon Heizung (mein Anteil)', get: function (a) { return started(a) ? a.privateInfo.heat : null; }, f: heatText },
+        { label: 'Kaution & Einzug', who: 'all', get: rentOnly(function (a) { return a.moveIn; }), f: eur, best: 'min' },
+        { label: 'Kreditrate / Monat', who: 'all', get: buyOnly(function (a) { return a.payment; }), f: eur, sep: true },
+        { label: 'davon Zinsen (Ø 1. Jahr)', who: 'all', get: buyOnly(function (a) { return a.interestMonth; }), f: eur, best: 'min' },
+        { label: 'davon Tilgung (Ø 1. Jahr)', who: 'all', get: buyOnly(function (a) { return a.repayMonth; }), f: eur, best: 'max' },
+        { label: 'Laufende Kosten / Monat', who: 'all', get: function (a) { return a.runningAll; }, f: eur, best: 'min', sep: true },
+        { label: 'davon feste Kosten', who: 'all', get: function (a) { return a.privateInfo.fixedGross; }, f: eur, best: 'min' },
+        { label: 'davon Heizung', who: 'all', get: function (a) { return started(a) ? a.privateInfo.heatGross : null; }, f: heatText },
         { label: 'Hausgeld pro m²', get: buyOnly(function (a) { return a.hoaPerSqm; }), f: perSqm, best: 'min' },
-        { label: 'WG-Einnahmen', get: function (a) { return a.rentEff; }, f: eur, best: 'max' },
-        { label: 'Netto-Wohnkosten', get: function (a) { return a.netHousing; }, f: eur, best: 'min', strong: true, level: overLevel },
-        { label: 'Abstand zu deinem Maximum', get: function (a) { return started(a) ? a.ownOver : null; }, f: function (v) { return v === null ? '–' : v > 0.5 ? eur(v) + ' darüber' : eur(-v) + ' Luft'; }, level: overLevel },
-        { label: 'Echte Kosten', get: function (a) { return a.trueCost; }, f: eur, best: 'min', strong: true },
-        { label: 'Kaltmiete in 5 Jahren', get: rentOnly(function (a) { return a.coldIn5; }), f: eur, best: 'min' },
-        { label: 'Netto-Wohnkosten Ø 10 Jahre', get: rentOnly(function (a) { return a.avgNet10; }), f: eur, best: 'min' },
-        { label: 'Restschuld nach Zinsbindung', get: withRate(function (a) { return a.balanceAtFixed; }), f: eur, best: 'min', sep: true },
+        { label: 'Wohnkosten / Monat', who: 'all', get: function (a) { return a.outflowAll; }, f: eur, best: 'min', strong: true, sep: true },
+        { label: 'Zahlen die anderen', get: function (a) { return a.shared ? a.othersPay : null; }, f: eur, best: 'max' },
+        { label: 'Netto-Wohnkosten', who: 'me', get: function (a) { return a.netHousing; }, f: eur, best: 'min', strong: true, level: overLevel },
+        { label: 'Abstand zum Maximum', who: 'me', get: function (a) { return started(a) ? a.ownOver : null; }, f: function (v) { return v === null ? '–' : v > 0.5 ? eur(v) + ' darüber' : eur(-v) + ' Luft'; }, level: overLevel },
+        { label: 'Echte Kosten', who: 'me', get: function (a) { return a.trueCost; }, f: eur, best: 'min', strong: true },
+        { label: 'Kaltmiete in 5 Jahren', who: 'all', get: rentOnly(function (a) { return a.coldIn5; }), f: eur, best: 'min' },
+        { label: 'Netto-Wohnkosten Ø 10 Jahre', who: 'me', get: rentOnly(function (a) { return a.avgNet10; }), f: eur, best: 'min' },
+        { label: 'Restschuld nach Zinsbindung', who: 'all', get: withRate(function (a) { return a.balanceAtFixed; }), f: eur, best: 'min', sep: true },
         { label: 'Schuldenfrei nach', get: withRate(function (a) { return a.payoffYears; }), f: payoffText, best: 'min', strong: true },
-        { label: 'Zinsen gesamt', get: withRate(function (a) { return a.totalInterest; }), f: eur, best: 'min', strong: true },
+        { label: 'Zinsen gesamt', who: 'all', get: withRate(function (a) { return a.totalInterest; }), f: eur, best: 'min', strong: true },
         { label: 'Auffälligkeiten am Objekt', get: function (a) { return started(a) ? a.review.filter(function (r) { return r.level === 'warn' || r.level === 'bad'; }).length : null; }, f: function (v) { return v === null ? '–' : String(v); }, best: 'min' }
     ];
 
@@ -1362,7 +1402,7 @@
                 ['2. Grenze vom Netto', '35 % vom Nettoeinkommen. Dahinter steckt die übliche Faustregel von 30 % für die Warmmiete, dazu Strom und Internet. Nur sicheres Einkommen zählt: ohne Boni, Überstunden, Weihnachts- und Urlaubsgeld.'],
                 ['Beispiel', '2.200 € Netto − 900 € Lebenshaltung − 150 € Autokredit = 1.150 €. 35 % von 2.200 € = 770 €. Eintragen: 770 €.'],
                 ['Ohne festes Einkommen', 'Bei Studium oder Ausbildung zählt, was sicher jeden Monat kommt (BAföG, Unterhalt, Nebenjob). Zahlt jemand nichts, 0 eintragen.'],
-                ['Ich', 'Die Person, die kauft bzw. den Mietvertrag unterschreibt. Alle anderen zahlen an sie. Dein eigenes Maximum ist die Grenze für deine Netto-Wohnkosten, also Kreditrate oder Miete + laufende Kosten − was die anderen dir zahlen. Liegt eine Wohnung darüber, warnt die Seite. Was die Bank zusagt, prüft sie beim Kauf zusätzlich.'],
+                ['Ich', 'Die Person, die kauft bzw. den Mietvertrag unterschreibt. Alle anderen zahlen an sie. Dein eigenes Maximum ist die Grenze für deine Netto-Wohnkosten, also Kreditrate oder Miete + laufende Kosten − was die anderen zahlen. In den Auswertungen steht bei jedem Betrag, ob er für dich (mit deinem Namen) oder für alle gilt. Liegt eine Wohnung darüber, warnt die Seite. Was die Bank zusagt, prüft sie beim Kauf zusätzlich.'],
                 ['Was die anderen wirklich zahlen', 'Die faire Miete der jeweiligen Wohnung (dort unter „WG & Untermieter“), höchstens ihr Maximum.'],
                 ['Wer zahlt welche Nebenkosten?', 'Mit Haken: Du bezahlst die Rechnung, und die Person gibt dir ihren Anteil mit der Miete. Ohne Haken: Die Person zahlt ihren Anteil selbst, z. B. direkt an den Anbieter. Bei den Nebenkosten der Wohnung heißt ohne Haken: Sie zahlt dir den Anteil zusätzlich zur Miete.'],
                 ['Wichtige Orte', 'Z. B. Arbeit, Uni oder Familie mit Adresse. Der KI-Prompt auf der Seite einer Wohnung enthält diese Adressen, damit die KI die Entfernungen ermittelt; sie stehen dann im Vergleich. Alternativ trägst du die Entfernungen in jeder Wohnung selbst ein. Wer die Adressen nicht an eine KI schicken will, lässt das Adressfeld leer.']
@@ -1408,7 +1448,7 @@
         var costPeople = el('p', { class: 'small group-hint' });
         app.appendChild(panel('Private Nebenkosten', [
             el('p', { class: 'muted small group-hint', text: 'Was zusätzlich zu Miete bzw. Hausgeld anfällt, wie auf der Rechnung – der Rundfunkbeitrag kostet derzeit 55,08 € pro Quartal. Einzeln oder gleich als eine Summe: In den Wohnungen erscheint ohnehin nur das Ergebnis. ' +
-                'Wer seinen Teil über dich zahlt und wer selbst, steht oben unter „Personen“. Was du ganz übernimmst, auf „zahle ich komplett“ stellen.' }),
+                'Wer seinen Teil über dich zahlt und wer selbst, steht oben unter „Personen“. Was du ganz übernimmst, bei der Aufteilung auf „komplett“ stellen.' }),
             costPeople,
             costsBox
         ], { key: 'costs' }));
@@ -1441,7 +1481,7 @@
 
         var mapBox = el('div', { class: 'map-box' });
         app.appendChild(panel('Karte', [mapBox], { key: 'map', hint: 'Wo die Wohnungen und die wichtigen Orte aus „Personen“ liegen.' }));
-        mapView = FLATMAP.create(mapBox, { el: el, btn: btn });
+        mapView = FLATMAP.create(mapBox, { el: el, btn: btn, save: saveGeo });
 
         var transferBox = el('div', { id: 'transfer', class: 'transfer' });
         app.appendChild(panel('Daten übertragen', [
@@ -1461,7 +1501,7 @@
         currentUpdate = function () {
             updateIncludes(peopleBox);
             var max = state.people.filter(function (q) { return WK.isSet(q.rent); });
-            peopleSum.textContent = max.length > 1 ? 'Zusammen höchstens ' + eur(max.reduce(function (s, q) { return s + n(q.rent); }, 0)) + ' im Monat' : '';
+            peopleSum.textContent = max.length > 1 ? 'Für ' + (max.length === state.people.length ? 'alle' : WK.andList(max.map(personName))) + ' zusammen höchstens ' + eur(max.reduce(function (s, q) { return s + n(q.rent); }, 0)) + ' im Monat' : '';
             costPeople.textContent = costPeopleText();
             updateCostsEditor(costsBox);
             renderBudget(budgetBox);
@@ -1482,7 +1522,7 @@
         if (fixed.length) {
             box.appendChild(el('div', { class: 'cost-row room-head' }, [
                 el('span', { text: 'Posten' }), el('span', { text: 'Betrag' }), el('span', { text: 'Zeitraum' }),
-                el('span', { text: 'Aufteilung' }), el('span', { class: 'cost-mine', text: 'Anteil / Monat' }), el('span')
+                el('span', { text: 'Aufteilung' }), el('span', { class: 'cost-mine', 'data-cost-head': '' }), el('span')
             ]));
         }
         fixed.forEach(function (c, idx) {
@@ -1515,22 +1555,30 @@
         updateCostsEditor(box);
     }
 
+    /** Aufteilungen mit meinem Namen. */
+    function costSplits() {
+        var name = state.profile.meName;
+        return WK.COST_SPLIT.map(function (s) {
+            return name && s[0] === 'percent' ? [s[0], '% für ' + name] : name && s[0] === 'all' ? [s[0], 'zahlt ' + name + ' komplett'] : s;
+        });
+    }
+
     /** Eine Zeile mit Betrag, Zeitraum und Aufteilung. */
     function costRow(c, name, last) {
         var amount = numField(c, 'amount', '', { unit: '€' });
         amount._input.setAttribute('aria-label', 'Betrag');
         var every = selectBox(WK.COST_EVERY, c.every, 'Zeitraum', function (v) { c.every = Number(v); changed(); });
         var share = numField(c, 'sharePct', '', { unit: '%', dec: 1 });
-        share._input.setAttribute('aria-label', 'Mein Anteil in Prozent');
         share._input.setAttribute('data-cost-share', '');
         var shareWrap = share.querySelector('.input-wrap');
         shareWrap.hidden = c.split !== 'percent';
-        var split = selectBox(WK.COST_SPLIT, c.split, 'Aufteilung', function (v) {
+        var split = selectBox(costSplits(), c.split, 'Aufteilung', function (v) {
             c.split = v;
             shareWrap.hidden = v !== 'percent';
             changed();
             if (v === 'percent') share._input.focus();
         });
+        split.setAttribute('data-cost-split', '');
         return el('div', { class: 'cost-row' }, [
             name, amount.querySelector('.input-wrap'), every,
             el('div', { class: 'cost-split' }, [split, shareWrap]),
@@ -1549,7 +1597,8 @@
     /** Summe der festen Kosten: ganze Wohnung und mein Anteil. */
     function costSumText(info) {
         if (!(info.fixedGross > 0)) return '';
-        return 'Zusammen ' + euro2(info.fixedGross) + ' im Monat · mein Anteil ' + euro2(info.fixed) + ' (' + pct(info.fixed / info.fixedGross) + ')';
+        if (info.persons === 1 && Math.abs(info.fixedGross - info.fixed) < 0.005) return 'Zusammen ' + words().forMe + ' ' + euro2(info.fixed) + ' im Monat';
+        return 'Für alle ' + euro2(info.fixedGross) + ' im Monat · davon ' + words().forMe + ' ' + euro2(info.fixed) + ' (' + pct(info.fixed / info.fixedGross) + ')';
     }
 
     function updateCostsEditor(box) {
@@ -1558,15 +1607,25 @@
         info.items.forEach(function (c, i) {
             if (!cells[i]) return;
             cells[i].textContent = c.gross > 0 ? euro2(c.mine) : '–';
-            cells[i].title = c.gross > 0 ? 'Ganze Wohnung: ' + euro2(c.gross) + ' pro Monat, ' + euro2(c.gross * 12) + ' pro Jahr' : '';
+            cells[i].setAttribute('data-who', words().forMe.replace(/^f/, 'F') + ' pro Monat: ');
+            cells[i].title = c.gross > 0 ? 'Für alle: ' + euro2(c.gross) + ' pro Monat, ' + euro2(c.gross * 12) + ' pro Jahr' : '';
         });
-        box.querySelectorAll('[data-cost-share]').forEach(function (i) { i.placeholder = fmtInput(100 / info.persons, 1); });
+        box.querySelectorAll('[data-cost-share]').forEach(function (i) {
+            i.placeholder = fmtInput(100 / info.persons, 1);
+            i.setAttribute('aria-label', words().ofMe('Anteil') + ' in Prozent');
+        });
+        var head = box.querySelector('[data-cost-head]');
+        if (head) head.textContent = words().forMe.replace(/^f/, 'F') + ' / Monat';
+        box.querySelectorAll('[data-cost-split]').forEach(function (s) {
+            costSplits().forEach(function (x, i) { s.options[i].textContent = x[1]; });
+        });
         var total = box.querySelector('[data-cost-total]');
         if (total) total.textContent = costSumText(info);
     }
 
-    function tile(label, value, sub, cls) {
-        return '<div class="tile' + (cls ? ' ' + cls : '') + '"><div class="tile-label">' + esc(label) + '</div>' +
+    /** who: Marke aus whoTag. */
+    function tile(label, value, sub, cls, who) {
+        return '<div class="tile' + (cls ? ' ' + cls : '') + '"><div class="tile-label">' + esc(label) + (who || '') + '</div>' +
             '<div class="tile-value">' + esc(value) + '</div>' + (sub ? '<div class="tile-sub">' + esc(sub) + '</div>' : '') + '</div>';
     }
 
@@ -1581,30 +1640,32 @@
     /** Was vom eigenen Maximum für die Wohnung bleibt. */
     function ownBudgetText(b) {
         var rate = n(state.profile.bankMaxRate);
-        return 'Netto-Wohnkosten = Kreditrate oder Warmmiete + laufende Kosten − was Mitbewohner dir zahlen.' +
-            (b.fixed > 0.5 ? ' Nach deinem Anteil an den festen privaten Nebenkosten (' + eur(b.fixed) + ')' : ' Davon') +
+        var w = words(), shared = anyShared();
+        return 'Netto-Wohnkosten ' + w.forMe + ' = Kreditrate oder Warmmiete + laufende Kosten' + (shared ? ' (jeweils für alle) − was die anderen zahlen.' : '.') +
+            (b.fixed > 0.5 ? ' Nach ' + w.toMine('Anteil') + ' an den festen privaten Nebenkosten (' + eur(b.fixed) + ')' : ' Davon') +
             ' bleiben ' + eur(Math.max(0, b.left)) + ' für Kreditrate, Hausgeld und Heizung bzw. für die Warmmiete.' +
             (b.after === null ? ''
-                : b.after < -0.5 ? ' Die max. Monatsrate der Bank (' + eur(rate) + ') liegt ' + eur(-b.after) + ' darüber: Ohne Mieten von Mitbewohnern geht ein Kauf nur mit einer kleineren Rate.'
-                : ' Mit der max. Monatsrate der Bank (' + eur(rate) + ') bleiben ohne Mieten von Mitbewohnern noch ' + eur(b.after) + ' für Hausgeld, Grundsteuer, Rücklage und Heizung.');
+                : b.after < -0.5 ? ' Die max. Monatsrate der Bank (' + eur(rate) + ') liegt ' + eur(-b.after) + ' darüber: ' + (shared ? 'Ohne das Geld der anderen geht ein Kauf nur' : 'Ein Kauf geht nur') + ' mit einer kleineren Rate.'
+                : ' Mit der max. Monatsrate der Bank (' + eur(rate) + ') bleiben ' + (shared ? 'ohne das Geld der anderen ' : '') + 'noch ' + eur(b.after) + ' für Hausgeld, Grundsteuer, Rücklage und Heizung.');
     }
 
     function renderBudget(box) {
         var p = state.profile;
         var b = WK.budget(p), own = WK.ownBudget(p);
-        var ownTile = own ? tile('Max. Netto-Wohnkosten', eur(own.max), 'pro Monat, dein Maximum aus „Personen“')
-            : tile('Max. Netto-Wohnkosten', '–', 'dein Maximum fehlt noch', 'tile-warn');
+        var me = whoTag('me'), alone = anyShared() ? ', ohne das Geld der anderen' : '';
+        var ownTile = own ? tile('Max. Netto-Wohnkosten', eur(own.max), 'pro Monat, ' + words().ofMe('Maximum') + ' aus „Personen“', '', me)
+            : tile('Max. Netto-Wohnkosten', '–', words().ofMe('Maximum') + ' fehlt noch', 'tile-warn', me);
         var ownText = own ? '<p class="small muted budget-note">' + esc(ownBudgetText(own)) + '</p>'
-            : '<p class="small muted budget-note">Wie hoch deine Netto-Wohnkosten sein dürfen, trägst du unter „Personen“ ein. Danach warnt die Seite bei jeder Wohnung, die darüber liegt. <button type="button" class="btn btn-ghost btn-small" data-enter-max>Maximum eintragen</button></p>';
+            : '<p class="small muted budget-note">Wie hoch die Netto-Wohnkosten ' + esc(words().forMe) + ' sein dürfen, trägst du unter „Personen“ ein. Danach warnt die Seite bei jeder Wohnung, die darüber liegt. <button type="button" class="btn btn-ghost btn-small" data-enter-max>Maximum eintragen</button></p>';
         if (!b) {
             box.innerHTML = '<div class="tiles">' + ownTile + '</div>' + ownText +
                 '<p class="small muted budget-note">Für dein Budget beim Kauf trag oben die max. Monatsrate oder das max. Darlehen ein.</p>';
             return;
         }
         box.innerHTML = '<div class="tiles">' + ownTile +
-            tile('Max. Monatsrate', n(p.bankMaxRate) > 0 ? eur(n(p.bankMaxRate)) : '–', n(p.bankMaxRate) > 0 ? 'laut Bank' : 'fehlt noch – ohne sie steht keine Laufzeit fest', n(p.bankMaxRate) > 0 ? '' : 'tile-warn') +
-            tile('Max. Darlehen', eur(b.maxLoan), b.limit === 'loan' ? 'Kreditrahmen laut Bank' : 'aus der Monatsrate bei ' + fmtInput(n(p.defRate) + n(p.defRepay), 2) + ' % Zins + Mindesttilgung') +
-            tile('Kaufpreis-Budget', eur(b.maxPrice), eur(n(p.equity)) + ' Eigenkapital + Darlehen, abzgl. ~' + fmtInput(b.closingPct, 1) + ' % Nebenkosten') +
+            tile('Max. Monatsrate', n(p.bankMaxRate) > 0 ? eur(n(p.bankMaxRate)) : '–', n(p.bankMaxRate) > 0 ? 'laut Bank' + alone : 'fehlt noch – ohne sie steht keine Laufzeit fest', n(p.bankMaxRate) > 0 ? '' : 'tile-warn', me) +
+            tile('Max. Darlehen', eur(b.maxLoan), b.limit === 'loan' ? 'Kreditrahmen laut Bank' : 'aus der Monatsrate bei ' + fmtInput(n(p.defRate) + n(p.defRepay), 2) + ' % Zins + Mindesttilgung', '', me) +
+            tile('Kaufpreis-Budget', eur(b.maxPrice), eur(n(p.equity)) + ' Eigenkapital + Darlehen, abzgl. ~' + fmtInput(b.closingPct, 1) + ' % Nebenkosten', '', me) +
             '</div>' + ownText;
     }
 
@@ -1799,7 +1860,7 @@
             if (line._sig !== sig) {
                 line._sig = sig;
                 line.innerHTML = '';
-                line.appendChild(el('span', { class: 'muted', text: 'Zahlt über mich:' }));
+                line.appendChild(el('span', { class: 'muted', 'data-incl-head': '' }));
                 [{ id: 'running' }].concat(info.items).forEach(function (c) {
                     var cb = el('input', { type: 'checkbox', 'data-key': c.id });
                     cb.checked = p.includes[c.id] !== false;
@@ -1812,13 +1873,14 @@
                 line.appendChild(el('span', { class: 'muted incl-left' }));
             }
 
+            line.querySelector('[data-incl-head]').textContent = state.profile.meName ? 'Zahlt über ' + state.profile.meName + ':' : 'Zahlt über dich:';
             line.querySelectorAll('label').forEach(function (label, i) {
                 var cb = label.firstChild, text = label.lastChild;
                 if (!i) { text.textContent = 'Nebenkosten der Wohnung (beim Kauf: Hausgeld & Grundsteuer)'; return; }
                 var c = info.items[i - 1];
                 var all = state.profile.privateCosts[i - 1].split === 'all';
                 cb.disabled = all;
-                text.textContent = (c.heat ? 'Heizung, wenn sie extra kommt' : c.name) + (all ? ' (zahlst du komplett)' : c.other > 0 ? ' (' + euro2(c.other) + ')' : '');
+                text.textContent = (c.heat ? 'Heizung, wenn sie extra kommt' : c.name) + (all ? ' (' + words().pays + ' komplett)' : c.other > 0 ? ' (' + euro2(c.other) + ')' : '');
             });
             var off = WK.sumOther(info.items);
             var max = n(state.profile.personRents[p.id]);
@@ -2101,13 +2163,14 @@
                 cardStatus(f) +
                 '<dl class="card-facts">' +
                 (isRent(a)
-                    ? '<dt>Warmmiete</dt><dd>' + eur(a.warmRent) + (a.area ? ' · ' + fmtInput(a.area, 1) + ' m²' : '') + '</dd>' +
+                    ? '<dt>Warmmiete' + whoTag('all', a) + '</dt><dd>' + eur(a.warmRent) + (a.area ? ' · ' + fmtInput(a.area, 1) + ' m²' : '') + '</dd>' +
                         (f.rentType !== 'fixed' ? '<dt>' + RENT_TYPE[f.rentType] + '</dt><dd>in 5 J. ' + eur(a.coldIn5) + ' kalt</dd>' : '')
                     : '<dt>Kaufpreis</dt><dd>' + eur(a.price) + (a.area ? ' · ' + fmtInput(a.area, 1) + ' m²' : '') + '</dd>' +
                         (a.hoaPerSqm ? '<dt>Hausgeld</dt><dd>' + perSqm(a.hoaPerSqm) + '</dd>' : '')) +
-                (!isRent(a) && a.price > 0 ? '<dt>Schuldenfrei nach</dt><dd>' + (a.rateMissing ? 'Rate der Bank fehlt' : WK.years(a.payoffYears)) + '</dd>' + (a.rateMissing ? '' : '<dt>Kreditrate</dt><dd>' + eur(a.payment) + ' / Monat</dd>') : '') +
-                '<dt>Netto-Wohnkosten</dt><dd' + (over ? ' class="' + over + '-text"' : '') + '>' + eur(a.netHousing) + ' / Monat' +
-                (over ? '<div class="card-over">' + eur(a.ownOver) + ' über deinem Maximum' + (over === 'warn' ? ', mit kleinerer Rate machbar' : '') + '</div>' : '') + '</dd>' +
+                (!isRent(a) && a.price > 0 ? '<dt>Schuldenfrei nach</dt><dd>' + (a.rateMissing ? 'Rate der Bank fehlt' : WK.years(a.payoffYears)) + '</dd>' + (a.rateMissing ? '' : '<dt>Kreditrate' + whoTag('all', a) + '</dt><dd>' + eur(a.payment) + ' / Monat</dd>') : '') +
+                (a.shared ? '<dt>Wohnkosten' + whoTag('all', a) + '</dt><dd>' + eur(a.outflowAll) + ' / Monat</dd>' : '') +
+                '<dt>Netto-Wohnkosten' + whoTag('me', a) + '</dt><dd' + (over ? ' class="' + over + '-text"' : '') + '>' + eur(a.netHousing) + ' / Monat</dd>' +
+                (over ? '<dd class="card-over ' + over + '-text">' + eur(a.ownOver) + ' über ' + esc(words().toMine('Maximum')) + (over === 'warn' ? ', mit kleinerer Rate machbar' : '') + '</dd>' : '') +
                 (hasWishes ? '<dt>Passt zu ' + (state.people.length > 1 ? 'uns' : esc(personName(state.people[0]))) + '</dt>' +
                     (a.wish.ko.length
                         ? '<dd class="bad-text" title="Muss nicht erfüllt: ' + esc(wishNames(a.wish.ko.map(function (k) { return k.wishId; }))) + '">✕ passt nicht</dd>'
@@ -2122,7 +2185,7 @@
 
         var table = '';
         if (results.length) {
-            table = '<h3 class="group-title">Vergleich</h3>' + terms(box, 'Was bedeuten Kreditrate, Netto-Wohnkosten und echte Kosten?', TERMS_COMPARE) + '<div class="table-scroll"><table class="compare"><thead><tr><th></th>' +
+            table = '<h3 class="group-title">Vergleich</h3>' + (anyShared() ? whoLegend() : '') + terms(box, 'Was bedeuten Kreditrate, Netto-Wohnkosten und echte Kosten?', termsCompare()) + '<div class="table-scroll"><table class="compare"><thead><tr><th></th>' +
                 results.map(function (a) { return '<th><a href="#w=' + encodeURIComponent(a.flat.id) + '">' + esc(a.flat.name || 'Ohne Namen') + '</a></th>'; }).join('') +
                 '</tr></thead><tbody>' +
                 rows.map(function (row) {
@@ -2134,13 +2197,13 @@
                         best = row.best === 'min' ? Math.min.apply(null, valid) : Math.max.apply(null, valid);
                         if (Math.min.apply(null, valid) === Math.max.apply(null, valid)) best = null;
                     }
-                    return '<tr class="' + (row.sep ? 'sep ' : '') + (row.strong ? 'strong' : '') + '"><th>' + esc(row.label) + '</th>' +
+                    return '<tr class="' + (row.sep ? 'sep ' : '') + (row.strong ? 'strong' : '') + '"><th>' + esc(row.label) + whoTag(row.who) + '</th>' +
                         vals.map(function (v, i) {
                             var isBest = best !== null && v === best;
                             var text = row.get.only && row.get.only !== results[i].kind ? '–' : row.f(v, results[i]);
                             var level = row.level ? row.level(results[i]) : null;
                             var cls = (isBest ? 'best' : '') + (level ? ' over-' + level : '');
-                            var hint = [isBest ? 'bester Wert' : '', level ? 'über deinem Maximum' : ''].filter(Boolean).join(', ');
+                            var hint = [isBest ? 'bester Wert' : '', level ? 'über ' + words().toMine('Maximum') : ''].filter(Boolean).join(', ');
                             return '<td' + (cls ? ' class="' + cls.trim() + '" title="' + hint + '"' : '') + '>' + esc(text) + '</td>';
                         }).join('') + '</tr>';
                 }).join('') +
@@ -2372,7 +2435,7 @@
                 group(null, [
                     numField(f, 'utilities', 'Weitere laufende Kosten', { unit: '€', hint: 'Nur für diese Wohnung, z. B. Stellplatz oder Garten. Ohne Heizung.' })
                 ])
-            ])
+            ], { hint: FOR_FLAT })
             : panel('Laufende Kosten (monatlich)', [
                 group(null, [
                     numField(f, 'hoa', 'Hausgeld', { unit: '€', hint: 'Gesamt laut Wirtschaftsplan, inkl. Heizung & Erhaltungsrücklage.' }),
@@ -2386,7 +2449,7 @@
                     numField(f, 'utilities', 'Weitere laufende Kosten', { unit: '€', hint: 'Nur für diese Wohnung, z. B. Stellplatz-Miete. Ohne Heizung, Strom, Internet & Co.' })
                 ]),
                 costsPanel
-            ]);
+            ], { hint: FOR_FLAT });
 
         var wgAssumptions = [
             numField(f.wg, 'vacancyPct', 'Leerstand / Mietausfall', { unit: '%', hint: function () {
@@ -2522,7 +2585,7 @@
 
         app.appendChild(el('div', { class: 'detail-layout' }, [inputs, el('aside', { class: 'detail-aside' }, [results])]));
         if (!rent) app.appendChild(panel('Schulden & Vermögen über die Zeit', [chartPanel, planBox], {
-            cls: 'panel-wide', hint: 'Gezahlt gesamt = Eigenkapital + alle Raten (Zins und Tilgung) und Sondertilgungen, ohne Hausgeld und andere laufende Kosten.'
+            cls: 'panel-wide', hint: 'Alle Beträge für die ganze Wohnung, ohne das Geld der anderen. Gezahlt gesamt = Eigenkapital + alle Raten (Zins und Tilgung) und Sondertilgungen, ohne Hausgeld und andere laufende Kosten.'
         }));
 
         /** Mietart (fest / Staffel / Index) mit den jeweils passenden Feldern. */
@@ -2597,7 +2660,7 @@
         function renderRooms() {
             roomsBox.innerHTML = '';
             var head = el('div', { class: 'room room-head' }, [
-                el('span', { text: 'Wer' }), el('span', { text: 'Zimmer' }), el('span', { text: 'Größe' }), el('span', { text: 'Miete an mich' }), el('span')
+                el('span', { text: 'Wer' }), el('span', { text: 'Zimmer' }), el('span', { text: 'Größe' }), el('span', { text: 'Miete ' + words().toMe }), el('span')
             ]);
             roomsBox.appendChild(head);
             f.wg.rooms.forEach(function (r, idx) {
@@ -2614,7 +2677,7 @@
                 name.addEventListener('input', function () { r.name = name.value; changed(); });
                 var size = numField(r, 'size', '', { unit: 'm²', dec: 1 });
                 var rent = numField(r, 'rent', '', { unit: '€' });
-                rent._input.setAttribute('aria-label', 'Miete an mich pro Monat');
+                rent._input.setAttribute('aria-label', 'Miete ' + words().toMe + ' pro Monat');
                 rent._input.setAttribute('data-room-rent', '');
                 if (r.self) { rent._input.disabled = true; rent._input.value = ''; }
                 var del = el('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Zimmer entfernen', text: '×', onclick: function () {
@@ -2694,7 +2757,7 @@
             var heads = roomsBox.querySelectorAll('.room-features > summary');
             plan.groups.forEach(function (g) {
                 g.rooms.forEach(function (i, k) {
-                    inputs[i].placeholder = g.self ? 'ich' : !k && !g.entered && g.pay > 0 ? fmtInput(Math.round(g.pay), 0) : '';
+                    inputs[i].placeholder = g.self ? state.profile.meName || 'ich' : !k && !g.entered && g.pay > 0 ? fmtInput(Math.round(g.pay), 0) : '';
                     texts[i].textContent = k ? 'Zählt oben bei ' + (g.name || 'diesem Zimmer') + ' mit.' : fairText(g);
                     var pctExtra = WK.roomExtra(f.wg.rooms[i]);
                     heads[i].textContent = 'Lage & Ausstattung' + (pctExtra ? ' (' + signedPct(pctExtra) + ')' : '');
@@ -2703,20 +2766,20 @@
         }
 
         function fairText(g) {
-            if (g.self) return g.cold === null || !rent ? '' : 'Dein fairer Anteil an der Kaltmiete: ' + eur(g.cold);
+            if (g.self) return g.cold === null || !rent ? '' : 'Fairer Anteil ' + words().forMe + ' an der Kaltmiete: ' + eur(g.cold);
             var max = g.max !== null ? 'Maximum ' + eur(g.max) : '';
             if (g.due === null) return g.source === 'equal' ? 'Vorläufig gleichmäßig geteilt: ' + eur(g.pay) + ' (' + max + '), bis alle Angaben für die faire Miete da sind.'
                 : g.source === 'max' ? 'Gerechnet mit ' + eur(g.pay) + ' (' + max + '), bis alle Angaben für die faire Miete da sind.' : '';
             var parts = [eur(g.cold) + ' kalt'];
             if (g.running > 0) parts.push(eur(g.running) + (rent ? ' Nebenkosten' : ' Hausgeld & Grundsteuer'));
             if (g.priv > 0) parts.push(eur(g.priv) + ' ' + g.items.map(function (c) { return c.name; }).join(', '));
-            var text = 'Faire Miete: ' + eur(g.due) + (parts.length > 1 ? ' = ' + parts.join(' + ') : ' kalt');
+            var text = 'Faire Miete' + (g.name ? ' für ' + g.name : '') + ': ' + eur(g.due) + (parts.length > 1 ? ' = ' + parts.join(' + ') : ' kalt');
             if (g.own > 0.5 && g.person) text += ' · dazu ' + eur(g.own) + ' selbst gezahlt';
             if (g.entered) {
                 var diff = g.rent - g.due;
                 text += ' · eingetragen ' + (Math.abs(diff) < 0.5 ? 'genau fair' : eur(Math.abs(diff)) + (diff > 0 ? ' mehr' : ' weniger'));
                 if (g.over > 0.5) text += ', ' + eur(g.over) + ' über dem ' + max;
-            } else if (g.short > 0.5) text += ' · gerechnet mit ' + eur(g.pay) + ' wegen ' + max + ', ' + eur(g.short) + ' trägst du';
+            } else if (g.short > 0.5) text += ' · gerechnet mit ' + eur(g.pay) + ' wegen ' + max + ', ' + eur(g.short) + ' ' + words().bears;
             if (!g.person && !g.entered) text += ' · zählt erst, wenn du den Betrag einträgst';
             return text;
         }
@@ -2750,27 +2813,37 @@
         currentUpdate();
     }
 
-    function line(label, value, cls) {
-        return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><th>' + label + '</th><td>' + esc(value) + '</td></tr>';
+    /** who: Marke aus whoTag. */
+    function line(label, value, cls, who) {
+        return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><th>' + label + (who || '') + '</th><td>' + esc(value) + '</td></tr>';
     }
 
-    /** Feste Kosten und Heizung in der Monatsbilanz; nennt die Summe, wenn mein Anteil kleiner ist. */
+    /** Feste Kosten und Heizung in der Monatsbilanz, für alle; nennt meinen Anteil, wenn er kleiner ist. */
     function privateLines(a) {
         var info = a.privateInfo, h = info.heating;
-        function share(gross, mine) { return gross - mine > 0.5 ? ' (mein Anteil von ' + eur(gross) + ')' : ''; }
-        return line('Feste Kosten' + share(info.fixedGross, info.fixed), eur(info.fixed)) +
+        function share(gross, mine) { return gross - mine > 0.5 ? ' (davon ' + esc(a.words.forMe) + ' ' + eur(mine) + ')' : ''; }
+        return line('Feste Kosten' + share(info.fixedGross, info.fixed), eur(info.fixedGross)) +
             (h.pay === 'incl' ? (a.heating > 0 ? '' : line('Heizung', isRent(a) ? 'in der Warmmiete' : 'im Hausgeld', 'muted-row'))
-                : line('Heizung' + (h.source === 'estimate' ? ', geschätzt' : '') + share(info.heatGross, info.heat), h.source === null ? 'Betrag fehlt' : eur(info.heat)));
+                : line('Heizung' + (h.source === 'estimate' ? ', geschätzt' : '') + share(info.heatGross, info.heat), h.source === null ? 'Betrag fehlt' : eur(info.heatGross)));
     }
 
-    /** Mieten in der Monatsbilanz. */
+    /** Was die anderen zahlen, in der Monatsbilanz. */
     function rentLines(a) {
-        if (!(a.rentGross > 0)) return line('WG-Mieten', 'keine eingetragen', 'muted-row');
-        return line('WG-Mieten (' + a.roomsRented + ' Zi., ' + fmtInput(n(a.flat.wg.vacancyPct), 1) + ' % Leerstand)', '− ' + eur(a.rentCash)) +
-            (a.rentPrivate > 0 ? line('darin enthalten: ' + esc(a.rentPrivateNames.join(', ')) + ' der anderen', '+ ' + eur(a.rentPrivate)) : '') +
+        if (!a.shared) return '';
+        var direct = Math.abs(a.othersDirect) > 0.5;
+        return (a.rentGross > 0 ? line('Mieten ' + esc(a.words.toMe) + ' (' + a.roomsRented + ' Zi., ' + fmtInput(n(a.flat.wg.vacancyPct), 1) + ' % Leerstand)', '− ' + eur(a.rentCash))
+                : line('Mieten ' + esc(a.words.toMe), 'keine eingetragen', 'muted-row')) +
             (a.rentExtra > 0 ? line('zusätzlich zur Miete: ' + esc(runningLabel(a)), '− ' + eur(a.rentExtra)) : '') +
-            (a.rentPrivate + a.rentExtra > 0 ? line('WG-Einnahmen', minus(a.rentEff), 'sum') : '');
+            (direct ? line('Private Nebenkosten, die sie selbst zahlen', minus(a.othersDirect)) : '') +
+            line('Zahlen die anderen', minus(a.othersPay), 'sum');
     }
+
+    /** Kurzform für Rechenwege, z. B. " − 600 € von den anderen". */
+    function othersTerm(a) {
+        return a.shared && Math.abs(a.othersPay) > 0.5 ? ' ' + minus(a.othersPay) + ' von den anderen' : '';
+    }
+
+    var FOR_FLAT = 'Beträge für die ganze Wohnung, also für alle zusammen eintragen.';
 
     /** Betrag, der abgezogen wird. */
     function minus(v) {
@@ -2795,16 +2868,17 @@
     function heatTerm(a) {
         var h = a.privateInfo.heating, rent = isRent(a);
         if (h.pay === 'incl') return 'Heizung: steckt hier ' + (rent ? 'in der Warmmiete' : 'im Hausgeld') + ' und zählt deshalb nicht noch einmal.';
-        return 'Heizung: kommt hier extra dazu' + (h.source === null ? ', der Betrag fehlt aber noch.' : ', dein Anteil sind ' + eur(a.privateInfo.heat) + '.') +
+        return 'Heizung: kommt hier extra dazu' + (h.source === null ? ', der Betrag fehlt aber noch.' : ', ' + eur(a.privateInfo.heatGross) + ' ' + a.forAll + (a.shared ? ', davon ' + eur(a.privateInfo.heat) + ' ' + a.words.forMe : '') + '.') +
             ' Steckt sie doch ' + (rent ? 'in der Warmmiete' : 'im Hausgeld') + ', stell sie unter „Laufende Kosten“ auf „schon enthalten“.';
     }
 
-    /** Rechenweg der WG-Einnahmen, leer ohne Mieten. */
+    /** Rechenweg, was die anderen zahlen; leer, wenn niemand sonst da wohnt. */
     function rentTerm(a) {
-        if (!(a.rentGross > 0)) return '';
-        return 'WG-Einnahmen: ' + eur(a.rentCash) + ' Mieten nach Leerstand' +
-            (a.rentPrivate > 0 ? ' − ' + eur(a.rentPrivate) + ' für den Anteil der anderen an ' + a.rentPrivateNames.join(', ') : '') +
-            (a.rentExtra > 0 ? ' + ' + eur(a.rentExtra) + ' für ihren Anteil an ' + runningLabel(a) : '') + ' = ' + eur(a.rentEff) + '.';
+        if (!a.shared || Math.abs(a.othersPay) < 0.5) return '';
+        return 'Die anderen zahlen: ' + eur(a.rentCash) + ' Mieten nach Leerstand' +
+            (a.rentPrivate > 0 ? ' (darin ihr Anteil an ' + a.rentPrivateNames.join(', ') + ')' : '') +
+            (a.rentExtra > 0 ? ' + ' + eur(a.rentExtra) + ' für ihren Anteil an ' + runningLabel(a) : '') +
+            (Math.abs(a.othersDirect) > 0.5 ? (a.othersDirect < 0 ? ' − ' : ' + ') + eur(Math.abs(a.othersDirect)) + ' private Nebenkosten, die sie selbst zahlen' : '') + ' = ' + eur(a.othersPay) + '.';
     }
 
     /** Woraus die Kreditrate besteht. */
@@ -2813,27 +2887,27 @@
             : eur(a.interestMonth) + ' Zinsen + ' + eur(a.repayMonth) + ' Tilgung';
     }
 
-    var FIXED_TERM = 'Feste Kosten und extra bezahlte Heizung: nur dein Anteil. Was die anderen davon mit der Miete an dich zahlen, reichst du weiter – das wird von den Mieten abgezogen.';
+    var FIXED_TERM = 'Feste Kosten und extra bezahlte Heizung: zählen für alle zusammen. Was die anderen davon zahlen, mit der Miete oder selbst, steckt in „Zahlen die anderen“.';
 
     function termsBuy(a) {
         var info = a.privateInfo;
         return [
             ['Vorweg', 'Alle drei Zahlen sind Beträge pro Monat und bauen aufeinander auf. Die Kreditrate steckt schon in den Netto-Wohnkosten – also nicht zusammenzählen.'],
-            ['1. Kreditrate: ' + eur(a.payment), 'Was du der Bank überweist, nur für den Kredit.',
+            ['1. Kreditrate ' + a.forAll + ': ' + eur(a.payment), 'Was an die Bank geht, nur für den Kredit, für die ganze Wohnung.',
                 '= ' + rateParts(a),
                 'Die Zinsen behält die Bank, die Tilgung verkleinert deine Schulden. Die Rate bleibt gleich, aber der Zinsanteil sinkt mit der Zeit. Gezeigt ist der Durchschnitt des ersten Jahres.',
                 a.extraYear1 > 0 ? 'Deine Sondertilgung (' + eur(a.extraYear1) + ' im ersten Jahr) kommt noch dazu und steckt in keiner der drei Zahlen.' : ''],
-            ['2. Netto-Wohnkosten: ' + eur(a.netHousing), 'Was im Monat unterm Strich von deinem Konto abgeht.',
-                '= ' + eur(a.payment) + ' Kreditrate + ' + eur(a.runningCosts) + ' laufende Kosten' + (a.rentGross > 0 ? ' − ' + eur(a.rentEff) + ' WG-Einnahmen' : ''),
-                'Laufende Kosten: ' + addends([[a.hoa, 'Hausgeld'], [a.propertyTax, 'Grundsteuer'], [a.maintenance, 'eigene Rücklage'], [info.fixed, 'feste Kosten'], [info.heat, 'Heizung'], [a.utilities, 'weitere']]) + '.',
+            ['2. Netto-Wohnkosten ' + a.words.forMe + ': ' + eur(a.netHousing), 'Was im Monat unterm Strich übrig bleibt' + (a.shared ? ', wenn die anderen ihren Teil gezahlt haben.' : '.'),
+                '= ' + eur(a.payment) + ' Kreditrate + ' + eur(a.runningAll) + ' laufende Kosten' + (a.shared ? ' (beides für alle)' : '') + othersTerm(a),
+                'Laufende Kosten ' + a.forAll + ': ' + addends([[a.hoa, 'Hausgeld'], [a.propertyTax, 'Grundsteuer'], [a.maintenance, 'eigene Rücklage'], [info.fixedGross, 'feste Kosten'], [info.heatGross, 'Heizung'], [a.utilities, 'weitere']]) + '.',
                 rentTerm(a)],
-            ['3. Echte Kosten: ' + eur(a.trueCost), 'Was davon wirklich weg ist.',
+            ['3. Echte Kosten ' + a.words.forMe + ': ' + eur(a.trueCost), 'Was davon wirklich weg ist.',
                 '= ' + eur(a.netHousing) + ' Netto-Wohnkosten ' + (a.repayMonth < -0.5 ? minus(a.repayMonth) + ' Zinsen, die offen bleiben' : minus(a.repayMonth) + ' Tilgung'),
                 'Die Tilgung ist nicht ausgegeben: Um diesen Betrag sinken deine Schulden, die Wohnung gehört dir also ein Stück mehr. Deshalb ist das die richtige Zahl für den Vergleich mit einer Miete.' +
-                    (a.trueCost < -0.5 ? ' Negativ heißt: Die WG-Einnahmen decken mehr als Zinsen und laufende Kosten.' : ''),
+                    (a.trueCost < -0.5 ? ' Negativ heißt: Was die anderen zahlen, deckt mehr als Zinsen und laufende Kosten.' : ''),
                 'Nicht enthalten sind einmalige Kosten: ' + eur(a.closing) + ' Kaufnebenkosten' + (a.oneOff > 0 ? ' und ' + eur(a.oneOff) + ' Renovierung & Sonstiges' : '') + '.'],
             ['Zählt etwas doppelt?', 'Nein, jeder Betrag zählt genau einmal:',
-                'Hausgeld: zählt ganz, auch der Teil für Mitbewohner. Deren Anteil kommt über die WG-Einnahmen zurück.',
+                'Hausgeld: zählt ganz, auch der Teil für Mitbewohner. Deren Anteil steckt in „Zahlen die anderen“.',
                 'Grundsteuer und eigene Rücklage: stehen nicht im Hausgeld. Die Rücklage der Eigentümergemeinschaft dagegen schon – trag sie nicht noch einmal als eigene Rücklage ein.',
                 heatTerm(a), FIXED_TERM,
                 'Weitere laufende Kosten: hier nur eintragen, was in keinem anderen Feld steht.'],
@@ -2844,10 +2918,10 @@
     function termsRent(a) {
         var info = a.privateInfo;
         return [
-            ['Warmmiete: ' + eur(a.warmRent), 'Was du dem Vermieter überweist, für die ganze Wohnung.',
+            ['Warmmiete ' + a.forAll + ': ' + eur(a.warmRent), 'Was an den Vermieter geht, für die ganze Wohnung.',
                 '= ' + addends([[a.coldRent, 'Kaltmiete'], [a.serviceCharges, 'Nebenkosten'], [a.heating, 'Heizkosten']])],
-            ['Netto-Wohnkosten: ' + eur(a.netHousing), 'Was im Monat unterm Strich von deinem Konto abgeht.',
-                '= ' + addends([[a.warmRent, 'Warmmiete'], [info.fixed, 'feste Kosten'], [info.heat, 'Heizung'], [a.utilities, 'weitere laufende Kosten']]) + (a.rentGross > 0 ? ' − ' + eur(a.rentEff) + ' WG-Einnahmen' : ''),
+            ['Netto-Wohnkosten ' + a.words.forMe + ': ' + eur(a.netHousing), 'Was im Monat unterm Strich übrig bleibt' + (a.shared ? ', wenn die anderen ihren Teil gezahlt haben.' : '.'),
+                '= ' + addends([[a.warmRent, 'Warmmiete'], [info.fixedGross, 'feste Kosten'], [info.heatGross, 'Heizung'], [a.utilities, 'weitere laufende Kosten']]) + (a.shared ? ' (alles für alle)' : '') + othersTerm(a),
                 rentTerm(a)],
             ['Echte Kosten (im Vergleich)', 'Bei Miete dasselbe wie die Netto-Wohnkosten, weil nichts davon zurückkommt. Bei einer Kaufwohnung ist die Tilgung abgezogen.'],
             ['Zählt etwas doppelt?', 'Nein, jeder Betrag zählt genau einmal:', heatTerm(a), FIXED_TERM,
@@ -2855,14 +2929,19 @@
         ];
     }
 
-    var TERMS_COMPARE = [
-        ['Kreditrate', 'Nur Kauf: was du der Bank überweist = Zinsen + Tilgung.'],
-        ['Laufende Kosten', 'Beim Kauf Hausgeld, Grundsteuer, eigene Rücklage, feste Kosten und Heizung (wenn sie extra kommt). Bei Miete Nebenkosten, Heizung und feste Kosten, ohne Kaltmiete.'],
-        ['Netto-Wohnkosten', 'Was im Monat unterm Strich von deinem Konto abgeht. Kauf: Kreditrate + laufende Kosten − WG-Einnahmen. Miete: Kaltmiete + laufende Kosten − WG-Einnahmen.'],
-        ['Abstand zu deinem Maximum', 'Dein Maximum aus „Personen“ minus Netto-Wohnkosten. Rot: passt nicht. Gelb: passt nur mit einer kleineren Kreditrate.'],
-        ['Echte Kosten', 'Was davon wirklich weg ist. Kauf: Netto-Wohnkosten − Tilgung, denn die Tilgung gehört dir. Miete: gleich den Netto-Wohnkosten. Damit vergleichst du Kauf und Miete fair.'],
-        ['Nicht zusammenzählen', 'Die Kreditrate steckt schon in den Netto-Wohnkosten, und die echten Kosten sind ein Teil davon. Den Rechenweg mit deinen Zahlen findest du auf der Seite jeder Wohnung.']
-    ];
+    function termsCompare() {
+        var all = whoText('all'), w = words();
+        return [
+            ['Kreditrate ' + all, 'Nur Kauf: was an die Bank geht = Zinsen + Tilgung, für die ganze Wohnung.'],
+            ['Laufende Kosten ' + all, 'Beim Kauf Hausgeld, Grundsteuer, eigene Rücklage, feste Kosten und Heizung (wenn sie extra kommt). Bei Miete Nebenkosten, Heizung und feste Kosten, ohne Kaltmiete. Immer für die ganze Wohnung.'],
+            ['Wohnkosten ' + all, 'Kreditrate bzw. Kaltmiete + laufende Kosten: was die Wohnung im Monat insgesamt kostet.'],
+            ['Zahlen die anderen', 'Die Mieten der anderen nach Leerstand und was sie von den Nebenkosten selbst zahlen.'],
+            ['Netto-Wohnkosten ' + w.forMe, 'Was im Monat übrig bleibt: Wohnkosten ' + all + ' − was die anderen zahlen.'],
+            ['Abstand zum Maximum', w.ofMe('Maximum').replace(/^d/, 'D') + ' aus „Personen“ minus Netto-Wohnkosten. Rot: passt nicht. Gelb: passt nur mit einer kleineren Kreditrate.'],
+            ['Echte Kosten ' + w.forMe, 'Was davon wirklich weg ist. Kauf: Netto-Wohnkosten − Tilgung, denn die Tilgung ist nicht ausgegeben. Miete: gleich den Netto-Wohnkosten. Damit vergleicht man Kauf und Miete fair.'],
+            ['Nicht zusammenzählen', 'Die Kreditrate steckt schon in den Wohnkosten, und die echten Kosten sind ein Teil der Netto-Wohnkosten. Den Rechenweg mit euren Zahlen findest du auf der Seite jeder Wohnung.']
+        ];
+    }
 
     function runningLabel(a) {
         return isRent(a) ? 'Nebenkosten & Heizung' : 'umlegbares Hausgeld & Grundsteuer';
@@ -2871,7 +2950,7 @@
     /** Wie viel von den Mieten nach den enthaltenen Kosten übrig bleibt. */
     function rentLeftTable(a) {
         if (!(a.rentGross > 0) || !(a.rentPrivate + a.rentRunning > 0)) return '';
-        return '<h3>Mieten an dich</h3><table class="calc">' +
+        return '<h3>Mieten ' + esc(a.words.toMe) + '</h3><table class="calc">' +
             line('Mieten nach Leerstand', eur(a.rentCash)) +
             (a.rentRunning > 0 ? line('Anteil ' + esc(runningLabel(a)), '− ' + eur(a.rentRunning)) : '') +
             (a.rentPrivate > 0 ? line('Anteil ' + esc(a.rentPrivateNames.join(', ')), '− ' + eur(a.rentPrivate)) : '') +
@@ -2882,10 +2961,11 @@
     /** Netto-Wohnkosten mit meinem Maximum, ohne Maximum mit dem Rechenweg. */
     function netTile(a) {
         var over = overLevel(a);
-        return tile('Netto-Wohnkosten', eur(a.netHousing), a.ownMax === null
-            ? (isRent(a) ? 'Warmmiete + weitere Kosten' : 'Kreditrate + laufende Kosten') + (a.rentEff > 0.5 ? ' − WG-Einnahmen' : '')
-            : over ? eur(a.ownOver) + ' über deinem Maximum von ' + eur(a.ownMax)
-            : 'dein Maximum: ' + eur(a.ownMax) + ', noch ' + eur(-a.ownOver) + ' Luft', over ? 'tile-' + over : '');
+        return tile('Netto-Wohnkosten', eur(a.netHousing), (a.ownMax === null
+            ? (isRent(a) ? 'Warmmiete + weitere Kosten' : 'Kreditrate + laufende Kosten') + (a.shared ? ' − was die anderen zahlen' : '')
+            : over ? eur(a.ownOver) + ' über ' + a.words.toMine('Maximum') + ' (' + eur(a.ownMax) + ')'
+            : a.words.ofMe('Maximum') + ': ' + eur(a.ownMax) + ', noch ' + eur(-a.ownOver) + ' Luft') +
+            (a.shared ? ' · Wohnkosten für alle: ' + eur(a.outflowAll) : ''), over ? 'tile-' + over : '', whoTag('me', a));
     }
 
     function renderDetailResults(box, a) {
@@ -2898,9 +2978,9 @@
         var html = '<div class="panel results-panel">';
 
         html += '<div class="tiles tiles-2">' +
-            tile('Kreditrate', eur(a.payment), a.rateMissing ? 'vorläufig, nur Mindesttilgung' : n(p.bankMaxRate) > 0 && a.payment > n(p.bankMaxRate) + 0.5 ? 'laut Bank höchstens ' + eur(n(p.bankMaxRate)) : rateParts(a), a.payment > n(p.bankMaxRate) + 0.5 && n(p.bankMaxRate) > 0 ? 'tile-bad' : '') +
+            tile('Kreditrate', eur(a.payment), a.rateMissing ? 'vorläufig, nur Mindesttilgung' : n(p.bankMaxRate) > 0 && a.payment > n(p.bankMaxRate) + 0.5 ? 'laut Bank höchstens ' + eur(n(p.bankMaxRate)) : rateParts(a), a.payment > n(p.bankMaxRate) + 0.5 && n(p.bankMaxRate) > 0 ? 'tile-bad' : '', whoTag('all', a)) +
             netTile(a) +
-            tile('Echte Kosten', eur(a.trueCost), 'Netto-Wohnkosten − Tilgung') +
+            tile('Echte Kosten', eur(a.trueCost), 'Netto-Wohnkosten − Tilgung', '', whoTag('me', a)) +
             (a.rateMissing ? tile('Schuldenfrei nach', '–', 'Rate der Bank fehlt', 'tile-warn')
                 : tile('Schuldenfrei nach', WK.years(a.payoffYears), 'Zinsen gesamt ' + eur(a.totalInterest))) +
             '</div>' + terms(box, 'Wie werden diese Zahlen gerechnet?', termsBuy(a));
@@ -2914,22 +2994,23 @@
         html += '<h3>Monatsbilanz</h3><table class="calc">' +
             line('Zinsen (Ø 1. Jahr)', eur(a.interestMonth)) +
             line(a.repayMonth < -0.5 ? 'Davon offen: Die Rate deckt die Zinsen nicht' : 'Tilgung (Ø 1. Jahr)', a.repayMonth < -0.5 ? '− ' + eur(-a.repayMonth) : eur(a.repayMonth)) +
-            line('Kreditrate', eur(a.payment), 'sum') +
+            line('Kreditrate', eur(a.payment), 'sum', whoTag('all', a)) +
             line('Hausgeld', eur(a.hoa)) +
             line('Grundsteuer (anteilig)', eur(a.propertyTax)) +
             line('Eigene Rücklage', eur(a.maintenance)) +
             privateLines(a) +
             (a.utilities > 0 ? line('Weitere laufende Kosten', eur(a.utilities)) : '') +
-            line('Laufende Kosten', eur(a.runningCosts), 'sum') +
+            line('Laufende Kosten', eur(a.runningAll), 'sum', whoTag('all', a)) +
+            (a.shared ? line('Wohnkosten', eur(a.outflowAll), 'sum strong', whoTag('all', a)) : '') +
             rentLines(a) +
-            line('Netto-Wohnkosten', eur(a.netHousing), 'sum strong') +
-            line(a.repayMonth < -0.5 ? 'Zinsen, die offen bleiben' : 'Tilgung, die dir bleibt', minus(a.repayMonth)) +
-            line('Echte Kosten', eur(a.trueCost), 'sum strong') +
+            line('Netto-Wohnkosten', eur(a.netHousing), 'sum strong', whoTag('me', a)) +
+            line(a.repayMonth < -0.5 ? 'Zinsen, die offen bleiben' : 'Tilgung, nicht ausgegeben', minus(a.repayMonth)) +
+            line('Echte Kosten', eur(a.trueCost), 'sum strong', whoTag('me', a)) +
             '</table>' + (a.extraYear1 > 0 ? '<p class="muted small">Dazu kommen im ersten Jahr ' + eur(a.extraYear1) + ' Sondertilgung. Sie stecken in keiner dieser Zahlen.</p>' : '');
 
         html += rentLeftTable(a);
 
-        html += '<h3>Kauf</h3><table class="calc">' +
+        html += '<h3>Kauf' + whoTag('all', a) + '</h3><table class="calc">' +
             line('Kaufpreis', eur(a.price)) +
             line('Grunderwerbsteuer (' + fmtInput(n(a.flat.transferTaxPct), 2) + ' %)', eur(a.transferTax)) +
             line('Notar & Grundbuch', eur(a.notary)) +
@@ -2940,8 +3021,8 @@
             (a.pricePerSqm ? line('Preis pro m²', eur(a.pricePerSqm)) : '') +
             '</table>';
 
-        html += '<h3>Finanzierung</h3><table class="calc">' +
-            line('Eigenkapital-Einsatz', eur(a.equity) + (a.equityRatio !== null ? ' (' + pct(a.equityRatio) + ')' : '')) +
+        html += '<h3>Finanzierung' + whoTag('all', a) + '</h3><table class="calc">' +
+            line('Eigenkapital-Einsatz', eur(a.equity) + (a.equityRatio !== null ? ' (' + pct(a.equityRatio) + ')' : ''), '', whoTag('me', a)) +
             line('Darlehen gesamt', eur(a.loanTotal)) +
             line('Beleihung (Darlehen / Kaufpreis)', pct(a.ltv)) +
             (fixed > 0 ? line('Restschuld nach ' + fixed + ' J. Zinsbindung', eur(a.balanceAtFixed), 'sum') : '') +
@@ -2963,9 +3044,9 @@
 
         html += '<div class="tiles tiles-2">' +
             netTile(a) +
-            tile('Warmmiete', eur(a.warmRent), 'pro Monat, für die ganze Wohnung') +
-            tile('Kaltmiete in 5 Jahren', eur(a.coldIn5), f.rentType === 'fixed' ? 'feste Miete, ohne Erhöhungen' : (a.rentIncrease5 > 0 ? '+ ' + pct(a.rentIncrease5) + ' (' + RENT_TYPE[f.rentType] + ')' : RENT_TYPE[f.rentType])) +
-            tile('Kaution & Einzug', eur(a.moveIn), 'einmalig') +
+            tile('Warmmiete', eur(a.warmRent), 'pro Monat, für die ganze Wohnung', '', whoTag('all', a)) +
+            tile('Kaltmiete in 5 Jahren', eur(a.coldIn5), f.rentType === 'fixed' ? 'feste Miete, ohne Erhöhungen' : (a.rentIncrease5 > 0 ? '+ ' + pct(a.rentIncrease5) + ' (' + RENT_TYPE[f.rentType] + ')' : RENT_TYPE[f.rentType]), '', whoTag('all', a)) +
+            tile('Kaution & Einzug', eur(a.moveIn), 'einmalig', '', whoTag('all', a)) +
             '</div>' + terms(box, 'Wie werden diese Zahlen gerechnet?', termsRent(a));
 
         html += '<h3>Checks</h3><ul class="checks">' + a.warnings.slice().sort(function (x, y) { return TIER[y.level] - TIER[x.level]; }).map(function (w) {
@@ -2978,25 +3059,25 @@
             line('Kaltmiete', eur(a.coldRent)) +
             line('Nebenkosten', eur(a.serviceCharges)) +
             (a.heating > 0 ? line('Heizkosten', eur(a.heating)) : '') +
-            line('Warmmiete', eur(a.warmRent), 'sum') +
+            line('Warmmiete', eur(a.warmRent), 'sum', whoTag('all', a)) +
             privateLines(a) +
             (a.utilities > 0 ? line('Weitere laufende Kosten', eur(a.utilities)) : '') +
-            line('Ausgaben', eur(a.outflow), 'sum') +
+            (a.shared ? line('Wohnkosten', eur(a.outflowAll), 'sum strong', whoTag('all', a)) : '') +
             rentLines(a) +
-            line('Netto-Wohnkosten', eur(a.netHousing), 'sum strong') +
+            line('Netto-Wohnkosten', eur(a.netHousing), 'sum strong', whoTag('me', a)) +
             (a.coldPerSqm ? line('Kaltmiete pro m²', perSqm(a.coldPerSqm)) : '') +
             (a.warmPerSqm ? line('Warmmiete pro m²', perSqm(a.warmPerSqm)) : '') +
             '</table>';
 
         html += rentLeftTable(a);
 
-        html += '<h3>Einzug</h3><table class="calc">' +
+        html += '<h3>Einzug' + whoTag('all', a) + '</h3><table class="calc">' +
             line('Kaution', eur(a.deposit) + (a.coldRent > 0 && a.deposit > 0 ? ' (' + fmtInput(a.deposit / a.coldRent, 1) + ' Kaltmieten)' : '')) +
             line('Umzug & Einrichtung', eur(a.oneOff)) +
             line('Zusammen', eur(a.moveIn), 'sum strong') +
             '</table>';
 
-        html += '<h3>Mietentwicklung <span class="muted small">(' + RENT_TYPE[f.rentType] + ')</span></h3><table class="calc rent-plan"><tr><th>Mietjahr</th><td>Kaltmiete</td><td>Warmmiete</td><td>Netto-Wohnkosten</td></tr>' +
+        html += '<h3>Mietentwicklung <span class="muted small">(' + RENT_TYPE[f.rentType] + ')</span></h3><table class="calc rent-plan"><tr><th>Mietjahr</th><td>Kaltmiete' + whoTag('all', a) + '</td><td>Warmmiete' + whoTag('all', a) + '</td><td>Netto-Wohnkosten' + whoTag('me', a) + '</td></tr>' +
             a.rentTimeline.map(function (r) {
                 return '<tr><th>' + r.year + '</th><td>' + eur(r.cold) + '</td><td>' + eur(r.warm) + '</td><td>' + eur(r.net) + '</td></tr>';
             }).join('') +
@@ -3062,7 +3143,7 @@
             info.items.forEach(function (c, i) {
                 var row = list.querySelector('[data-cost="' + c.id + '"]');
                 if (!row) return;
-                row.querySelector('.cost-amount').textContent = c.gross > 0 ? euro2(c.mine) : '–';
+                row.querySelector('.cost-amount').textContent = c.gross > 0 ? euro2(c.mine) + ' ' + words().forMe : '–';
                 row.querySelector('.cost-state').textContent = c.covered ? 'schon enthalten'
                     : c.gross > 0 ? costNote(state.profile.privateCosts[i], info.persons) : '';
             });
@@ -3102,7 +3183,8 @@
             amount.hidden = h.pay === 'incl';
             amount._input.placeholder = h.source === null || h.source === 'own' ? '' : fmtInput(Math.round(h.amount), 0);
             mine.textContent = h.pay === 'incl' ? '' : h.source === null ? 'Betrag fehlt noch'
-                : euro2(info.heatGross) + ' im Monat · mein Anteil ' + euro2(info.heat);
+                : info.persons === 1 && Math.abs(info.heatGross - info.heat) < 0.005 ? words().forMe.replace(/^f/, 'F') + ' ' + euro2(info.heat) + ' im Monat'
+                : 'Für alle ' + euro2(info.heatGross) + ' im Monat · davon ' + words().forMe + ' ' + euro2(info.heat);
         };
         return box;
     }

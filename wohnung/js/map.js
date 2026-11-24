@@ -1,11 +1,13 @@
 /* Wohnung – Karte der Übersicht: Wohnungen und wichtige Orte der Personen.
    Adressen findet geo.js, das Kartenbild kommt vom deutschen OpenStreetMap-Server,
    Leaflet liegt in vendor/. Ohne Zustimmung und bei eingeklappter Kachel geht nichts ins
-   Netz. Zustimmung und gefundene Orte bleiben in diesem Browser (KEY, kein Abgleich). */
+   Netz. Jede Adresse wird nur einmal gesucht: Die Koordinaten stehen dann bei der Wohnung
+   bzw. beim Ort (geo, siehe geo.js). Zustimmung und vergebliche Suchen merkt sich nur
+   dieser Browser (KEY, kein Abgleich). */
 var FLATMAP = (function () {
     'use strict';
 
-    var KEY = 'klmpfh-wohnung-karte';   // { on: true, found: { Adresse: Treffer aus GEO.find oder { none, at } } }
+    var KEY = 'klmpfh-wohnung-karte';   // { on: true, found: { Adresse: { none, at } } }, früher auch Treffer
     var TILES = 'https://tile.openstreetmap.de/{z}/{x}/{y}.png';
     var CREDIT = 'Karte: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap-Mitwirkende</a> · Suche: <a href="https://photon.komoot.io/" target="_blank" rel="noopener">Photon</a>';
     var RETRY = 24 * 3600 * 1000;       // nicht Gefundenes frühestens nach einem Tag wieder suchen
@@ -26,15 +28,13 @@ var FLATMAP = (function () {
         try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { /* gilt dann bis zum Neuladen */ }
     }
 
-    function hit(address) {
-        var h = store.found[GEO.key(address)];
-        return h && isFinite(h.lat) && isFinite(h.lon) ? h : null;
-    }
+    /** Wo ein Eintrag liegt, null = unbekannt. */
+    function hit(x) { return x.address ? GEO.unpack(x.geo, x.address) : null; }
 
     /** Schon gesucht (gefunden oder erst kürzlich nicht gefunden)? */
-    function known(address) {
-        var h = store.found[GEO.key(address)];
-        return !!h && (!h.none || Date.now() - h.at < RETRY);
+    function known(x) {
+        var h = store.found[GEO.key(x.address)];
+        return !!hit(x) || !!(h && h.none && Date.now() - h.at < RETRY);
     }
 
     var leaflet = null;
@@ -52,8 +52,9 @@ var FLATMAP = (function () {
         }));
     }
 
-    /** Baut die Karte in box. ui: { el, btn } aus app.js. update(items) mit
-     *  { id, kind: 'flat'|'place', mark, title, sub, address, out, href, popup(near) }.
+    /** Baut die Karte in box. ui: { el, btn } und save([[kind, id, geo]]) aus app.js, das
+     *  neue Koordinaten speichert. update(items) mit
+     *  { id, kind: 'flat'|'place', mark, title, sub, address, geo, out, href, popup(near) }.
      *  popup bekommt die Entfernungen [{ item, km, rough }] der jeweils anderen Art. */
     function create(box, ui) {
         var el = ui.el, btn = ui.btn;
@@ -72,10 +73,10 @@ var FLATMAP = (function () {
                 save();
                 stop();
                 show();
-            }, 'Es geht nichts mehr ins Netz, und die gefundenen Orte werden vergessen')]), lists]);
+            }, 'Es geht nichts mehr ins Netz. Schon gefundene Koordinaten bleiben gespeichert.')]), lists]);
         var ask = el('div', { class: 'map-ask' }, [
             el('p', { class: 'small muted', text: 'Die Karte braucht zwei Dienste im Internet: Um die Wohnungen und die wichtigen Orte der Personen zu finden, gehen deren Adressen an den Suchdienst Photon (komoot), ohne Namen, Bezeichnungen und Beträge. ' +
-                'Das Kartenbild kommt von OpenStreetMap, der Server sieht, welchen Ausschnitt du anschaust. Gefundene Orte merkt sich nur dieser Browser.' }),
+                'Das Kartenbild kommt von OpenStreetMap, der Server sieht, welchen Ausschnitt du anschaust. Jede Adresse wird nur einmal gesucht, die Koordinaten werden mit deinen Daten gespeichert (auch im Einmal-Link und im Export).' }),
             el('div', { class: 'actions' }, [btn('Karte anzeigen', 'btn-primary', function () { store.on = true; save(); show(); })])
         ]);
         box.appendChild(ask);
@@ -99,7 +100,28 @@ var FLATMAP = (function () {
 
         function update(next) {
             items = next;
+            adopt();
             run();
+        }
+
+        /** Treffer bei allen Einträgen mit dieser Adresse speichern. */
+        function keep(address, found) {
+            var list = items.filter(function (x) { return GEO.key(x.address) === address && !hit(x); });
+            if (!list.length) return;
+            var geo = GEO.pack(address, found);
+            list.forEach(function (x) { x.geo = geo; });
+            ui.save(list.map(function (x) { return [x.kind, x.id, geo]; }));
+        }
+
+        /** Dieselbe Adresse ist schon bekannt (zweite Wohnung im Haus, frühere Treffer dieses Browsers). */
+        function adopt() {
+            items.forEach(function (x) {
+                if (!x.address || hit(x)) return;
+                var key = GEO.key(x.address), twin = items.find(function (y) { return y.address && GEO.key(y.address) === key && hit(y); });
+                var old = store.found[key];
+                if (twin) keep(key, hit(twin));
+                else if (old && !old.none && GEO.valid(GEO.pack(key, old))) keep(key, old);
+            });
         }
 
         function run() {
@@ -136,7 +158,7 @@ var FLATMAP = (function () {
         /* ---------- Suche ---------- */
 
         function open() {
-            return items.filter(function (x) { return x.address && !known(x.address); });
+            return items.filter(function (x) { return x.address && !known(x); });
         }
 
         /** Sucht eine Adresse nach der anderen, die mit Postleitzahl zuerst. */
@@ -145,12 +167,16 @@ var FLATMAP = (function () {
             var next = open().sort(function (a, b) { return /\d{5}/.test(b.address) - /\d{5}/.test(a.address); })[0];
             if (!next) { forget(); draw(); return; }
             var key = GEO.key(next.address);
-            var near = items.map(function (x) { return x.kind === 'flat' && hit(x.address); }).find(Boolean);
+            var near = items.map(function (x) { return x.kind === 'flat' && hit(x); }).find(Boolean);
             searching = key;
             draw();
             GEO.find(key, near ? { lat: near.lat, lon: near.lon } : null).then(function (res) {
-                if (store.on) store.found[key] = res || { none: true, at: Date.now() };
-                save();
+                if (!store.on) return;
+                if (res) keep(key, res);
+                else {
+                    store.found[key] = { none: true, at: Date.now() };
+                    save();
+                }
             }, function () { failed = true; }).then(function () {
                 searching = null;
                 if (!alive) return;
@@ -159,10 +185,10 @@ var FLATMAP = (function () {
             });
         }
 
-        /** Adressen, die es nicht mehr gibt, nicht länger merken. */
+        /** Nur noch vergebliche Suchen nach Adressen merken, die es noch gibt. */
         function forget() {
             var used = {}, before = Object.keys(store.found).length;
-            items.forEach(function (x) { if (x.address) used[GEO.key(x.address)] = true; });
+            items.forEach(function (x) { if (x.address && !hit(x)) used[GEO.key(x.address)] = true; });
             Object.keys(store.found).forEach(function (k) { if (!used[k]) delete store.found[k]; });
             if (Object.keys(store.found).length !== before) save();
         }
@@ -194,10 +220,10 @@ var FLATMAP = (function () {
         }
 
         function located(kind) {
-            return items.filter(function (x) { return x.address && hit(x.address) && (!kind || x.kind === kind); });
+            return items.filter(function (x) { return hit(x) && (!kind || x.kind === kind); });
         }
 
-        function point(x) { var h = hit(x.address); return L.latLng(h.lat, h.lon); }
+        function point(x) { var h = hit(x); return L.latLng(h.lat, h.lon); }
 
         /** Ausschnitt: Wohnungen und nahe Orte, mit all alles. */
         function scope(all) {
@@ -206,7 +232,7 @@ var FLATMAP = (function () {
             if (active.length) flats = active;
             if (all || !flats.length) return list;
             return flats.concat(located('place').filter(function (x) {
-                return flats.some(function (f) { return GEO.km(hit(f.address), hit(x.address)) <= NEAR_KM; });
+                return flats.some(function (f) { return GEO.km(hit(f), hit(x)) <= NEAR_KM; });
             }));
         }
 
@@ -220,15 +246,15 @@ var FLATMAP = (function () {
         }
 
         function distances(x) {
-            var h = hit(x.address);
-            return items.filter(function (y) { return y.kind !== x.kind && !y.out && hit(y.address); }).map(function (y) {
-                var g = hit(y.address);
+            var h = hit(x);
+            return items.filter(function (y) { return y.kind !== x.kind && !y.out && hit(y); }).map(function (y) {
+                var g = hit(y);
                 return { item: y, km: GEO.km(h, g), rough: h.acc === 'area' || g.acc === 'area' };
             }).sort(function (a, b) { return a.km - b.km; });
         }
 
         function popup(x) {
-            var h = hit(x.address);
+            var h = hit(x);
             return el('div', { class: 'map-popup' }, [x.popup(distances(x)),
                 el('p', { class: 'small muted', text: 'Gefunden: ' + h.label + (ACC[h.acc] ? ' (' + ACC[h.acc] + ')' : '') })]);
         }
@@ -265,9 +291,9 @@ var FLATMAP = (function () {
 
         function note(x) {
             if (!x.address) return 'Adresse fehlt';
-            var h = hit(x.address);
+            var h = hit(x);
             if (h) return ACC[h.acc] || '';
-            return searching === GEO.key(x.address) || (!known(x.address) && !failed) ? 'wird gesucht …' : failed && !known(x.address) ? 'noch nicht gesucht' : 'Adresse nicht gefunden';
+            return searching === GEO.key(x.address) || (!known(x) && !failed) ? 'wird gesucht …' : failed && !known(x) ? 'noch nicht gesucht' : 'Adresse nicht gefunden';
         }
 
         function drawLists() {
@@ -276,7 +302,7 @@ var FLATMAP = (function () {
                 var list = items.filter(function (x) { return x.kind === g[0]; });
                 lists.appendChild(el('div', null, [el('h3', { class: 'group-title', text: g[1] }),
                     list.length ? el('ul', { class: 'map-list' }, list.map(function (x) {
-                        var text = note(x), there = !!(x.address && hit(x.address));
+                        var text = note(x), there = !!hit(x);
                         var inner = [badge(x, { 'aria-hidden': 'true' }), el('span', null, [
                             el('b', { text: x.title }), x.sub ? el('span', { class: 'muted', text: ' ' + x.sub }) : null,
                             text ? el('span', { class: 'map-note' + (there ? ' muted' : ' warn-text'), text: text }) : null])];
@@ -297,13 +323,13 @@ var FLATMAP = (function () {
 
         function draw() {
             if (!visible()) return;
-            var key = JSON.stringify([!!map, failed, searching, items.map(function (x) { return [x, x.address ? store.found[GEO.key(x.address)] : 0]; })]);
+            var key = JSON.stringify([!!map, failed, searching, items.map(function (x) { return [x, x.address ? known(x) : 0]; })]);
             var todo = open().length;
             status.textContent = failed ? 'Die Adresssuche oder die Karte ist gerade nicht erreichbar.'
                 : todo && !typing() ? (todo === 1 ? 'Eine Adresse wird gesucht …' : todo + ' Adressen werden gesucht …')
                 : noTiles ? 'Das Kartenbild lässt sich gerade nicht laden.' : '';
             status.hidden = !status.textContent;
-            retryBtn.hidden = !failed && !items.some(function (x) { return x.address && known(x.address) && !hit(x.address); });
+            retryBtn.hidden = !failed && !items.some(function (x) { return x.address && known(x) && !hit(x); });
             flatsBtn.hidden = !located('flat').length;
             allBtn.hidden = located().length < 2 || scope(false).length === located().length;
             if (key === shown) return;
@@ -312,7 +338,7 @@ var FLATMAP = (function () {
             if (!map) return;
             drawMarkers();
             // Neu ausrichten, sobald sich etwas an den Punkten ändert, sonst so lassen wie zuletzt
-            var spots = JSON.stringify(scope(false).map(function (x) { var h = hit(x.address); return [h.lat, h.lon]; }));
+            var spots = JSON.stringify(scope(false).map(function (x) { var h = hit(x); return [h.lat, h.lon]; }));
             if (spots === fitted) return;
             if (fitted === null && view && view.spots === spots) map.setView(view.center, view.zoom, { animate: false });
             else fit(false);

@@ -2,7 +2,9 @@
    Sucht bei Photon (photon.komoot.io, Daten von OpenStreetMap), höchstens eine Anfrage
    pro Sekunde. Photon verzeiht Tippfehler und liefert dafür auch Unpassendes – was davon
    zur Adresse passt, entscheidet judge(). Treffer: { lat, lon, acc, label } mit
-   acc 'house' (genau), 'street' oder 'area' (nur Stadtteil, Ort oder Postleitzahl). */
+   acc 'house' (genau), 'street' oder 'area' (nur Stadtteil, Ort oder Postleitzahl).
+   Gespeichert wird ein Treffer als ein Wert [Adresse, lat, lon, acc, label] (pack), damit
+   der Abgleich ihn nie mit einem anderen vermischt. Er gilt nur für genau diese Adresse. */
 var GEO = (function () {
     'use strict';
 
@@ -183,11 +185,30 @@ var GEO = (function () {
         })(0);
     }
 
+    var ACCS = ['house', 'street', 'area'];
+
+    function pack(address, h) {
+        function round(v) { return Math.round(v * 1e5) / 1e5; }   // auf etwa einen Meter
+        return [clean(address), round(h.lat), round(h.lon), h.acc, h.label];
+    }
+
+    /** Treffer aus pack, wenn er zur Adresse passt, sonst null. */
+    function unpack(geo, address) {
+        geo = valid(geo);
+        return geo && geo[0] === clean(address) ? { lat: geo[1], lon: geo[2], acc: geo[3], label: geo[4] } : null;
+    }
+
+    /** Gespeicherter Wert von außen: so, wie pack ihn schreibt, sonst null. */
+    function valid(geo) {
+        return Array.isArray(geo) && geo.length === 5 && typeof geo[0] === 'string' && geo[0] && Math.abs(geo[1]) <= 90 && Math.abs(geo[2]) <= 180 &&
+            typeof geo[1] === 'number' && typeof geo[2] === 'number' && ACCS.indexOf(geo[3]) !== -1 && typeof geo[4] === 'string' ? geo : null;
+    }
+
     /** Luftlinie in km. */
     function km(a, b) {
         var rad = Math.PI / 180, x = Math.sin((b.lat - a.lat) * rad / 2), y = Math.sin((b.lon - a.lon) * rad / 2);
         return 12742 * Math.asin(Math.sqrt(x * x + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * y * y));
     }
 
-    return { parse: parse, pick: pick, queries: queries, find: find, km: km, key: clean };
+    return { parse: parse, pick: pick, queries: queries, find: find, pack: pack, unpack: unpack, valid: valid, km: km, key: clean };
 })();

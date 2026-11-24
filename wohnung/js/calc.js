@@ -510,6 +510,7 @@ var WK = (function () {
         a.coldIn5 = coldRentInYear(flat, 6);
         a.avgNet10 = total / 10;
         a.rateRoom = 0;
+        household(a, p);
         ownLimit(a, p);
         a.rentIncrease5 = a.coldRent > 0 ? a.coldIn5 / a.coldRent - 1 : null;
 
@@ -525,9 +526,42 @@ var WK = (function () {
             if (g.self || !g.name) return;
             if (g.max === null) warn(a, 'info', g.name + ': Kein Maximum eingetragen (Übersicht, „Personen“).');
             else if (g.entered && g.over > 0.5) warn(a, 'warn', g.name + ': Die eingetragene Miete liegt ' + eur(g.over) + ' über dem Maximum von ' + eur(g.max) + '.');
-            else if (g.short > 0.5) warn(a, 'warn', g.name + ': Fair wären ' + eur(g.due + g.own) + ' im Monat, das Maximum ist ' + eur(g.max) + ' – ' + eur(g.short) + ' trägst du.');
+            else if (g.short > 0.5) warn(a, 'warn', g.name + ': Fair wären ' + eur(g.due + g.own) + ' im Monat, das Maximum ist ' + eur(g.max) + ' – ' + eur(g.short) + ' ' + a.words.bears + '.');
             else if (g.entered || g.source === 'fair') warn(a, 'ok', g.name + ': ' + eur(g.pay + g.own) + ' im Monat passen ins Maximum von ' + eur(g.max) + '.');
         });
+    }
+
+    /* ---------- Bezugsgröße ----------
+       Alles rund um die Wohnung kostet erst einmal "für alle". Davon zahlen die anderen
+       ihren Teil, der Rest sind die Netto-Wohnkosten für eine Person ("Ich", p.meName). */
+
+    /** Wörter zur Person "Ich": mit Namen, sonst in der Anrede. */
+    function wording(p) {
+        var name = (p.meName || '').trim();
+        return {
+            forMe: 'für ' + (name || 'dich'),
+            ofMe: function (noun) { return name ? noun + ' von ' + name : 'dein ' + noun; },            // "Maximum von Anna"
+            toMine: function (noun) { return name ? 'dem ' + noun + ' von ' + name : 'deinem ' + noun; },
+            pays: name ? 'zahlt ' + name : 'zahlst du',
+            bears: name ? 'trägt ' + name : 'trägst du',
+            toMe: 'an ' + (name || 'dich')
+        };
+    }
+
+    /** Dieselben Kosten für die ganze Wohnung.
+     *    shared       zahlt hier noch jemand mit?
+     *    runningAll   laufende Kosten mit den ganzen privaten Nebenkosten
+     *    outflowAll   dazu Kreditrate bzw. Kaltmiete = Wohnkosten für alle
+     *    othersPay    was die anderen davon zahlen; othersDirect: davon nicht über mich
+     *    (outflowAll − othersPay = netHousing) */
+    function household(a, p) {
+        a.words = wording(p);
+        a.shared = a.privateInfo.persons > 1 || a.roomsRented > 0 || a.privateInfo.gross - a.private > 0.005;
+        a.forAll = a.shared ? 'für alle' : a.words.forMe;
+        a.runningAll = a.runningCosts - a.private + a.privateInfo.gross;
+        a.outflowAll = a.outflow - a.private + a.privateInfo.gross;
+        a.othersPay = a.outflowAll - a.netHousing;
+        a.othersDirect = a.othersPay - a.rentCash - a.rentExtra;
     }
 
     /** Meine Netto-Wohnkosten gegen mein Maximum (p.ownMax, "Personen").
@@ -543,16 +577,16 @@ var WK = (function () {
 
     function checksOwn(a) {
         if (a.ownMax === null) {
-            warn(a, 'info', 'Für dich ist kein Maximum eingetragen (Übersicht, „Personen“) – ob die Netto-Wohnkosten passen, lässt sich so nicht prüfen.');
+            warn(a, 'info', 'Kein Maximum ' + a.words.forMe + ' eingetragen (Übersicht, „Personen“) – ob die Netto-Wohnkosten passen, lässt sich so nicht prüfen.');
             return;
         }
-        var rent = a.kind === 'rent', limit = 'deinem Maximum von ' + eur(a.ownMax);
-        var text = 'Deine Netto-Wohnkosten (' + eur(a.netHousing) + ')';
+        var rent = a.kind === 'rent', limit = a.words.toMine('Maximum') + ' (' + eur(a.ownMax) + ')';
+        var text = 'Netto-Wohnkosten ' + a.words.forMe + ' (' + eur(a.netHousing) + ')';
         if (a.ownLevel === 'ok') {
             if (a.rateMissing) warn(a, 'info', text + ' liegen ' + eur(-a.ownOver) + ' unter ' + limit + ', gerechnet nur mit der Mindesttilgung.');
             else warn(a, 'ok', text + ' liegen ' + eur(-a.ownOver) + ' unter ' + limit + '.');
             checksOwnLater(a, limit);
-            if (a.ownOver + a.rentEff > 0.5) warn(a, 'info', 'Geht nur gemeinsam: Ohne die Mieten der anderen zahlst du ' + eur(a.netHousing + a.rentEff) + ' im Monat (Auszug einplanen).');
+            if (a.ownOver + a.rentEff > 0.5) warn(a, 'info', 'Geht nur gemeinsam: Ohne die Mieten der anderen ' + a.words.pays + ' ' + eur(a.netHousing + a.rentEff) + ' im Monat (Auszug einplanen).');
             return;
         }
         text += ' liegen ' + eur(a.ownOver) + ' über ' + limit;
@@ -560,7 +594,7 @@ var WK = (function () {
             var main = Math.floor(a.sims[0].payment - a.ownOver + 0.005);
             var slow = simulateLoan(Object.assign({}, a.loans[0], { mode: 'payment', payment: main }), a.loanAmounts[0], MAX_YEARS);
             var terms = a.sims.map(function (s, i) { return i ? s.payoffYears : slow.payoffYears; });
-            warn(a, 'warn', text + '. Mit einer Kreditrate von ' + eur(a.payment - a.sims[0].payment + main) + ' statt ' + eur(a.payment) + ' würde es passen' +
+            warn(a, 'warn', text + '. Mit einer Kreditrate ' + a.forAll + ' von ' + eur(a.payment - a.sims[0].payment + main) + ' statt ' + eur(a.payment) + ' würde es passen' +
                 (terms.indexOf(null) === -1 ? ' (schuldenfrei dann nach ' + years(Math.max.apply(null, terms)) + ')' : '') + '. Die Rate stellst du beim Darlehen ein.');
             return;
         }
@@ -571,11 +605,11 @@ var WK = (function () {
     function checksOwnLater(a, limit) {
         if (a.kind === 'rent') {
             var row = a.rentTimeline.find(function (r) { return r.net > a.ownMax + 0.5; });
-            if (row) warn(a, 'warn', 'Ab dem ' + row.year + '. Mietjahr liegen deine Netto-Wohnkosten mit ' + eur(row.net) + ' über ' + limit + '.');
+            if (row) warn(a, 'warn', 'Ab dem ' + row.year + '. Mietjahr liegen die Netto-Wohnkosten ' + a.words.forMe + ' mit ' + eur(row.net) + ' über ' + limit + '.');
             return;
         }
         var later = a.netHousing + sum(a.sims.map(function (s) { return s.raised ? s.followPayment - s.payment : 0; }));
-        if (later > a.ownMax + 0.5) warn(a, 'warn', 'Nach der Zinsbindung steigen deine Netto-Wohnkosten beim angenommenen Anschlusszins auf ' + eur(later) + ' – ' + eur(later - a.ownMax) + ' über ' + limit + '.');
+        if (later > a.ownMax + 0.5) warn(a, 'warn', 'Nach der Zinsbindung steigen die Netto-Wohnkosten ' + a.words.forMe + ' beim angenommenen Anschlusszins auf ' + eur(later) + ' – ' + eur(later - a.ownMax) + ' über ' + limit + '.');
     }
 
     function checksRent(a, p, flat) {
@@ -738,6 +772,7 @@ var WK = (function () {
         // "Echte Kosten": was wirklich weg ist – Zinsen und laufende Kosten abzüglich
         // WG-Einnahmen, also die Netto-Wohnkosten ohne Tilgung (die ist Sparen).
         a.trueCost = a.netHousing - a.repayMonth;
+        household(a, p);
         ownLimit(a, p);
 
         // Schulden und Vermögen über die Zeit, ohne Wertsteigerung
@@ -773,7 +808,7 @@ var WK = (function () {
         if (a.price <= 0) { warn(a, 'info', 'Kaufpreis eingeben, um die Wohnung durchzurechnen.'); return; }
 
         if (n(p.bankMaxLoan) > 0) {
-            if (a.loanTotal > n(p.bankMaxLoan)) warn(a, 'bad', 'Darlehen liegt ' + eur(a.loanTotal - n(p.bankMaxLoan)) + ' über deinem Kreditrahmen laut Bank.');
+            if (a.loanTotal > n(p.bankMaxLoan)) warn(a, 'bad', 'Darlehen liegt ' + eur(a.loanTotal - n(p.bankMaxLoan)) + ' über ' + a.words.toMine('Kreditrahmen') + ' laut Bank.');
             else warn(a, 'ok', 'Darlehen passt in den Kreditrahmen (' + eur(n(p.bankMaxLoan) - a.loanTotal) + ' Luft).');
         }
         checksRate(a, p);
@@ -798,11 +833,11 @@ var WK = (function () {
     function checksRate(a, p) {
         var max = n(p.bankMaxRate);
         if (!(a.loanTotal > 0)) return;
-        if (a.rateMissing) warn(a, 'warn', 'Max. Monatsrate der Bank fehlt (Übersicht, „Finanzierung laut Bank“). Vorläufig ist die Rate nur mit der Mindesttilgung gerechnet (' + eur(a.payment) + ') – die Laufzeit steht erst mit der Rate der Bank fest.');
+        if (a.rateMissing) warn(a, 'warn', 'Max. Monatsrate der Bank fehlt (Übersicht, „Finanzierung laut Bank“). Vorläufig ist die Kreditrate ' + a.forAll + ' nur mit der Mindesttilgung gerechnet (' + eur(a.payment) + ') – die Laufzeit steht erst mit der Rate der Bank fest.');
         if (!(max > 0)) return;
-        if (a.payment > max + 0.5) warn(a, 'bad', 'Rate liegt ' + eur(a.payment - max) + ' über der maximalen Rate laut Bank' + (a.fromBank ? ', schon mit der Mindesttilgung. So wird die Bank das nicht finanzieren.' : '.'));
-        else if (a.payment > max - 0.5) warn(a, 'ok', 'Rate von ' + eur(a.payment) + ' ist die maximale Rate laut Bank' + (a.payoffYears !== null ? ' (schuldenfrei nach ' + years(a.payoffYears) + ').' : '.'));
-        else warn(a, 'ok', 'Rate liegt ' + eur(max - a.payment) + ' unter der maximalen Rate laut Bank.');
+        if (a.payment > max + 0.5) warn(a, 'bad', 'Kreditrate ' + a.forAll + ' liegt ' + eur(a.payment - max) + ' über der maximalen Rate laut Bank' + (a.fromBank ? ', schon mit der Mindesttilgung. So wird die Bank das nicht finanzieren.' : '.'));
+        else if (a.payment > max - 0.5) warn(a, 'ok', 'Kreditrate ' + a.forAll + ' (' + eur(a.payment) + ') ist die maximale Rate laut Bank' + (a.payoffYears !== null ? ' (schuldenfrei nach ' + years(a.payoffYears) + ').' : '.'));
+        else warn(a, 'ok', 'Kreditrate ' + a.forAll + ' liegt ' + eur(max - a.payment) + ' unter der maximalen Rate laut Bank.');
     }
 
     /* ---------- Objekt-Bewertung & Rückfragen ----------
@@ -1221,6 +1256,7 @@ var WK = (function () {
         wishScore: wishScore,
         MUST: MUST,
         budget: budget,
+        wording: wording,
         ownBudget: ownBudget,
         LOAN_DEFAULTS: LOAN_DEFAULTS,
         n: n,

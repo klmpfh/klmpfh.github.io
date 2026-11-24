@@ -78,7 +78,8 @@ relativ, über die eigene `src`-Angabe.
   wahlweise nur in eine Richtung oder als Abgleich in beide (je Feld gewinnt die neuere Änderung; `js/sync.js` mit `assets/js/sync-core.js` führt zusammen, `assets/js/transfer.js` verbindet, PeerJS und QR-Code kommen aus `fileshare/vendor/`). Angebote lassen sich per KI übernehmen:
   Prompt auf der Wohnungsseite kopieren, Antwort (JSON) dort einfügen (`js/offer.js`: Felder, Prompt und Einlesen). Wichtige Orte der Personen (Arbeit, Familie …) und die Wünsche gehen in den Prompt (eindeutig Erfülltes wird vorausgefüllt; Wünsche mit Ort je Person haben dort je Person eine Kennung, Namen stehen nicht darin);
   Entfernungen zu den Orten und zur nächsten U-/S-Bahn stehen je Wohnung und im Vergleich. Karte der Wohnungen und wichtigen Orte auf der Übersicht (`js/map.js`, Leaflet in `vendor/`, Kacheln von tile.openstreetmap.de):
-  lädt erst nach Zustimmung, weil die Adressen zum Finden an Photon (photon.komoot.io, `js/geo.js`, höchstens eine Anfrage pro Sekunde) gehen; Treffer bleiben im localStorage des Geräts.
+  lädt erst nach Zustimmung, weil die Adressen zum Finden an Photon (photon.komoot.io, `js/geo.js`, höchstens eine Anfrage pro Sekunde) gehen. Jede Adresse wird nur einmal gesucht, die Koordinaten stehen danach bei der Wohnung bzw. beim Ort (`geo`, auch im Abgleich und Export).
+  Beträge tragen ihre Bezugsgröße: „für alle“ (ganze Wohnung) oder „für <Name>“ (was nach den Beiträgen der anderen bei der Person „Ich“ bleibt).
 - `/zauberkloppen/` – Szenario-Generator für Fantasy-Rollenspiele.
 - `/zeitfresser/` – Zeitfresser: Wochenanalyse, wohin die Zeit geht. Themen mit Wert pro Woche oder pro Tag
   an gewählten Wochentagen, darunter eine Ebene Unterpunkte; nicht zugeordnete Zeit wird schraffiert gezeigt,
