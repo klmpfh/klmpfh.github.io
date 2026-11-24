@@ -204,11 +204,14 @@ var GEO = (function () {
             typeof geo[1] === 'number' && typeof geo[2] === 'number' && ACCS.indexOf(geo[3]) !== -1 && typeof geo[4] === 'string' ? geo : null;
     }
 
+    /** Gespeicherter Wert, wenn er zur Adresse gehört, sonst null. */
+    function current(geo, address) { return unpack(geo, address) ? geo : null; }
+
     /** Luftlinie in km. */
     function km(a, b) {
         var rad = Math.PI / 180, x = Math.sin((b.lat - a.lat) * rad / 2), y = Math.sin((b.lon - a.lon) * rad / 2);
         return 12742 * Math.asin(Math.sqrt(x * x + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * y * y));
     }
 
-    return { parse: parse, pick: pick, queries: queries, find: find, pack: pack, unpack: unpack, valid: valid, km: km, key: clean };
+    return { parse: parse, pick: pick, queries: queries, find: find, pack: pack, unpack: unpack, valid: valid, current: current, km: km, key: clean };
 })();

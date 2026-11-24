@@ -161,7 +161,7 @@
         [['energySource', WK.ENERGY_SOURCES], ['heatingType', WK.HEATING_TYPES], ['energyCert', WK.ENERGY_CERTS], ['heatPay', WK.HEAT_PAY], ['distanceBasis', OFFER.BASIS]].forEach(function (x) {
             if (!x[1].some(function (o) { return o[0] === out[x[0]]; })) out[x[0]] = '';
         });
-        out.geo = GEO.valid(out.geo);
+        out.geo = GEO.current(out.geo, out.address);
         out.status = DIARY.known(out.status);
         out.diary = DIARY.normalize(out.diary, uid, stamp());
         out.steps = Array.isArray(out.steps) ? out.steps.filter(isObj).map(function (s) {
@@ -225,7 +225,7 @@
                     rent: mine ? legacyMax(null, raw) : legacyMax(p.rent, p),
                     includes: isObj(p.includes) ? Object.assign({}, p.includes) : {},
                     places: (Array.isArray(p.places) ? p.places : []).filter(isObj).map(function (x) {
-                        return { id: x.id ? String(x.id) : uid(), name: String(x.name || ''), address: String(x.address || ''), geo: GEO.valid(x.geo) };
+                        return { id: x.id ? String(x.id) : uid(), name: String(x.name || ''), address: String(x.address || ''), geo: GEO.current(x.geo, x.address) };
                     }) };
             })
             : [newPerson(), newPerson()];
@@ -343,9 +343,17 @@
         return normalizeState(null);
     }
 
+    /** Koordinaten gelten nur für ihre Adresse: Ist die geändert oder leer, weg damit. */
+    function dropOldGeo() {
+        state.flats.concat.apply(state.flats, state.people.map(function (p) { return p.places; })).forEach(function (x) {
+            x.geo = GEO.current(x.geo, x.address);
+        });
+    }
+
     function saveNow() {
         clearTimeout(saveTimer);
         saveTimer = null;
+        dropOldGeo();
         var now = SYNC.plain(state);
         SYNC.stamp(stampBase, now, stamps, Date.now());
         stampBase = now;
