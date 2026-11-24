@@ -1,12 +1,14 @@
 /* Zeitfresser – Datenmodell, Speicherung (localStorage) und Rechenhilfen.
  *
  * Aufbau im localStorage (Schlüssel STORE_KEY):
- *   { version: 1, activeId, scenarios: [Szenario, ...] }
+ *   { version: 1, activeId, scenarios: [Szenario, ...], stamps }
  * Szenario:
- *   { id, name, hoursPerDay, nodes: [Knoten, ...] }
+ *   { id, name, hoursPerDay, nodes: [Knoten, ...], pos }
  * Knoten (höchstens zwei Ebenen: Thema → Unterpunkte über children):
  *   { id, name, amount, per: 'week' | 'day', days: [Mo..So als bool],
- *     colorSlot (nur bei obersten Punkten relevant), collapsed, children }
+ *     colorSlot (nur bei obersten Punkten relevant), collapsed, children, pos }
+ * pos (Reihenfolge) und stamps (wann welches Feld zuletzt geändert wurde) sind nur
+ * für den Abgleich mit anderen Geräten da, siehe sync.js.
  *
  * Alles bezieht sich auf eine Woche. "amount" ist entweder der Wochenwert
  * (per = 'week') oder der Wert pro gewähltem Wochentag (per = 'day'). Die
@@ -26,6 +28,8 @@ const SLOT_COUNT = 12;
 const EPS = 1e-6;
 
 let store = null;
+let stamps = {};        // Zeitstempel je Feld (sync.js) …
+let stampBase = null;   // … und der Stand, für den sie gelten
 
 function uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -94,6 +98,7 @@ function sanitizeNode(raw) {
         days: days,
         colorSlot: Number.isInteger(raw.colorSlot) ? ((raw.colorSlot % SLOT_COUNT) + SLOT_COUNT) % SLOT_COUNT : 0,
         collapsed: !!raw.collapsed,
+        pos: Number.isFinite(raw.pos) ? raw.pos : null,
         children: Array.isArray(raw.children) ? raw.children.map(sanitizeNode).filter(Boolean) : []
     };
 }
@@ -123,6 +128,7 @@ function sanitizeScenario(raw) {
         id: typeof raw.id === 'string' && raw.id ? raw.id : uid(),
         name: typeof raw.name === 'string' ? raw.name : 'Szenario',
         hoursPerDay: isFinite(hpd) && hpd > 0 && hpd <= 24 ? hpd : 24,
+        pos: Number.isFinite(raw.pos) ? raw.pos : null,
         nodes: limitDepth(Array.isArray(raw.nodes) ? raw.nodes.map(sanitizeNode).filter(Boolean) : [])
     };
 }
@@ -141,12 +147,25 @@ function loadStore() {
     let activeId = data && data.activeId;
     if (!scenarios.some(s => s.id === activeId)) activeId = scenarios[0].id;
 
-    store = { version: 1, activeId: activeId, scenarios: scenarios };
+    store = SYNC.assignAll({ version: 1, activeId: activeId, scenarios: scenarios });
+    stamps = SYNC.cleanStamps(data && data.stamps);
+    stampBase = SYNC.plain(store);
+}
+
+/** Ersetzt den ganzen Stand, z. B. nach einem Abgleich. */
+function replaceStore(next, nextStamps) {
+    store = next;
+    stamps = nextStamps;
+    stampBase = SYNC.plain(SYNC.assignAll(store));
+    saveStore();
 }
 
 function saveStore() {
+    const now = SYNC.plain(SYNC.assignAll(store));
+    SYNC.stamp(stampBase, now, stamps, Date.now());
+    stampBase = now;
     try {
-        localStorage.setItem(STORE_KEY, JSON.stringify(store));
+        localStorage.setItem(STORE_KEY, JSON.stringify(Object.assign({}, store, { stamps: stamps })));
     } catch (e) { /* localStorage evtl. nicht verfügbar (privater Modus) – Seite funktioniert trotzdem */ }
 }
 

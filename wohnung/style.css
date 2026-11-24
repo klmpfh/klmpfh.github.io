@@ -21,6 +21,7 @@
         --series-1: #3987e5;
         --series-2: #d95926;
         --series-3: #199e70;
+        --date-scheme: dark;
     }
 }
 
@@ -28,6 +29,7 @@
     --series-1: #3987e5;
     --series-2: #d95926;
     --series-3: #199e70;
+    --date-scheme: dark;
 }
 
 button, input, select, textarea {
@@ -95,6 +97,31 @@ body {
     font-weight: 800;
     color: var(--theme-text-strong);
 }
+
+/* Einklappbar (Übersicht), siehe panel() in app.js */
+.panel-head:has(> h2 > .panel-toggle) > h2 { flex: 1 1 auto; min-width: 0; }
+
+.panel-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 32px;
+    padding: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.panel-toggle:hover { color: var(--primary-strong); }
+.panel-chevron { flex: none; font-size: 13px; color: var(--muted); transition: transform 0.2s; }
+.is-collapsed .panel-chevron { transform: rotate(-90deg); }
+.panel.is-collapsed > :not(.panel-head) { display: none; }
+.panel.is-collapsed > .panel-head { margin-bottom: 0; }
+.panel.is-collapsed { padding-top: 12px; padding-bottom: 12px; }
 
 .panel-hint {
     color: var(--muted);
@@ -180,6 +207,7 @@ body {
 }
 
 input[type="text"],
+input[type="date"],
 select,
 textarea {
     width: 100%;
@@ -712,6 +740,65 @@ table {
 }
 
 .fair-missing:empty { display: none; }
+
+/* Status & Tagebuch */
+.status-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.status-ends { padding-top: 10px; border-top: 1px dashed var(--border); margin-top: 10px; }
+
+.status-chip {
+    min-height: 34px;
+    padding: 5px 12px;
+    border: 2px solid var(--border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text);
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.status-chip:hover { border-color: var(--primary); color: var(--primary-strong); }
+.status-chip.is-been { border-color: var(--theme-accent-border); background: var(--primary-light); }
+.status-chip.is-been::before { content: "✓ "; }
+.status-chip[aria-pressed="true"] { border-color: var(--primary); background: var(--primary); color: #fff; }
+.chip-out:hover { border-color: var(--theme-danger); color: var(--theme-danger); }
+.chip-out[aria-pressed="true"] { border-color: var(--theme-danger); background: var(--theme-danger-soft); color: var(--theme-danger); }
+.chip-hold[aria-pressed="true"] { border-color: var(--theme-warning); background: var(--theme-warning-soft); color: var(--theme-warning-text); }
+.chip-done[aria-pressed="true"] { border-color: var(--theme-success); background: var(--theme-success-soft); color: var(--theme-success); }
+
+.status-note { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; line-height: 1.45; }
+.btn-small { min-height: 30px; padding: 3px 10px; font-size: 12px; }
+.btn[hidden] { display: none; }
+
+.status-tag {
+    display: inline-block;
+    padding: 1px 8px;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--primary-strong);
+    background: var(--primary-light);
+}
+
+.status-tag.status-out { color: var(--theme-danger); background: var(--theme-danger-soft); }
+.status-tag.status-hold { color: var(--theme-warning-text); background: var(--theme-warning-soft); }
+.status-tag.status-done { color: var(--theme-success); background: var(--theme-success-soft); }
+
+.card-status { margin-top: 8px; font-size: 12px; }
+.card-why { margin-top: 4px; color: var(--muted); white-space: pre-line; overflow-wrap: anywhere; }
+.card-out:not(:hover):not(:focus) { opacity: 0.7; }
+
+.diary-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; }
+.diary-list { display: flex; flex-direction: column; gap: 12px; }
+.diary-list:not(:empty) { margin: 8px 0 10px; }
+.diary-entry { padding-left: 12px; border-left: 3px solid var(--theme-accent-border); }
+.diary-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.diary-head input { flex: 0 0 150px; min-height: 34px; padding: 4px 8px; }
+input[type="date"] { color-scheme: var(--date-scheme, light); }   /* sonst ist das Kalender-Symbol dunkel auf dunkel */
+.diary-tag { flex: 1; min-width: 0; }
+.diary-entry textarea { field-sizing: content; min-height: 56px; }
 
 /* Angebot mit KI übernehmen */
 .offer > summary { margin-bottom: 0; }

@@ -331,6 +331,19 @@ function watchTheme() {
     new MutationObserver(rerender).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 }
 
+/* In einem anderen Tab geändert (z. B. Einmal-Link dort geöffnet): übernehmen, sonst
+ * überschreibt dieser Tab es beim nächsten Speichern. Das gewählte Szenario bleibt. */
+function watchOtherTabs() {
+    window.addEventListener('storage', e => {
+        if (e.key !== STORE_KEY || !e.newValue) return;
+        const activeId = store.activeId;
+        if (document.activeElement) document.activeElement.blur();
+        loadStore();
+        if (store.scenarios.some(s => s.id === activeId)) store.activeId = activeId;
+        renderAll();
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     loadStore();
     saveStore();
@@ -341,4 +354,6 @@ document.addEventListener('DOMContentLoaded', () => {
     watchTheme();
     renderAll();
     initStickyCharts();
+    watchOtherTabs();
+    initTransfer();
 });

@@ -73,16 +73,17 @@ relativ, über die eigene `src`-Angabe.
   Tilgungsplan, Diagramm und Vergleichstabelle. Objekt-Bewertung gegen Faustwerte (Hausgeld/m², Baujahr, Energieverbrauch und Heizung mit geschätzten Heizkosten, Grundsteuer,
   Makler, Inventar, WG-Eignung) mit Rückfragen an Makler/Verwaltung zum Kopieren und Unterlagen-Checkliste. Wünsche & Bedingungen:
   gemeinsame Liste frei formulierter Wünsche (für alle gleich oder bezogen auf einen Ort je Person), jede Person gewichtet jeden Wunsch (0–100 %) und bewertet ihn in jeder Wohnung;
-  daraus Passung je Person und gemeinsam (offene Gewichtungen/Bewertungen werden angezeigt). `js/calc.js` ist die Rechenlogik, `js/app.js` die Oberfläche. Daten im
+  daraus Passung je Person und gemeinsam (offene Gewichtungen/Bewertungen werden angezeigt). `js/calc.js` ist die Rechenlogik, `js/app.js` die Oberfläche. Je Wohnung Status (typische Schritte bei Kauf bzw. Miete, auch „Kommt nicht in Frage“) und Tagebuch (`js/diary.js`); Aussortierte stehen auf der Übersicht zugeklappt und fehlen im Vergleich. Daten im
   localStorage, Übertragung zwischen Geräten per Einmal-Link oder JSON-Export/-Import (alles oder einzelne Wohnung). Der Einmal-Link überträgt per WebRTC alles genau einmal,
-  wahlweise nur in eine Richtung oder als Abgleich in beide (je Feld gewinnt die neuere Änderung; `js/sync.js` führt zusammen, `js/transfer.js` verbindet, PeerJS und QR-Code kommen aus `fileshare/vendor/`). Angebote lassen sich per KI übernehmen:
+  wahlweise nur in eine Richtung oder als Abgleich in beide (je Feld gewinnt die neuere Änderung; `js/sync.js` mit `assets/js/sync-core.js` führt zusammen, `assets/js/transfer.js` verbindet, PeerJS und QR-Code kommen aus `fileshare/vendor/`). Angebote lassen sich per KI übernehmen:
   Prompt auf der Wohnungsseite kopieren, Antwort (JSON) dort einfügen (`js/offer.js`: Felder, Prompt und Einlesen). Wichtige Orte der Personen (Arbeit, Familie …) und die Wünsche gehen in den Prompt (eindeutig Erfülltes wird vorausgefüllt; Wünsche mit Ort je Person haben dort je Person eine Kennung, Namen stehen nicht darin);
   Entfernungen zu den Orten und zur nächsten U-/S-Bahn stehen je Wohnung und im Vergleich.
 - `/zauberkloppen/` – Szenario-Generator für Fantasy-Rollenspiele.
 - `/zeitfresser/` – Zeitfresser: Wochenanalyse, wohin die Zeit geht. Themen mit Wert pro Woche oder pro Tag
   an gewählten Wochentagen, darunter eine Ebene Unterpunkte; nicht zugeordnete Zeit wird schraffiert gezeigt,
   Überschreitungen pulsieren rot. Ein Thema ohne eigenen Wert übernimmt die Summe seiner Unterpunkte. Verschieben per Drag & Drop oder ↑/↓, 12 Themenfarben zur Auswahl.
-  Kreisdiagramm (innen Themen, außen Unterpunkte) und Balken je Wochentag. Mehrere Szenarien, gespeichert im localStorage.
+  Kreisdiagramm (innen Themen, außen Unterpunkte) und Balken je Wochentag. Mehrere Szenarien, gespeichert im localStorage,
+  Übertragung zwischen Geräten per Einmal-Link wie in Wohnung (`js/sync.js`, `js/transfer.js`) oder JSON-Export/-Import je Szenario.
 
 ## Entwicklung
 

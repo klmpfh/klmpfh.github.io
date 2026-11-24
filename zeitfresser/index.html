@@ -8,16 +8,20 @@
     <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="../assets/css/reset.css">
     <link rel="stylesheet" href="../assets/css/theme.css">
-    <link rel="stylesheet" href="style.css?v=1.7">
+    <link rel="stylesheet" href="style.css?v=1.8">
     <!-- ?v= immer zusammen mit den Versionsnummern unten ändern: Sonst läuft die neue Seite mit alten Dateien aus dem Browser-Cache. -->
     <!-- Klassische Skripte (keine ES-Module), damit die Seite auch per file:// läuft; Reihenfolge ist wichtig, main.js zuletzt. -->
-    <script src="js/state.js?v=1.7" defer></script>
-    <script src="js/colors.js?v=1.7" defer></script>
-    <script src="js/dialog.js?v=1.7" defer></script>
-    <script src="js/charts.js?v=1.7" defer></script>
-    <script src="js/share.js?v=1.7" defer></script>
-    <script src="js/editor.js?v=1.7" defer></script>
-    <script src="js/main.js?v=1.7" defer></script>
+    <script src="js/state.js?v=1.8" defer></script>
+    <script src="../assets/js/sync-core.js?v=1.8" defer></script>
+    <script src="../assets/js/transfer.js?v=1.8" defer></script>
+    <script src="js/sync.js?v=1.8" defer></script>
+    <script src="js/colors.js?v=1.8" defer></script>
+    <script src="js/dialog.js?v=1.8" defer></script>
+    <script src="js/charts.js?v=1.8" defer></script>
+    <script src="js/share.js?v=1.8" defer></script>
+    <script src="js/editor.js?v=1.8" defer></script>
+    <script src="js/transfer.js?v=1.8" defer></script>
+    <script src="js/main.js?v=1.8" defer></script>
 </head>
 <body>
 <script src="../assets/js/nav.js"></script>
@@ -60,6 +64,7 @@
                 <button type="button" class="btn btn-ghost" id="btnExport" title="Dieses Szenario als JSON-Datei speichern">Export</button>
                 <button type="button" class="btn btn-ghost" id="btnImport" title="Szenario aus JSON-Datei hinzufügen">Import</button>
                 <input type="file" id="importFile" accept=".json,application/json" hidden>
+                <button type="button" class="btn btn-ghost" id="btnTransfer" title="Alle Szenarien direkt auf ein anderes Gerät übertragen oder abgleichen">Einmal-Link</button>
                 <button type="button" class="btn btn-ghost" id="btnShare" title="Diagramme als Bild kopieren, teilen oder speichern">Als Bild</button>
             </div>
         </div>

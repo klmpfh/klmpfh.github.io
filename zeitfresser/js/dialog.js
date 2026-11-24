@@ -13,12 +13,14 @@ const FLYOVER_ANCHOR_MQ = '(min-width: 560px)';
  * Öffnet einen Flyover und liefert ein Promise mit dem Wert des gedrückten
  * Knopfs (bzw. null bei Esc / Klick daneben).
  * opts: { title, message, body (Element), anchor, wide,
+ *         sticky (kein Schließen per Esc oder Klick daneben), onOpen(close),
  *         buttons: [{ label, value, kind: 'primary'|'danger-solid'|'ghost', autofocus, onClick(btn, close) }] }
  */
 function openFlyover(opts) {
     return new Promise(resolve => {
         const dlg = document.createElement('dialog');
         dlg.className = 'flyover' + (opts.wide ? ' flyover-wide' : '');
+        if (opts.sticky) dlg.setAttribute('closedby', 'none');
 
         const box = document.createElement('div');
         box.className = 'flyover-box';
@@ -53,7 +55,7 @@ function openFlyover(opts) {
             actions.appendChild(btn);
             if (b.autofocus) focusBtn = btn;
         });
-        box.appendChild(actions);
+        if (actions.children.length) box.appendChild(actions);
         dlg.appendChild(box);
         document.body.appendChild(dlg);
 
@@ -67,14 +69,18 @@ function openFlyover(opts) {
             resolve(value === undefined ? null : value);
         }
 
-        dlg.addEventListener('cancel', e => { e.preventDefault(); close(null); });
+        dlg.addEventListener('cancel', e => { e.preventDefault(); if (!opts.sticky) close(null); });
+        // Ohne closedby schließen manche Browser beim zweiten Esc trotzdem.
+        dlg.addEventListener('close', () => close(null));
         // Klick auf den abgedunkelten Hintergrund (= das <dialog> selbst, nicht sein Inhalt)
-        dlg.addEventListener('click', e => { if (e.target === dlg) close(null); });
+        dlg.addEventListener('click', e => { if (e.target === dlg && !opts.sticky) close(null); });
 
         dlg.showModal();
         // Breite Flyover (z. B. Bildvorschau) immer mittig
         if (!opts.wide) placeFlyover(dlg, opts.anchor);
-        (focusBtn || actions.lastChild).focus();
+        if (opts.onOpen) opts.onOpen(close);
+        const first = focusBtn || actions.lastChild || box.querySelector('button');
+        if (first) first.focus();
     });
 }
 

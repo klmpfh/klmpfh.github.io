@@ -1250,6 +1250,81 @@ button:focus-visible {
     object-fit: contain;
 }
 
+/* ── Übertragen per Einmal-Link – siehe transfer.js ── */
+
+.transfer {
+    margin-top: 14px;
+    font-size: 13.5px;
+    line-height: 1.5;
+}
+
+.transfer-text {
+    margin-bottom: 10px;
+    max-width: 75ch;
+}
+
+.transfer-text.is-status {
+    font-weight: 600;
+}
+
+.transfer-text.is-muted {
+    font-size: 12.5px;
+    color: var(--text-muted);
+}
+
+.transfer-text.is-warn {
+    color: var(--danger);
+}
+
+.transfer-start,
+.transfer-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.transfer-start .field {
+    flex: 0 1 280px;
+}
+
+.transfer-start + .transfer-actions {
+    margin-top: 14px;
+}
+
+.transfer-link {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 16px;
+}
+
+/* Heller Rand auch im dunklen Design, sonst lässt sich der Code nicht scannen. */
+.transfer-qr {
+    flex: none;
+    width: 196px;
+    height: 196px;
+    padding: 10px;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.transfer-share {
+    flex: 1 1 260px;
+    min-width: 0;
+}
+
+.transfer-share .field {
+    margin-bottom: 10px;
+}
+
+.transfer-changes {
+    margin: 0 0 10px;
+    padding-left: 20px;
+    overflow-wrap: anywhere;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .panel-summary .sum-warn,
     .info-warn,

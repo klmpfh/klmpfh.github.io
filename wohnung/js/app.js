@@ -1,5 +1,5 @@
 /* Wohnung (Kauf oder Miete) – Oberfläche, Speicherung, Export/Import, Einmal-Link
-   (Abgleich in sync.js, Verbindung in transfer.js).
+   (Abgleich in sync.js, Verbindung in assets/js/transfer.js).
    Zwei Ansichten über den URL-Hash: Übersicht ("" / "#") mit den Zusagen der
    Bank, Personen und dem Vergleich aller Wohnungen, und "#w=<id>" mit allem, was zu
    einer einzelnen Wohnung gehört. Rechenlogik liegt in calc.js (WK). */
@@ -87,6 +87,7 @@
     function newFlat(p, kind) {
         return {
             id: uid(), kind: kind === 'rent' ? 'rent' : 'buy', name: 'Neue Wohnung', address: '', link: '', notes: '',
+            status: '', diary: [],   // siehe diary.js
             area: null, year: null, price: null, inventory: null,
             energyUse: null,     // kWh/(m²·a) laut Energieausweis
             distances: {},       // { placeId: Luftlinie in km } zu den wichtigen Orten der Personen
@@ -160,6 +161,8 @@
         [['energySource', WK.ENERGY_SOURCES], ['heatingType', WK.HEATING_TYPES], ['energyCert', WK.ENERGY_CERTS], ['heatPay', WK.HEAT_PAY], ['distanceBasis', OFFER.BASIS]].forEach(function (x) {
             if (!x[1].some(function (o) { return o[0] === out[x[0]]; })) out[x[0]] = '';
         });
+        out.status = DIARY.known(out.status);
+        out.diary = DIARY.normalize(out.diary, uid, stamp());
         out.steps = Array.isArray(out.steps) ? out.steps.filter(isObj).map(function (s) {
             return Object.assign(newStep(), s, { id: s.id ? String(s.id) : uid() });
         }) : [];
@@ -529,12 +532,33 @@
         return sel;
     }
 
+    // Eingeklappte Kacheln der Übersicht: { key: true }, nur Ansicht dieses Browsers, deshalb getrennt von den Daten.
+    var COLLAPSE_KEY = KEY + '-eingeklappt';
+    var collapsed = {};
+    try { collapsed = Object.assign({}, JSON.parse(localStorage.getItem(COLLAPSE_KEY))); } catch (e) { /* dann alles offen */ }
+
+    /** o.key: einklappbar, gemerkt unter diesem Schlüssel. */
     function panel(title, children, o) {
         o = o || {};
-        return el('section', { class: 'panel' + (o.cls ? ' ' + o.cls : '') }, [
-            el('div', { class: 'panel-head' }, [el('h2', { text: title })].concat(o.actions || [])),
+        var head = el('h2', o.key ? null : { text: title });
+        var out = el('section', { class: 'panel' + (o.cls ? ' ' + o.cls : '') }, [
+            el('div', { class: 'panel-head' }, [head].concat(o.actions || [])),
             o.hint ? el('p', { class: 'panel-hint', text: o.hint }) : null
         ].concat(children));
+        if (!o.key) return out;
+
+        var toggle = el('button', { type: 'button', class: 'panel-toggle', onclick: function () {
+            if (collapsed[o.key]) delete collapsed[o.key]; else collapsed[o.key] = true;
+            try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(collapsed)); } catch (e) { /* gilt dann bis zum Neuladen */ }
+            show();
+        } }, [el('span', { class: 'panel-chevron', 'aria-hidden': 'true', text: '▾' }), el('span', { text: title })]);
+        function show() {
+            out.classList.toggle('is-collapsed', !!collapsed[o.key]);
+            toggle.setAttribute('aria-expanded', String(!collapsed[o.key]));
+        }
+        head.appendChild(toggle);
+        show();
+        return out;
     }
 
     function group(title, fields) {
@@ -661,9 +685,10 @@
 
     /* ---------- Übertragen per Einmal-Link ---------- */
 
+    var TRANSFER = createTransfer('klmpfh-wohnung', 'Wohnung');
     var BACKUP_KEY = KEY + '-vorher';
     var transferMode = 'sync';
-    var transferOut = null;      // laufende oder letzte Sitzung beim Senden (transfer.js)
+    var transferOut = null;      // laufende oder letzte Sitzung beim Senden
     var transferIn = null;       // geöffneter Link beim Empfangen
     var transferNote = null;     // was der letzte Abgleich auf diesem Gerät geändert hat (SYNC.diff)
 
@@ -1211,6 +1236,7 @@
     // bei lauter Mietwohnungen), blendet renderFlatList aus.
     var COMPARE = [
         { label: 'Art', get: function () { return null; }, f: function (v, a) { return kindLabel(a); }, always: true },
+        { label: 'Status', get: function (a) { return DIARY.label(a.flat.status) || null; }, f: function (v) { return v || '–'; } },
         { label: 'Kaufpreis', get: buyOnly(function (a) { return a.price; }), f: eur },
         { label: 'Kaltmiete', get: rentOnly(function (a) { return a.coldRent; }), f: eur, best: 'min' },
         { label: 'Warmmiete', get: rentOnly(function (a) { return a.warmRent; }), f: eur, best: 'min' },
@@ -1283,7 +1309,7 @@
                 ['Wer zahlt welche Nebenkosten?', 'Mit Haken: Du bezahlst die Rechnung, und die Person gibt dir ihren Anteil mit der Miete. Ohne Haken: Die Person zahlt ihren Anteil selbst, z. B. direkt an den Anbieter. Bei den Nebenkosten der Wohnung heißt ohne Haken: Sie zahlt dir den Anteil zusätzlich zur Miete.'],
                 ['Wichtige Orte', 'Z. B. Arbeit, Uni oder Familie mit Adresse. Der KI-Prompt auf der Seite einer Wohnung enthält diese Adressen, damit die KI die Entfernungen ermittelt; sie stehen dann im Vergleich. Alternativ trägst du die Entfernungen in jeder Wohnung selbst ein. Wer die Adressen nicht an eine KI schicken will, lässt das Adressfeld leer.']
             ])], {
-            hint: 'Wer zusammen wohnen will, und was jede Person höchstens zahlen kann. Alle hier teilen sich die privaten Nebenkosten und gewichten die Wünsche.'
+            key: 'people', hint: 'Wer zusammen wohnen will, und was jede Person höchstens zahlen kann. Alle hier teilen sich die privaten Nebenkosten und gewichten die Wünsche.'
         }));
         renderPeople(peopleBox, function () { renderWishEditor(wishBox); });
 
@@ -1319,7 +1345,7 @@
                 ]),
             el('h3', { class: 'group-title', text: 'Was ist drin?' }),
             budgetBox
-        ], { hint: 'Hier steht nur, was die Bank dir zusagt. Es gilt für alle Kaufwohnungen und wird nur in diesem Browser gespeichert.' }));
+        ], { key: 'bank', hint: 'Hier steht nur, was die Bank dir zusagt. Es gilt für alle Kaufwohnungen und wird nur in diesem Browser gespeichert.' }));
 
         var costPeople = el('p', { class: 'small group-hint' });
         app.appendChild(panel('Private Nebenkosten', [
@@ -1327,11 +1353,11 @@
                 'Wer seinen Teil über dich zahlt und wer selbst, steht oben unter „Personen“. Was du ganz übernimmst, auf „zahle ich komplett“ stellen.' }),
             costPeople,
             costsBox
-        ]));
+        ], { key: 'costs' }));
 
         var wishStatus = el('div', { class: 'wish-status' });
         app.appendChild(panel('Wünsche & Bedingungen', [wishBox, wishStatus], {
-            hint: 'Eine gemeinsame Liste, frei formuliert – z. B. „Balkon“, „max. 30 Minuten zur Arbeit“, „kein Erdgeschoss“. ' +
+            key: 'wishes', hint: 'Eine gemeinsame Liste, frei formuliert – z. B. „Balkon“, „max. 30 Minuten zur Arbeit“, „kein Erdgeschoss“. ' +
                 'Hängt ein Wunsch vom Ort einer Person ab (Arbeitsweg …), stell ihn auf „Ort je Person“, dann beurteilt ihn die KI für jede Person einzeln. ' +
                 'Danach gibt jede Person bei jedem Wunsch an, wie wichtig er ihr ist (0 % = egal). ' +
                 '100 % heißt Muss: Erfüllt eine Wohnung das nicht voll, kommt sie nicht in Frage. ' +
@@ -1347,6 +1373,7 @@
             location.hash = 'w=' + f.id;
         }
         app.appendChild(panel('Wohnungen', [listBox], {
+            key: 'flats',
             actions: [el('div', { class: 'actions' }, [
                 btn('+ Kaufwohnung', 'btn-primary', function () { addFlat('buy'); }),
                 btn('+ Mietwohnung', 'btn-primary', function () { addFlat('rent'); })
@@ -1366,7 +1393,7 @@
                 btn('Alles exportieren (JSON)', 'btn-ghost', exportAll),
                 btn('Importieren …', 'btn-ghost', function () { importInput.click(); })
             ])
-        ]));
+        ], { key: 'transfer' }));
         renderTransfer(transferBox);
 
         currentUpdate = function () {
@@ -1821,7 +1848,8 @@
                 ' fehlt ein Ort mit Adresse. Beim Übernehmen mit KI bleibt der Wunsch dort offen.'));
         });
         if (allWeighted) items.push(checkItem('ok', 'Alle Wünsche sind von ' + (people.length > 1 ? 'allen Personen' : personName(people[0])) + ' gewichtet.'));
-        var scored = state.flats.map(function (f) { return { f: f, s: WK.wishScore(f, people, wishes) }; });
+        var active = state.flats.filter(function (f) { return !DIARY.isOut(f); });
+        var scored = active.map(function (f) { return { f: f, s: WK.wishScore(f, people, wishes) }; });
         scored.filter(function (x) { return x.s.ko.length; }).forEach(function (x) {
             items.push(checkItem('bad', (x.f.name || 'Ohne Namen') + ' kommt nicht in Frage – Muss nicht erfüllt: ' + x.s.ko.map(function (k) {
                 var p = people.find(function (q) { return q.id === k.personId; });
@@ -1833,7 +1861,7 @@
             items.push(checkItem('warn', 'Noch nicht fertig bewertet: ' + openFlats.map(function (x) {
                 return (x.f.name || 'Ohne Namen') + ' (' + x.s.open + ' offen)';
             }).join(', ') + '.'));
-        } else if (state.flats.length && allWeighted) {
+        } else if (active.length && allWeighted) {
             items.push(checkItem('ok', 'Alle Wohnungen sind fertig bewertet.'));
         }
         box.innerHTML = '<ul class="checks">' + items.join('') + '</ul>';
@@ -1954,11 +1982,14 @@
             box.innerHTML = '<p class="muted">Noch keine Wohnung angelegt. Mit „+ Kaufwohnung“ (Kaufpreis, Hausgeld, Finanzierung) oder „+ Mietwohnung“ (Kalt- und Warmmiete, Staffel- oder Indexmiete) geht’s los – beide lassen sich hier vergleichen.</p>';
             return;
         }
-        var results = state.flats.map(function (f) {
+        var all = state.flats.map(function (f) {
             var a = WK.analyze(f, p, state.flats);
             a.wish = WK.wishScore(f, state.people, state.wishes);
             return a;
         });
+        // Aussortierte stehen zugeklappt darunter und fehlen im Vergleich.
+        var results = all.filter(function (a) { return !DIARY.isOut(a.flat); });
+        var sortedOut = all.filter(function (a) { return DIARY.isOut(a.flat); });
         var hasWishes = state.wishes.length > 0 && state.people.length > 0;
 
 
@@ -1973,12 +2004,13 @@
             rows = rows.concat([{ label: 'Bewertungen offen', get: function (a) { return a.wish.open; }, f: function (v) { return v ? String(v) : '–'; } }]);
         }
 
-        var cards = '<div class="cards">' + results.map(function (a) {
+        function card(a) {
             var f = a.flat, w = worst(a);
-            return '<a class="card" href="#w=' + encodeURIComponent(f.id) + '">' +
+            return '<a class="card' + (DIARY.isOut(f) ? ' card-out' : '') + '" href="#w=' + encodeURIComponent(f.id) + '">' +
                 '<div class="card-head"><span class="card-name"><span class="kind-tag kind-' + a.kind + '">' + (isRent(a) ? 'Miete' : 'Kauf') + '</span> ' + esc(f.name || 'Ohne Namen') + '</span>' +
-                '<span class="badge badge-' + w + '" title="' + TIER_LABEL[w] + '">' + ICON[w] + ' ' + TIER_LABEL[w] + '</span></div>' +
+                (DIARY.isOut(f) ? '' : '<span class="badge badge-' + w + '" title="' + TIER_LABEL[w] + '">' + ICON[w] + ' ' + TIER_LABEL[w] + '</span>') + '</div>' +
                 (f.address ? '<div class="card-sub">' + esc(f.address) + '</div>' : '') +
+                cardStatus(f) +
                 '<dl class="card-facts">' +
                 (isRent(a)
                     ? '<dt>Warmmiete</dt><dd>' + eur(a.warmRent) + (a.area ? ' · ' + fmtInput(a.area, 1) + ' m²' : '') + '</dd>' +
@@ -1992,7 +2024,12 @@
                         ? '<dd class="bad-text" title="Muss nicht erfüllt: ' + esc(wishNames(a.wish.ko.map(function (k) { return k.wishId; }))) + '">✕ passt nicht</dd>'
                         : '<dd>' + fmtScore(a.wish.overall) + (a.wish.open ? ' <span class="muted">(' + a.wish.open + ' offen)</span>' : '') + '</dd>') : '') +
                 '</dl></a>';
-        }).join('') + '</div>';
+        }
+        var cards = results.length ? '<div class="cards">' + results.map(card).join('') + '</div>'
+            : '<p class="muted">Alle Wohnungen sind aussortiert.</p>';
+        var outBox = box.querySelector('.sorted-out');
+        var outCards = sortedOut.length ? '<details class="sorted-out"' + (outBox && outBox.open ? ' open' : '') + '><summary>Aussortiert (' + sortedOut.length + ')</summary>' +
+            '<div class="cards">' + sortedOut.map(card).join('') + '</div></details>' : '';
 
         var table = '';
         if (results.length) {
@@ -2015,16 +2052,164 @@
                             return '<td' + (isBest ? ' class="best" title="bester Wert"' : '') + '>' + esc(text) + '</td>';
                         }).join('') + '</tr>';
                 }).join('') +
-                '<tr class="sep"><th>Status</th>' + results.map(function (a) {
+                '<tr class="sep"><th>Einschätzung</th>' + results.map(function (a) {
                     var w = worst(a);
                     return '<td><span class="badge badge-' + w + '">' + ICON[w] + ' ' + TIER_LABEL[w] + '</span></td>';
                 }).join('') + '</tr>' +
                 '</tbody></table></div>' +
                 (results.length >= 2 ? '<p class="muted small">Markiert = bester Wert der Zeile.' +
-                    (state.flats.some(function (f) { return Object.keys(f.distances).length; }) ? ' Entfernungen = Luftlinie, „ca.“ = Lage nur ungefähr bekannt.' : '') +
+                    (results.some(function (a) { return Object.keys(a.flat.distances).length; }) ? ' Entfernungen = Luftlinie, „ca.“ = Lage nur ungefähr bekannt.' : '') +
                     (hasWishes ? ' „Passt zu …“ = wie gut die Wohnung die Wünsche erfüllt, gewichtet nach Wichtigkeit; gemeinsam = Durchschnitt aller Personen.' : '') + '</p>' : '');
         }
-        box.innerHTML = cards + table;
+        box.innerHTML = cards + outCards + table;
+    }
+
+    /* ---------- Status & Tagebuch (Schritte und Einträge in diary.js) ---------- */
+
+    function statusTag(key) {
+        return '<span class="status-tag status-' + DIARY.tone(key) + '">' + esc(DIARY.label(key)) + '</span>';
+    }
+
+    /** Status auf der Karte: seit wann, bei Aussortierten auch warum. */
+    function cardStatus(f) {
+        if (!f.status) return '';
+        var e = DIARY.current(f), why = e && (DIARY.isOut(f) || f.status === 'hold') ? e.text.trim() : '';
+        return '<div class="card-status">' + statusTag(f.status) + (e ? ' <span class="muted">' + DIARY.fmtDate(e.date) + '</span>' : '') +
+            (why ? '<div class="card-why">' + esc(why) + '</div>' : '') + '</div>';
+    }
+
+    var DIARY_SHORT = 4;   // so viele Einträge stehen ohne Aufklappen da
+
+    function diaryPanel(f) {
+        var note = el('span', { role: 'status' });
+        var undoBtn = btn('Rückgängig', 'btn-ghost btn-small', function () {
+            f.diary.splice(f.diary.indexOf(undo.entry), 1);
+            f.status = undo.status;
+            undo = null;
+            changed();
+            showStatus();
+            showList();
+            (buttons[f.status] || buttons.found).focus();
+        });
+        var list = el('div', { class: 'diary-list' });
+        var more = btn('', 'btn-ghost btn-small', function () { all = !all; showList(); });
+        var buttons = {}, rows = {};
+        var undo = null;     // letzter Statuswechsel, solange sein Eintrag unberührt ist
+        var all = false;
+
+        function add(status) {
+            var e = DIARY.entry(uid(), stamp(), status);
+            f.diary.push(e);
+            return e;
+        }
+
+        function chips(steps, cls) {
+            return el('div', { class: 'status-chips' + (cls || '') }, steps.map(function (s) {
+                return buttons[s[0]] = el('button', { type: 'button', class: 'status-chip chip-' + DIARY.tone(s[0]), text: s[1], onclick: function () {
+                    if (f.status === s[0]) return;
+                    undo = { status: f.status, entry: add(s[0]) };
+                    f.status = s[0];
+                    changed();
+                    showStatus();
+                    showList(undo.entry);
+                } });
+            }));
+        }
+
+        function showStatus() {
+            Object.keys(buttons).forEach(function (key) {
+                buttons[key].setAttribute('aria-pressed', String(f.status === key));
+                // Schritte, die schon im Tagebuch stehen
+                var been = f.status !== key && ['step', 'done'].indexOf(DIARY.tone(key)) !== -1 && f.diary.some(function (e) { return e.status === key; });
+                buttons[key].classList.toggle('is-been', been);
+            });
+            var e = DIARY.current(f);
+            note.textContent = !f.status ? 'Noch kein Status. Klick an, wo ihr gerade steht, Schritte lassen sich überspringen.'
+                : DIARY.label(f.status) + (e ? ' seit ' + DIARY.fmtDate(e.date) : '') + '.' +
+                    (DIARY.isOut(f) ? ' Auf der Übersicht unter „Aussortiert“, nicht mehr im Vergleich. Den Grund kannst du unten im Eintrag notieren.' : '');
+            undoBtn.hidden = !undo;
+        }
+
+        function remove(e) {
+            if (e.text.trim() && !confirm('Diesen Eintrag vom ' + DIARY.fmtDate(e.date) + ' löschen?')) return;
+            f.diary.splice(f.diary.indexOf(e), 1);
+            if (undo && undo.entry === e) undo = null;
+            changed();
+            showStatus();
+            showList();
+            addBtn.focus();
+        }
+
+        function row(e) {
+            var date = el('input', { type: 'date', 'aria-label': 'Datum' });
+            date.value = e.date;
+            date.addEventListener('change', function () {
+                if (!DIARY.isDate(date.value)) return;
+                e.date = date.value;
+                changed();
+                showStatus();
+            });
+            date.addEventListener('blur', function () { date.value = e.date; });
+            var text = el('textarea', { rows: 2, 'aria-label': 'Eintrag', placeholder: DIARY.isOut(e) ? 'Warum? z. B. zu laut, zu teuer, Zuschnitt passt nicht'
+                : e.status === 'date' ? 'Wann, wo, mit wem?'
+                : e.status === 'viewed' || e.status === 'second' ? 'Eindrücke, Vor- und Nachteile, offene Fragen …'
+                : e.status ? 'Notiz dazu (optional)' : 'Was ist passiert? z. B. Telefonat, Antwort der Verwaltung, nächste Schritte …' });
+            text.value = e.text;
+            text.addEventListener('input', function () {
+                e.text = text.value;
+                if (undo && undo.entry === e) { undo = null; undoBtn.hidden = true; }
+                changed();
+            });
+            var out = el('div', { class: 'diary-entry' }, [
+                el('div', { class: 'diary-head' }, [
+                    date,
+                    el('span', { class: 'diary-tag', html: e.status ? statusTag(e.status) : '' }),
+                    el('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Eintrag löschen', text: '×', onclick: function () { remove(e); } })
+                ]),
+                text
+            ]);
+            // Nach geändertem Datum neu einsortieren, aber erst, wenn der Fokus den Eintrag verlässt.
+            out.addEventListener('focusout', function (ev) {
+                if (out.contains(ev.relatedTarget) || !out.isConnected) return;
+                var sorted = DIARY.sorted(f.diary), next = sorted.slice(sorted.indexOf(e) + 1).find(function (x) { return rows[x.id]; });
+                var before = next ? rows[next.id] : null;
+                if (out.nextElementSibling !== before) list.insertBefore(out, before);
+            });
+            return out;
+        }
+
+        /** fresh: gerade angelegter Eintrag, der auf jeden Fall zu sehen sein soll. */
+        function showList(fresh) {
+            var sorted = DIARY.sorted(f.diary);
+            if (fresh && sorted.indexOf(fresh) >= DIARY_SHORT) all = true;
+            list.innerHTML = '';
+            rows = {};
+            (all ? sorted : sorted.slice(0, DIARY_SHORT)).forEach(function (e) {
+                rows[e.id] = row(e);
+                list.appendChild(rows[e.id]);
+            });
+            more.hidden = sorted.length <= DIARY_SHORT;
+            more.textContent = all ? 'Nur die neuesten zeigen' : 'Alle ' + sorted.length + ' Einträge zeigen';
+        }
+
+        var addBtn = btn('+ Eintrag', 'btn-ghost', function () {
+            var e = add('');
+            changed();
+            showList(e);
+            rows[e.id].querySelector('textarea').focus();
+        });
+
+        var out = panel('Status & Tagebuch', [
+            chips(DIARY.STEPS[f.kind]),
+            chips(DIARY.ENDS, ' status-ends'),
+            el('p', { class: 'small muted status-note' }, [note, undoBtn]),
+            el('div', { class: 'diary-title' }, [el('h3', { class: 'group-title', text: 'Tagebuch' }), addBtn]),
+            list,
+            more
+        ]);
+        showStatus();
+        showList();
+        return out;
     }
 
     /* ---------- Detailansicht einer Wohnung ---------- */
@@ -2054,6 +2239,7 @@
                 copy.loans.forEach(function (l) { l.id = uid(); });
                 copy.wg.rooms.forEach(function (r) { r.id = uid(); });
                 copy.steps.forEach(function (s) { s.id = uid(); });
+                copy.diary.forEach(function (e) { e.id = uid(); });
                 copy.name = (f.name || 'Wohnung') + ' (Kopie)';
                 state.flats.splice(state.flats.indexOf(f) + 1, 0, copy);
                 saveNow();
@@ -2168,6 +2354,7 @@
 
         var rentTypeBox = el('div');
         var rentInputs = rent ? [
+            diaryPanel(f),
             offerPanel(f),
             objectPanel,
             wishPanel.el,
@@ -2192,6 +2379,7 @@
         ] : null;
 
         var inputs = el('div', { class: 'detail-inputs' }, rentInputs || [
+            diaryPanel(f),
             offerPanel(f),
             objectPanel,
             wishPanel.el,

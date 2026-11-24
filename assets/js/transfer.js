@@ -1,4 +1,5 @@
-/* Wohnung – Übertragung per Einmal-Link (PeerJS/WebRTC, ohne Oberfläche).
+/* Übertragung per Einmal-Link (PeerJS/WebRTC, ohne Oberfläche), für Wohnung und
+   Zeitfresser: createTransfer(Kennung der Seite, Name). Beide Geräte brauchen dieselbe Seite.
    Das sendende Gerät meldet sich unter einer zufälligen Sitzungs-ID bei PeerJS an.
    Der Link enthält Sitzung und Schlüssel hinter dem #, beides geht nie an einen
    Webserver. Wer ihn öffnet, beweist mit dem Schlüssel, dass er den Link hat; erst
@@ -8,11 +9,11 @@
    Ablauf:  Empfänger → hello → Sender → data → Empfänger → received
             nur bei mode 'sync':  Empfänger → result → Sender → done
             (oder declined, wenn der Empfänger nichts übernimmt) */
-var TRANSFER = (function () {
+function createTransfer(APP, NAME) {
     'use strict';
 
-    var APP = 'klmpfh-wohnung', VERSION = 1;
-    var PREFIX = 'klmpfh-wohnung-transfer-';
+    var VERSION = 1;
+    var PREFIX = APP + '-transfer-';
     var LINK_MS = 30 * 60 * 1000;      // so lange wartet ein Link
     var CONFIRM_MS = 10 * 60 * 1000;   // so lange darf der Empfänger überlegen
     var CONNECT_MS = 25 * 1000;
@@ -203,7 +204,7 @@ var TRANSFER = (function () {
                     post(conn, 'done');
                     finish('synced');
                 }).catch(function (e) {
-                    console.warn('Wohnung: Antwort nicht lesbar.', e);
+                    console.warn(NAME + ': Antwort nicht lesbar.', e);
                     finish('badResult');
                 });
             }
@@ -320,4 +321,4 @@ var TRANSFER = (function () {
     }
 
     return { supported: supported, send: send, receive: receive, loadQr: loadQr };
-})();
+}
