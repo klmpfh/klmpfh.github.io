@@ -10,8 +10,10 @@
  * Unterpunkte zwischen Unterpunkte – auch in ein anderes Thema (dann auf
  * die Zeile des Themas ziehen oder zwischen dessen Unterpunkte).
  *
- * Ein Thema behält seinen eigenen Wert; die Infozeile zeigt, ob seine
- * Unterpunkte ihn ganz, teilweise oder zu viel abdecken.
+ * Ein Thema ohne eigenen Wert übernimmt automatisch die Summe seiner
+ * Unterpunkte (als Platzhalter im leeren Feld). Mit eigenem Wert zeigt die
+ * Infozeile, ob die Unterpunkte ihn ganz, teilweise oder zu viel abdecken;
+ * bei "zu viel" lässt sich die Summe eintragen oder der Wert entfernen.
  */
 'use strict';
 
@@ -96,9 +98,7 @@ function buildNode(node, parent, colors, index, count) {
     amount.inputMode = 'decimal';
     amount.autocomplete = 'off';
     amount.value = node.amount ? fmtNumber(node.amount) : '';
-    amount.placeholder = '0';
     amount.setAttribute('aria-label', 'Stunden');
-    amount.title = 'Stunden, z. B. 6, 1,5 oder 1:30';
     const per = el('select', 'node-per');
     per.setAttribute('aria-label', 'Einheit');
     [['day', 'pro Tag'], ['week', 'pro Woche']].forEach(o => {
@@ -163,7 +163,22 @@ function buildNode(node, parent, colors, index, count) {
     return wrap;
 }
 
-/** Infozeilen unter jedem Punkt neu berechnen (ohne den Baum neu aufzubauen). */
+/** Knöpfe, wenn die Unterpunkte mehr ergeben als der eingetragene Wert. */
+function buildSumActions(node) {
+    const wrap = el('span', 'info-actions');
+    const set = el('button', 'btn-info', fmtNumber(childrenAmount(node)) + (node.per === 'day' ? ' h/T' : ' h/W') + ' eintragen');
+    set.type = 'button';
+    set.dataset.action = 'sum-set';
+    set.title = 'Summe der Unterpunkte als festen Wert des Themas eintragen';
+    const auto = el('button', 'btn-info', 'Wert entfernen (automatisch)');
+    auto.type = 'button';
+    auto.dataset.action = 'sum-auto';
+    auto.title = 'Eingetragenen Wert entfernen – dann gilt immer die Summe der Unterpunkte';
+    wrap.append(set, auto);
+    return wrap;
+}
+
+/** Infozeilen und Platzhalter jedes Punkts neu berechnen (ohne den Baum neu aufzubauen). */
 function updateInfos() {
     const sc = activeScenario();
     const ref = weekRef(sc);
@@ -175,6 +190,7 @@ function updateInfos() {
         info.textContent = '';
         const n = dayCount(node);
         const w = weeklyHours(node);
+        const auto = isAutoSum(node);
         let over = false;
 
         if (!n) {
@@ -188,7 +204,9 @@ function updateInfos() {
                 : ['= ' + perDay(w / n), fmtDays(node.days), fmtPercent(w / ref) + ' der Woche'];
             info.appendChild(el('span', 'info-main', parts.join(' · ')));
 
-            if (node.children.length) {
+            if (auto) {
+                info.appendChild(el('span', 'info-auto', 'Σ automatisch: Summe der Unterpunkte'));
+            } else if (node.children.length) {
                 const cs = sumWeekly(node.children);
                 const label = node.name.trim() || 'dieses Thema';
                 // Pro-Tag-Werte beziehen sich auf die beim Thema gewählten Tage.
@@ -197,6 +215,7 @@ function updateInfos() {
                     info.appendChild(el('span', 'info-warn zf-pulse',
                         '⚠ Unterpunkte: ' + perDay(cs / n) + ' (' + perWeek(cs) + ') – ' +
                         perDay((cs - w) / n) + ' mehr als „' + label + '“'));
+                    info.appendChild(buildSumActions(node));
                 } else if (w - cs > EPS) {
                     const span = el('span', 'info-rest');
                     span.appendChild(el('span', 'info-hatch'));
@@ -210,7 +229,11 @@ function updateInfos() {
                 }
             }
         }
-        if (valueInput) valueInput.classList.toggle('is-over', over);
+        valueInput.classList.toggle('is-over', over);
+        valueInput.classList.toggle('is-auto', auto);
+        valueInput.placeholder = auto ? fmtNumber(childrenAmount(node)) : '0';
+        valueInput.title = 'Stunden, z. B. 6, 1,5 oder 1:30' +
+            (node.children.length ? ' – leer = Summe der Unterpunkte' : '');
     });
 }
 
@@ -385,9 +408,9 @@ function initEditor(onChange) {
         const node = hit.node;
         const w = weeklyHours(node);
         const n = dayCount(node);
-        // Einheit wechseln, ohne den Wochenwert zu verändern.
+        // Einheit wechseln, ohne den Wochenwert zu verändern (Automatik bleibt ohne eigenen Wert).
         node.per = e.target.value === 'day' ? 'day' : 'week';
-        if (n) node.amount = node.per === 'day' ? w / n : w;
+        if (n && !isAutoSum(node)) node.amount = node.per === 'day' ? w / n : w;
         const input = e.target.closest('.node-amount').querySelector('.node-value');
         input.value = node.amount ? fmtNumber(node.amount) : '';
         onChange('soft');
@@ -435,6 +458,12 @@ function initEditor(onChange) {
                 onChange('hard', { focus: node.id, selector: '.day-chip[data-day="' + d + '"]' });
                 break;
             }
+            case 'sum-set':
+            case 'sum-auto':
+                node.amount = btn.dataset.action === 'sum-set' ? childrenAmount(node) : 0;
+                // Der Knopf verschwindet; die Einheit fokussieren statt des Werts (sonst geht am Handy die Tastatur auf).
+                onChange('hard', { focus: node.id, selector: '.node-per' });
+                break;
             case 'add': {
                 if (hit.parent) return; // höchstens zwei Ebenen
                 const child = createNode({ days: node.days });

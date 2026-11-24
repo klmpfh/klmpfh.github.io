@@ -687,6 +687,36 @@ button:focus-visible {
     color: var(--success);
 }
 
+.info-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.btn-info {
+    padding: 4px 10px;
+    background: transparent;
+    border: 2px solid var(--border-color);
+    border-radius: 7px;
+    color: var(--text-color);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+}
+
+.btn-info:hover {
+    border-color: var(--primary);
+    color: var(--primary-strong);
+}
+
+/* Automatischer Wert (Summe der Unterpunkte) steht als Platzhalter im leeren Feld */
+.node-value.is-auto::placeholder {
+    color: var(--text-muted);
+    font-style: italic;
+    opacity: 1;
+}
+
 .info-rest {
     display: inline-flex;
     align-items: center;

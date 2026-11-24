@@ -12,9 +12,10 @@
  * (per = 'week') oder der Wert pro gewähltem Wochentag (per = 'day'). Die
  * Bezugsgröße der Woche ist 7 × hoursPerDay.
  *
- * Ein Thema hat immer seinen eigenen, eingetragenen Wert – unabhängig von
- * seinen Unterpunkten. Decken die Unterpunkte weniger ab, bleibt ein Rest
- * "nicht zugeordnet"; ergeben sie mehr, wird das als Fehler markiert.
+ * Hat ein Thema Unterpunkte und keinen eigenen Wert (amount = 0), gilt
+ * automatisch die Summe der Unterpunkte (siehe isAutoSum). Ist ein Wert
+ * eingetragen, gilt dieser: Decken die Unterpunkte weniger ab, bleibt ein
+ * Rest "nicht zugeordnet"; ergeben sie mehr, wird das als Fehler markiert.
  */
 'use strict';
 
@@ -195,14 +196,28 @@ function dayCount(node) {
     return node.days.reduce((s, d) => s + (d ? 1 : 0), 0);
 }
 
+/** Kein eigener Wert, aber Unterpunkte → deren Summe zählt. */
+function isAutoSum(node) {
+    return !node.amount && node.children.length > 0;
+}
+
 function weeklyHours(node) {
     const n = dayCount(node);
     if (!n) return 0;
+    if (isAutoSum(node)) return sumWeekly(node.children);
     return node.per === 'day' ? node.amount * n : node.amount;
 }
 
 function sumWeekly(nodes) {
     return nodes.reduce((s, n) => s + weeklyHours(n), 0);
+}
+
+/** Summe der Unterpunkte in der Einheit des Themas (pro Tag: auf dessen Tage verteilt). */
+function childrenAmount(node) {
+    const n = dayCount(node);
+    if (!n) return 0;
+    const cs = sumWeekly(node.children);
+    return node.per === 'day' ? cs / n : cs;
 }
 
 function weekRef(sc) {
