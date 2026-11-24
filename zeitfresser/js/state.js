@@ -18,6 +18,8 @@
  * automatisch die Summe der Unterpunkte (siehe isAutoSum). Ist ein Wert
  * eingetragen, gilt dieser: Decken die Unterpunkte weniger ab, bleibt ein
  * Rest "nicht zugeordnet"; ergeben sie mehr, wird das als Fehler markiert.
+ * Pro Tag gilt der Wert an jedem gewählten Tag für sich, pro Woche ist er ein
+ * Budget, dessen Rest sich flexibel auf die Tage verteilt (siehe dayPlan).
  */
 'use strict';
 
@@ -231,12 +233,74 @@ function sumWeekly(nodes) {
     return nodes.reduce((s, n) => s + weeklyHours(n), 0);
 }
 
-/** Summe der Unterpunkte in der Einheit des Themas (pro Tag: auf dessen Tage verteilt). */
+function sumOf(list) { return list.reduce((s, x) => s + x, 0); }
+
+/** Kleinster eigener Wert, der in der Einheit des Themas für alle Unterpunkte reicht (pro Tag: der vollste Tag). */
 function childrenAmount(node) {
+    if (!dayCount(node)) return 0;
+    return node.per === 'day' ? Math.max.apply(null, dayPlan(node).kids) : sumWeekly(node.children);
+}
+
+/** Verteilt rest so auf die gewählten Tage, dass sie mit dem, was dort schon liegt
+ *  (kids), möglichst gleich voll werden. Vollere Tage bekommen nichts dazu. */
+function levelRest(kids, days, rest) {
+    const out = kids.map(() => 0);
+    const idx = kids.map((k, d) => d).filter(d => days[d]).sort((a, b) => kids[a] - kids[b]);
+    let level = 0, sum = 0;
+    for (let k = 0; k < idx.length; k++) {
+        sum += kids[idx[k]];
+        level = (rest + sum) / (k + 1);
+        if (k + 1 < idx.length && level <= kids[idx[k + 1]]) break;
+    }
+    idx.forEach(d => { out[d] = Math.max(0, level - kids[d]); });
+    return out;
+}
+
+/** Was ein Punkt an den sieben Tagen ergibt, je Liste Mo..So in Stunden:
+ *  hours = insgesamt, kids = Unterpunkte, rest = nicht zugeordnet, over = Unterpunkte
+ *  zu viel, scale = Faktor, mit dem die Unterpunkte in die Grafik passen.
+ *  flexible: Der Rest ist nur verteilt (Wochenwert), kein fester Tageswert. */
+function dayPlan(node) {
     const n = dayCount(node);
-    if (!n) return 0;
-    const cs = sumWeekly(node.children);
-    return node.per === 'day' ? cs / n : cs;
+    const zero = () => DAY_SHORT.map(() => 0);
+    const plan = { hours: zero(), kids: zero(), rest: zero(), over: zero(), scale: DAY_SHORT.map(() => 1), flexible: false };
+    if (!n) return plan;
+
+    if (!node.children.length) {
+        plan.hours = node.days.map(on => on ? weeklyHours(node) / n : 0);
+        return plan;
+    }
+
+    node.children.forEach(c => dayPlan(c).hours.forEach((h, d) => { plan.kids[d] += h; }));
+    if (isAutoSum(node)) {
+        // nur die Unterpunkte
+    } else if (node.per === 'day') {
+        node.days.forEach((on, d) => {
+            const diff = (on ? node.amount : 0) - plan.kids[d];
+            if (diff > EPS) plan.rest[d] = diff;
+            else if (diff < -EPS) {
+                plan.over[d] = -diff;
+                plan.scale[d] = (plan.kids[d] + diff) / plan.kids[d];
+            }
+        });
+    } else {
+        const cs = sumOf(plan.kids);
+        if (node.amount - cs > EPS) {
+            plan.rest = levelRest(plan.kids, node.days, node.amount - cs);
+            plan.flexible = true;
+        } else if (cs - node.amount > EPS) {
+            plan.scale = plan.scale.map(() => node.amount / cs);
+            plan.over = plan.kids.map(k => k * (1 - node.amount / cs));
+        }
+    }
+    plan.hours = plan.kids.map((k, d) => k * plan.scale[d] + plan.rest[d]);
+    return plan;
+}
+
+/** Ergibt der Punkt an allen gewählten Tagen dasselbe? */
+function isEven(node) {
+    const on = dayPlan(node).hours.filter((h, d) => node.days[d]);
+    return on.every(h => Math.abs(h - on[0]) < EPS);
 }
 
 function weekRef(sc) {
@@ -319,6 +383,21 @@ function fmtHours(h) {
 function fmtPercent(share) {
     if (share > 0 && share < 0.005) return '< 1 %';
     return Math.round(share * 100) + ' %';
+}
+
+/** Stunden je Tag kompakt, gleiche Werte zusammen: "Di, Do je 1 h; Mi 3 h". */
+function fmtDayHours(list) {
+    const groups = [];
+    list.forEach((h, d) => {
+        if (h <= EPS) return;
+        let g = groups.find(x => Math.abs(x.h - h) < 0.005);
+        if (!g) groups.push(g = { h: h, days: DAY_SHORT.map(() => false) });
+        g.days[d] = true;
+    });
+    return groups.map(g => {
+        const n = g.days.filter(Boolean).length;
+        return fmtDays(g.days) + (n > 1 && n < 7 ? ' je ' : ' ') + fmtHours(g.h);
+    }).join('; ');
 }
 
 /** Wochentage kompakt: "täglich", "Mo–Fr", "Mo, Mi, Fr", "Sa–So". */

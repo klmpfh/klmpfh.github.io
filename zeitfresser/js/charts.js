@@ -9,16 +9,17 @@
  * Schraffiert = Zeit, die ein Thema hat, seine Unterpunkte aber nicht
  * abdecken ("nicht zugeordnet", in der Farbe des Themas), bzw. nicht
  * verplante Zeit der Woche/des Tages ("frei", grau).
+ * Blasser schraffiert = Rest eines Wochenwerts, der nur flexibel auf die Tage
+ * verteilt ist.
  * Ergeben Unterpunkte mehr als das Thema selbst, werden sie in der Grafik
  * auf die Größe des Themas gestaucht und rot markiert. Alle roten
  * Markierungen pulsieren dauerhaft (CSS-Animationen in style.css), solange
  * der Fehler besteht.
  *
- * Tages-Logik: Ein Blatt verteilt seinen Wochenwert gleichmäßig auf seine
- * Wochentage. Ein Thema mit Unterpunkten besteht an einem Tag aus seinen
- * Unterpunkten plus seinem nicht zugeordneten Rest, der sich gleichmäßig
- * auf die Tage des Themas verteilt – so bleibt die Wochensumme gleich, auch
- * wenn ein Unterpunkt nur an einzelnen Tagen stattfindet.
+ * Tages-Logik (dayPlan in state.js): Ein Blatt verteilt seinen Wochenwert
+ * gleichmäßig auf seine Wochentage. Ein Thema mit Unterpunkten besteht an einem
+ * Tag aus seinen Unterpunkten plus dem Rest: beim Tageswert, was an diesem Tag
+ * fehlt, beim Wochenwert so verteilt, dass die Tage möglichst gleich voll werden.
  *
  * Maßstab: Alle Zeilen teilen sich denselben, damit dieselbe Stundenzahl an
  * jedem Tag gleich lang ist. Ist ein Tag überbucht, werden deshalb alle
@@ -49,7 +50,7 @@ function tipNode(label, node, ref, scaledBy) {
     const lines = [
         label,
         fmtHours(w) + ' pro Woche · ' + fmtPercent(w / ref) + ' der Woche',
-        fmtHours(w / dayCount(node)) + ' pro Tag · ' + fmtDays(node.days)
+        (isEven(node) ? '' : 'Ø ') + fmtHours(w / dayCount(node)) + ' pro Tag · ' + fmtDays(node.days)
     ];
     if (scaledBy) lines.push(tipScaled(scaledBy));
     return lines.join('\n');
@@ -59,8 +60,9 @@ function tipScaled(scaledBy) {
     return '⚠ Unterpunkte von „' + scaledBy + '“ ergeben mehr als das Thema selbst – hier gestaucht dargestellt.';
 }
 
-function tipRest(label, hours, ref, unit) {
-    return label + ' – nicht zugeordnet\n' + fmtHours(hours) + ' ' + unit + ' · ' + fmtPercent(hours / ref);
+function tipRest(label, hours, ref, unit, flexible) {
+    return label + ' – nicht zugeordnet\n' + fmtHours(hours) + ' ' + unit + ' · ' + fmtPercent(hours / ref) +
+        (flexible ? '\nflexibel, gleichmäßig auf die Tage verteilt' : '');
 }
 
 function tipFree(hours, ref, unit) {
@@ -70,31 +72,32 @@ function tipFree(hours, ref, unit) {
 /* ── Balken je Tag: Daten ── */
 
 /** Segmente eines Tages (day = 0..6) bzw. der Woche (day = null): Blätter
- *  (kind 'node') und nicht zugeordnete Reste von Themen (kind 'rest').
- *  hours = Breite in der Grafik (ggf. gestaucht), real = tatsächliche Stunden. */
-function collectSegments(nodes, day, colors, path, out, scale, scaledBy) {
-    scale = scale == null ? 1 : scale;
-    nodes.forEach(node => {
-        const w = weeklyHours(node);
-        if (w <= EPS) return;
-        const label = nodeLabel(path, node);
-        const n = dayCount(node);
-        const color = colors.get(node.id);
+ *  (kind 'node') und nicht zugeordnete Reste von Themen (kind 'rest', flexible =
+ *  nur auf die Tage verteilt). hours = Breite in der Grafik (ggf. gestaucht),
+ *  real = tatsächliche Stunden. */
+function collectSegments(nodes, day, colors) {
+    const out = [];
+    const pick = list => day == null ? sumOf(list) : list[day];
 
-        if (!node.children.length) {
-            const real = day == null ? w : (node.days[day] ? w / n : 0);
-            if (real > EPS) out.push({ id: node.id, kind: 'node', hours: real * scale, real: real, color: color, label: label, scaledBy: scaledBy || null });
-            return;
+    nodes.forEach(node => {
+        if (weeklyHours(node) <= EPS) return;
+        const label = nodeLabel('', node);
+        const plan = dayPlan(node);
+
+        function leaf(n, text, hours, scale) {
+            const real = pick(hours);
+            if (real <= EPS) return;
+            const shown = pick(hours.map((h, d) => h * scale[d]));
+            out.push({ id: n.id, kind: 'node', hours: shown, real: real, color: colors.get(n.id), label: text,
+                scaledBy: real - shown > EPS ? (node.name.trim() || 'Ohne Namen') : null });
         }
 
-        const cs = sumWeekly(node.children);
-        const over = cs > w + EPS;
-        collectSegments(node.children, day, colors, label, out, over ? scale * w / cs : scale,
-            over ? (node.name.trim() || 'Ohne Namen') : scaledBy);
-        if (w - cs > EPS) {
-            const rest = w - cs;
-            const real = day == null ? rest : (node.days[day] ? rest / n : 0);
-            if (real > EPS) out.push({ id: node.id, kind: 'rest', hours: real * scale, real: real, color: color, label: label });
+        if (!node.children.length) { leaf(node, label, plan.hours, plan.scale); return; }
+        node.children.forEach(c => leaf(c, nodeLabel(label, c), dayPlan(c).hours, plan.scale));
+        const rest = pick(plan.rest);
+        if (rest > EPS) {
+            out.push({ id: node.id, kind: 'rest', hours: rest, real: rest, color: colors.get(node.id), label: label,
+                flexible: plan.flexible && day != null });
         }
     });
     return out;
@@ -107,7 +110,7 @@ function computeDayRows(sc, colors) {
     const rows = [{ day: null, short: 'Woche', long: 'der Woche', ref: weekRef(sc) }];
     for (let d = 0; d < 7; d++) rows.push({ day: d, short: DAY_SHORT[d], long: 'am ' + DAY_LONG[d], ref: sc.hoursPerDay });
     rows.forEach(r => {
-        r.segs = collectSegments(sc.nodes, r.day, colors, '', []);
+        r.segs = collectSegments(sc.nodes, r.day, colors);
         r.total = r.segs.reduce((s, x) => s + x.hours, 0);
         r.free = r.ref - r.total;          // negativ = überbucht
         r.over = r.free < -EPS;
@@ -166,8 +169,9 @@ function renderDays(el, sc, colors) {
             seg.dataset.id = s.id;
             if (s.kind === 'rest') {
                 seg.classList.add('seg-rest');
-                seg.style.background = 'repeating-linear-gradient(135deg, ' + s.color + ' 0 2px, ' + rgbaFromHex(s.color, 0.16) + ' 2px 7px)';
-                seg.dataset.tip = tipRest(s.label, s.real, r.ref, r.long);
+                const line = s.flexible ? rgbaFromHex(s.color, 0.45) : s.color;
+                seg.style.background = 'repeating-linear-gradient(135deg, ' + line + ' 0 2px, ' + rgbaFromHex(s.color, s.flexible ? 0.08 : 0.16) + ' 2px 7px)';
+                seg.dataset.tip = tipRest(s.label, s.real, r.ref, r.long, s.flexible);
             } else {
                 seg.style.background = s.color;
                 const tipLines = [s.label, fmtHours(s.real) + ' ' + r.long + ' · ' + fmtPercent(s.real / r.ref)];
@@ -241,41 +245,46 @@ function computeSunburst(sc, colors) {
     const ring = Math.min(48, (SB.RMAX - SB.R0) / depth);
     const perHour = 2 * Math.PI / Math.max(ref, total, EPS);
     const arcs = [];
+    const r1 = SB.R0, r2 = r1 + ring, r3 = r2 + ring;
+    let a = 0;
 
-    function level(list, a, hourAngle, d, path, scaledBy) {
-        list.forEach(node => {
-            const w = weeklyHours(node);
-            if (w <= EPS) return;
-            const label = nodeLabel(path, node);
-            const ang = w * hourAngle;
-            const r1 = SB.R0 + d * ring;
-            const color = colors.get(node.id);
-            arcs.push({ kind: 'node', r1: r1, r2: r1 + ring, a0: a, a1: a + ang, color: color, id: node.id, tip: tipNode(label, node, ref, scaledBy) });
+    sc.nodes.forEach(node => {
+        const w = weeklyHours(node);
+        if (w <= EPS) return;
+        const label = nodeLabel('', node);
+        const end = a + w * perHour;
+        const color = colors.get(node.id);
+        arcs.push({ kind: 'node', r1: r1, r2: r2, a0: a, a1: end, color: color, id: node.id, tip: tipNode(label, node, ref, null) });
 
-            if (node.children.length) {
-                const cs = sumWeekly(node.children);
-                const over = cs > w + EPS;
-                level(node.children, a, over ? hourAngle * w / cs : hourAngle, d + 1, label,
-                    over ? (node.name.trim() || 'Ohne Namen') : scaledBy);
-                if (w - cs > EPS) {
-                    arcs.push({ kind: 'rest', r1: r1 + ring, r2: r1 + 2 * ring, a0: a + cs * hourAngle, a1: a + ang,
-                        color: color, id: node.id, tip: tipRest(label, w - cs, ref, 'pro Woche') });
-                } else if (over) {
-                    // Rote Kante außen am Ring der Unterpunkte: hier passt etwas nicht.
-                    const r = r1 + 2 * ring;
-                    arcs.push({ kind: 'over', r1: r + 1, r2: r + 5, a0: a, a1: a + ang, color: null, id: node.id,
-                        tip: label + ' – Unterpunkte zu groß\n⚠ ' + fmtHours(cs) + ' eingetragen, aber nur ' + fmtHours(w) +
-                            ' verfügbar – ' + fmtHours(cs - w) + ' zu viel' });
-                }
+        if (node.children.length) {
+            const plan = dayPlan(node);
+            let ca = a;
+            node.children.forEach(c => {
+                const real = weeklyHours(c);
+                if (real <= EPS) return;
+                const shown = sumOf(dayPlan(c).hours.map((h, d) => h * plan.scale[d]));
+                const scaledBy = real - shown > EPS ? (node.name.trim() || 'Ohne Namen') : null;
+                arcs.push({ kind: 'node', r1: r2, r2: r3, a0: ca, a1: ca + shown * perHour, color: colors.get(c.id), id: c.id,
+                    tip: tipNode(nodeLabel(label, c), c, ref, scaledBy) });
+                ca += shown * perHour;
+            });
+            const rest = sumOf(plan.rest), over = sumOf(plan.over);
+            if (rest > EPS) {
+                arcs.push({ kind: 'rest', r1: r2, r2: r3, a0: ca, a1: end, color: color, id: node.id, tip: tipRest(label, rest, ref, 'pro Woche', false) });
             }
-            a += ang;
-        });
-        return a;
-    }
+            if (over > EPS) {
+                // Rote Kante außen am Ring der Unterpunkte: hier passt etwas nicht.
+                arcs.push({ kind: 'over', r1: r3 + 1, r2: r3 + 5, a0: a, a1: ca, color: null, id: node.id,
+                    tip: label + ' – Unterpunkte zu groß\n⚠ ' + (node.per === 'day'
+                        ? 'zu viel: ' + fmtDayHours(plan.over)
+                        : fmtHours(sumOf(plan.kids)) + ' eingetragen, aber nur ' + fmtHours(w) + ' verfügbar – ' + fmtHours(over) + ' zu viel') });
+            }
+        }
+        a = end;
+    });
 
-    const end = level(sc.nodes, 0, perHour, 0, '', null);
     if (ref - total > EPS) {
-        arcs.push({ kind: 'free', r1: SB.R0, r2: SB.R0 + ring, a0: end, a1: 2 * Math.PI, color: null, id: null, tip: tipFree(ref - total, ref, 'der Woche') });
+        arcs.push({ kind: 'free', r1: SB.R0, r2: SB.R0 + ring, a0: a, a1: 2 * Math.PI, color: null, id: null, tip: tipFree(ref - total, ref, 'der Woche') });
     }
     return { arcs: arcs.filter(x => x.a1 - x.a0 >= 1e-4), total: total, ref: ref };
 }
@@ -371,13 +380,15 @@ function renderLegend(el, sc, colors) {
     if (ref - total > EPS) row(null, 'swatch-free', 'Frei / nicht verplant', ref - total, null);
     el.appendChild(list);
 
-    const hasRest = sc.nodes.some(n => n.children.length && weeklyHours(n) - sumWeekly(n.children) > EPS);
+    const hasRest = sc.nodes.some(n => n.children.length && sumOf(dayPlan(n).rest) > EPS);
     if (hasRest) {
         const key = document.createElement('p');
         key.className = 'legend-key';
         const sw = document.createElement('span');
         sw.className = 'legend-swatch swatch-rest';
-        key.append(sw, document.createTextNode('schraffiert in Themenfarbe: von den Unterpunkten nicht abgedeckt'));
+        const flexible = sc.nodes.some(n => dayPlan(n).flexible);
+        key.append(sw, document.createTextNode('schraffiert in Themenfarbe: von den Unterpunkten nicht abgedeckt' +
+            (flexible ? ' (an den Tagen blasser: Wochenwert, flexibel verteilt)' : '')));
         el.appendChild(key);
     }
 

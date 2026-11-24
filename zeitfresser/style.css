@@ -714,6 +714,7 @@ button:focus-visible {
 .node-value.is-auto::placeholder {
     color: var(--text-muted);
     font-style: italic;
+    font-size: 12.5px;
     opacity: 1;
 }
 

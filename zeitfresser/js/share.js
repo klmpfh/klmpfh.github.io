@@ -31,12 +31,12 @@ function shareTheme() {
 
 /** Füllt eine Fläche (Path2D) mit Schraffur: grau für "frei", sonst in der
  *  übergebenen Themenfarbe (nicht zugeordneter Rest). */
-function fillHatched(ctx, path, t, color) {
+function fillHatched(ctx, path, t, color, faint) {
     ctx.save();
-    ctx.fillStyle = color ? rgbaFromHex(color, 0.16) : t.freeBg;
+    ctx.fillStyle = color ? rgbaFromHex(color, faint ? 0.08 : 0.16) : t.freeBg;
     ctx.fill(path);
     ctx.clip(path);
-    ctx.strokeStyle = color || t.freeLine;
+    ctx.strokeStyle = color ? rgbaFromHex(color, faint ? 0.45 : 1) : t.freeLine;
     ctx.lineWidth = 2;
     ctx.beginPath();
     // Diagonale Linien über die gesamte Zeichenfläche; der Clip begrenzt sie.
@@ -153,7 +153,7 @@ function renderShareCanvas(sc) {
         ctx.fillStyle = t.muted;
         ctx.fillText(r.short, L, cy);
 
-        const items = r.segs.map(s => ({ hours: s.hours, real: s.real, color: s.color, rest: s.kind === 'rest' }));
+        const items = r.segs.map(s => ({ hours: s.hours, real: s.real, color: s.color, rest: s.kind === 'rest', flexible: s.flexible }));
         if (r.free > EPS) items.push({ hours: r.free, real: r.free, color: null, rest: false });
         const segGap = 1;
         let x = barX;
@@ -163,7 +163,7 @@ function renderShareCanvas(sc) {
             const w = Math.max(1, slot - segGap);
             const p = roundRectPath(x, y, w, h, 4);
             if (it.rest) {
-                fillHatched(ctx, p, t, it.color);
+                fillHatched(ctx, p, t, it.color, it.flexible);
             } else if (it.color) {
                 ctx.fillStyle = it.color;
                 ctx.fill(p);

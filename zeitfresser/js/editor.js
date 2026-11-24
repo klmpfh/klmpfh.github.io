@@ -169,7 +169,8 @@ function buildSumActions(node) {
     const set = el('button', 'btn-info', fmtNumber(childrenAmount(node)) + (node.per === 'day' ? ' h/T' : ' h/W') + ' eintragen');
     set.type = 'button';
     set.dataset.action = 'sum-set';
-    set.title = 'Summe der Unterpunkte als festen Wert des Themas eintragen';
+    set.title = node.per === 'day' ? 'Den vollsten Tag der Unterpunkte als festen Wert pro Tag eintragen'
+        : 'Summe der Unterpunkte als festen Wert des Themas eintragen';
     const auto = el('button', 'btn-info', 'Wert entfernen (automatisch)');
     auto.type = 'button';
     auto.dataset.action = 'sum-auto';
@@ -191,6 +192,7 @@ function updateInfos() {
         const n = dayCount(node);
         const w = weeklyHours(node);
         const auto = isAutoSum(node);
+        const even = isEven(node);
         let over = false;
 
         if (!n) {
@@ -201,37 +203,41 @@ function updateInfos() {
             const perWeek = h => fmtNumber(h) + ' h/W';
             const parts = node.per === 'day'
                 ? ['= ' + perWeek(w), fmtDays(node.days), fmtPercent(w / ref) + ' der Woche']
-                : ['= ' + perDay(w / n), fmtDays(node.days), fmtPercent(w / ref) + ' der Woche'];
+                : [(even ? '= ' : 'Ø ') + perDay(w / n), fmtDays(node.days), fmtPercent(w / ref) + ' der Woche'];
             info.appendChild(el('span', 'info-main', parts.join(' · ')));
 
+            const plan = node.children.length ? dayPlan(node) : null;
+            const addRest = text => {
+                const span = el('span', 'info-rest');
+                span.appendChild(el('span', 'info-hatch'));
+                span.appendChild(document.createTextNode(text));
+                info.appendChild(span);
+            };
             if (auto) {
-                info.appendChild(el('span', 'info-auto', 'Σ automatisch: Summe der Unterpunkte'));
-            } else if (node.children.length) {
-                const cs = sumWeekly(node.children);
+                info.appendChild(el('span', 'info-auto', 'Σ automatisch: ' + (fmtDayHours(plan.kids) || 'Summe der Unterpunkte')));
+            } else if (plan) {
                 const label = node.name.trim() || 'dieses Thema';
-                // Pro-Tag-Werte beziehen sich auf die beim Thema gewählten Tage.
-                if (cs - w > EPS) {
-                    over = true;
-                    info.appendChild(el('span', 'info-warn zf-pulse',
-                        '⚠ Unterpunkte: ' + perDay(cs / n) + ' (' + perWeek(cs) + ') – ' +
-                        perDay((cs - w) / n) + ' mehr als „' + label + '“'));
+                const rest = sumOf(plan.rest), tooMuch = sumOf(plan.over);
+                over = tooMuch > EPS;
+                if (over) {
+                    info.appendChild(el('span', 'info-warn zf-pulse', node.per === 'day'
+                        ? '⚠ Unterpunkte mehr als „' + label + '“ (' + perDay(node.amount) + '), zu viel: ' + fmtDayHours(plan.over)
+                        : '⚠ Unterpunkte: ' + perWeek(sumOf(plan.kids)) + ' – ' + perWeek(tooMuch) + ' mehr als „' + label + '“'));
                     info.appendChild(buildSumActions(node));
-                } else if (w - cs > EPS) {
-                    const span = el('span', 'info-rest');
-                    span.appendChild(el('span', 'info-hatch'));
-                    span.appendChild(document.createTextNode(
-                        'Unterpunkte: ' + fmtNumber(cs / n) + ' von ' + perDay(w / n) + ' (' +
-                        fmtNumber(cs) + ' von ' + perWeek(w) + ') – ' +
-                        perDay((w - cs) / n) + ' (' + perWeek(w - cs) + ') nicht zugeordnet'));
-                    info.appendChild(span);
-                } else {
-                    info.appendChild(el('span', 'info-ok', '✓ Unterpunkte decken alles ab'));
                 }
+                if (rest > EPS) {
+                    addRest(node.per === 'day'
+                        ? 'Nicht zugeordnet: ' + fmtDayHours(plan.rest) + ' (' + perWeek(rest) + ')'
+                        : 'Unterpunkte: ' + fmtNumber(sumOf(plan.kids)) + ' von ' + perWeek(w) + ' – ' + perWeek(rest) +
+                            ' nicht zugeordnet, flexibel verteilt: ' + fmtDayHours(plan.rest));
+                }
+                if (!over && rest <= EPS) info.appendChild(el('span', 'info-ok', '✓ Unterpunkte decken alles ab'));
             }
         }
         valueInput.classList.toggle('is-over', over);
         valueInput.classList.toggle('is-auto', auto);
-        valueInput.placeholder = auto ? fmtNumber(childrenAmount(node)) : '0';
+        // Pro Tag, aber an den Tagen verschieden: Durchschnitt
+        valueInput.placeholder = !auto ? '0' : node.per === 'week' ? fmtNumber(w) : (even ? '' : 'Ø ') + fmtNumber(n ? w / n : 0);
         valueInput.title = 'Stunden, z. B. 6, 1,5 oder 1:30' +
             (node.children.length ? ' – leer = Summe der Unterpunkte' : '');
     });

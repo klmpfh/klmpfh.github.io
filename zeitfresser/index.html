@@ -8,20 +8,20 @@
     <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="../assets/css/reset.css">
     <link rel="stylesheet" href="../assets/css/theme.css">
-    <link rel="stylesheet" href="style.css?v=1.8">
+    <link rel="stylesheet" href="style.css?v=1.9">
     <!-- ?v= immer zusammen mit den Versionsnummern unten ändern: Sonst läuft die neue Seite mit alten Dateien aus dem Browser-Cache. -->
     <!-- Klassische Skripte (keine ES-Module), damit die Seite auch per file:// läuft; Reihenfolge ist wichtig, main.js zuletzt. -->
-    <script src="js/state.js?v=1.8" defer></script>
-    <script src="../assets/js/sync-core.js?v=1.8" defer></script>
-    <script src="../assets/js/transfer.js?v=1.8" defer></script>
-    <script src="js/sync.js?v=1.8" defer></script>
-    <script src="js/colors.js?v=1.8" defer></script>
-    <script src="js/dialog.js?v=1.8" defer></script>
-    <script src="js/charts.js?v=1.8" defer></script>
-    <script src="js/share.js?v=1.8" defer></script>
-    <script src="js/editor.js?v=1.8" defer></script>
-    <script src="js/transfer.js?v=1.8" defer></script>
-    <script src="js/main.js?v=1.8" defer></script>
+    <script src="js/state.js?v=1.9" defer></script>
+    <script src="../assets/js/sync-core.js?v=1.9" defer></script>
+    <script src="../assets/js/transfer.js?v=1.9" defer></script>
+    <script src="js/sync.js?v=1.9" defer></script>
+    <script src="js/colors.js?v=1.9" defer></script>
+    <script src="js/dialog.js?v=1.9" defer></script>
+    <script src="js/charts.js?v=1.9" defer></script>
+    <script src="js/share.js?v=1.9" defer></script>
+    <script src="js/editor.js?v=1.9" defer></script>
+    <script src="js/transfer.js?v=1.9" defer></script>
+    <script src="js/main.js?v=1.9" defer></script>
 </head>
 <body>
 <script src="../assets/js/nav.js"></script>
@@ -109,7 +109,7 @@
                 </button>
             </h2>
             <div class="panel-body" id="editorBody">
-                <p class="panel-hint">Wert pro Tag oder pro Woche, gültig an den gewählten Wochentagen. Die Unterpunkte teilen die Zeit ihres Themas auf. Bleibt der Wert eines Themas leer, gilt die Summe seiner Unterpunkte.</p>
+                <p class="panel-hint">Wert pro Tag (gilt an jedem gewählten Wochentag) oder pro Woche (verteilt sich auf die gewählten Wochentage). Die Unterpunkte teilen die Zeit ihres Themas auf. Bleibt der Wert eines Themas leer, gilt die Summe seiner Unterpunkte.</p>
                 <div id="tree" class="tree"></div>
                 <button type="button" class="btn btn-add" id="btnAddTop">+ Thema</button>
             </div>
