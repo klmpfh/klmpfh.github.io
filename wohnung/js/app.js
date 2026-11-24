@@ -1,4 +1,5 @@
-/* Wohnung (Kauf oder Miete) – Oberfläche, Speicherung, Export/Import.
+/* Wohnung (Kauf oder Miete) – Oberfläche, Speicherung, Export/Import, Einmal-Link
+   (Abgleich in sync.js, Verbindung in transfer.js).
    Zwei Ansichten über den URL-Hash: Übersicht ("" / "#") mit den Zusagen der
    Bank, Personen und dem Vergleich aller Wohnungen, und "#w=<id>" mit allem, was zu
    einer einzelnen Wohnung gehört. Rechenlogik liegt in calc.js (WK). */
@@ -306,18 +307,29 @@
 
     /* ---------- Speichern ---------- */
 
+    // Wann welches Feld zuletzt geändert wurde (sync.js), und der Stand, für den das gilt.
+    var stamps = {}, stampBase = null;
     var state = load();
     var saveTimer = null;
     var saveWarned = false;
 
     function load() {
+        var s = loadState();
+        stampBase = SYNC.plain(s);
+        return s;
+    }
+
+    function loadState() {
+        stamps = {};
         try {
             var raw = localStorage.getItem(KEY);
             if (raw) {
                 var data = JSON.parse(raw);
                 // Die Finanzangaben fallen beim nächsten Speichern weg – den alten Stand einmal aufheben.
                 if (isLegacy(data) && !localStorage.getItem(KEY + '-alt')) localStorage.setItem(KEY + '-alt', raw);
-                return normalizeState(data);
+                var s = normalizeState(data);
+                stamps = SYNC.cleanStamps(data.stamps);
+                return s;
             }
         } catch (e) { /* kaputte oder fehlende Daten → frisch starten */ }
         return normalizeState(null);
@@ -326,14 +338,26 @@
     function saveNow() {
         clearTimeout(saveTimer);
         saveTimer = null;
+        var now = SYNC.plain(state);
+        SYNC.stamp(stampBase, now, stamps, Date.now());
+        stampBase = now;
         try {
-            localStorage.setItem(KEY, JSON.stringify(Object.assign({ version: 1 }, dataOut())));
+            localStorage.setItem(KEY, JSON.stringify(Object.assign({ version: 1, stamps: stamps }, dataOut())));
         } catch (e) {
             if (!saveWarned) {
                 saveWarned = true;
                 alert('Speichern im Browser nicht möglich (privater Modus?). Bitte zwischendurch exportieren.');
             }
         }
+    }
+
+    /** Ersetzt den ganzen Stand. Ohne Zeitstempel (Import einer Datei) gilt nichts darin
+     *  als neuer oder gelöscht, damit ein späterer Abgleich nichts wegnimmt. */
+    function replaceState(next, nextStamps) {
+        state = next;
+        stamps = nextStamps || {};
+        stampBase = SYNC.plain(state);
+        saveNow();
     }
 
     function scheduleSave() {
@@ -343,6 +367,14 @@
 
     window.addEventListener('pagehide', function () { if (saveTimer) saveNow(); });
     document.addEventListener('visibilitychange', function () { if (document.hidden && saveTimer) saveNow(); });
+    // In einem anderen Tab geändert: übernehmen, sonst überschreibt dieser Tab es beim nächsten Speichern.
+    window.addEventListener('storage', function (e) {
+        if (e.key !== KEY || !e.newValue) return;
+        clearTimeout(saveTimer);
+        saveTimer = null;
+        state = load();
+        route();
+    });
 
     /* ---------- DOM-Helfer ---------- */
 
@@ -596,8 +628,7 @@
                 var msg = 'Alles durch die Datei ersetzen?\n\nDatei: Finanzierung, Personen + ' + next.flats.length + ' Wohnung(en)\n' +
                     'Jetzt hier: ' + state.flats.length + ' Wohnung(en) – gehen verloren, falls nicht exportiert.';
                 if (!confirm(msg)) return;
-                state = next;
-                saveNow();
+                replaceState(next);
                 location.hash = '';
                 route();
             } else if (data && isObj(data.flat) && !data.flat.id && !data.exported) {
@@ -627,6 +658,271 @@
             }
         });
     });
+
+    /* ---------- Übertragen per Einmal-Link ---------- */
+
+    var BACKUP_KEY = KEY + '-vorher';
+    var transferMode = 'sync';
+    var transferOut = null;      // laufende oder letzte Sitzung beim Senden (transfer.js)
+    var transferIn = null;       // geöffneter Link beim Empfangen
+    var transferNote = null;     // was der letzte Abgleich auf diesem Gerät geändert hat (SYNC.diff)
+
+    function current() {
+        saveNow();
+        return { data: SYNC.plain(state), stamps: stamps };
+    }
+
+    /** Stand vom anderen Gerät prüfen: { data, stamps } in der heutigen Form, sonst Fehler. */
+    function readTransfer(x) {
+        if (!isObj(x) || !isObj(x.data) || !isObj(x.data.profile) || !Array.isArray(x.data.flats) || !Array.isArray(x.data.people)) throw new Error('Keine Wohnungsdaten');
+        var s = normalizeState(x.data);
+        // Was sich nicht rechnen lässt, soll gar nicht erst gespeichert werden.
+        s.flats.forEach(function (f) { WK.analyze(f, s.profile, s.flats); WK.wishScore(f, s.people, s.wishes); });
+        [s.people, s.wishes, s.flats, s.profile.privateCosts].forEach(function (list) {
+            list.forEach(function (e) { if (!/^[\w-]{1,60}$/.test(e.id)) throw new Error('Ungültige Kennung'); });
+        });
+        return { data: SYNC.plain(s), stamps: SYNC.cleanStamps(x.stamps) };
+    }
+
+    /** Übernimmt einen fertigen Stand und hebt den bisherigen zum Wiederherstellen auf. */
+    function applyTransfer(next) {
+        var before = current();
+        var s = normalizeState(next.data);
+        var changes = SYNC.diff(before.data, SYNC.plain(s));
+        if (changes.length && !SYNC.pristine(before.data)) {
+            try { localStorage.setItem(BACKUP_KEY, JSON.stringify(Object.assign({ at: Date.now() }, before))); } catch (e) { /* kein Platz: dann ohne */ }
+        }
+        replaceState(s, next.stamps);
+        return changes;
+    }
+
+    function readBackup() {
+        try {
+            var b = JSON.parse(localStorage.getItem(BACKUP_KEY));
+            return b && isObj(b.data) ? b : null;
+        } catch (e) { return null; }
+    }
+
+    function restoreBackup() {
+        var b = readBackup();
+        if (!b || !confirm('Den Stand von ' + fmtTime(b.at) + ' wiederherstellen?\n\nAlles, was seitdem auf diesem Gerät übernommen oder geändert wurde, geht verloren.')) return;
+        replaceState(normalizeState(b.data), SYNC.cleanStamps(b.stamps));
+        try { localStorage.removeItem(BACKUP_KEY); } catch (e) { /* egal */ }
+        transferNote = null;
+        route();
+    }
+
+    function fmtTime(ms, timeOnly) {
+        var d = new Date(ms), time = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+        return timeOnly ? time : d.toLocaleDateString('de-DE', { day: 'numeric', month: 'numeric' }) + ', ' + time;
+    }
+
+    function changeList(changes) {
+        var words = [['added', 'neu'], ['changed', 'geändert'], ['removed', 'entfernt']];
+        return el('ul', { class: 'transfer-changes small' }, changes.map(function (c) {
+            return el('li', null, [el('b', { text: c.label + ': ' }), words.filter(function (w) { return c[w[0]].length; }).map(function (w) {
+                // Bei Finanzierung und Nebenkosten gibt es keine einzelnen Namen.
+                return c.whole ? w[1] : c[w[0]].join(', ') + ' (' + w[1] + ')';
+            }).join('; ')]);
+        }));
+    }
+
+    /* Senden */
+
+    var OUT_TEXT = {
+        connecting: 'Verbinde …',
+        offline: 'Gerade keine Verbindung, sie wird neu aufgebaut …',
+        sending: 'Überträgt …',
+        confirm: 'Angekommen. Auf dem anderen Gerät muss der Abgleich jetzt bestätigt werden, lass diese Seite so lange offen.',
+        sent: 'Übertragen. Der Link ist verbraucht.',
+        synced: 'Abgeglichen, beide Geräte haben jetzt denselben Stand. Der Link ist verbraucht.',
+        declined: 'Das andere Gerät hat die Daten nicht übernommen, hier hat sich nichts geändert. Der Link ist verbraucht.',
+        noReply: 'Die Daten sind angekommen, aber es kam nichts zurück. Hier hat sich nichts geändert. Der Link ist verbraucht.',
+        broken: 'Die Verbindung ist während der Übertragung abgebrochen. Der Link ist verbraucht, bitte einen neuen erstellen.',
+        badResult: 'Die Antwort des anderen Geräts war nicht lesbar, hier hat sich nichts geändert. Der Link ist verbraucht. Bitte auf beiden Geräten die Seite neu laden.',
+        expired: 'Der Link ist abgelaufen.',
+        cancelled: 'Abgebrochen, der Link gilt nicht mehr.',
+        error: 'Der Vermittlungsdienst ist gerade nicht erreichbar. Bitte später noch einmal versuchen oder die Daten als Datei übertragen.',
+        unsupported: 'Das geht in diesem Browser nicht. Bitte die Daten als Datei übertragen.'
+    };
+
+    function startTransfer() {
+        if (transferOut) transferOut.cancel();
+        transferNote = null;
+        var t = TRANSFER.send({
+            mode: transferMode,
+            payload: current,
+            onChange: function () { if (t === transferOut) refreshTransfer(); },
+            onResult: function (x) {
+                // Was hier in der Zwischenzeit eingegeben wurde, bleibt erhalten.
+                transferNote = applyTransfer(SYNC.merge(current(), readTransfer(x)));
+                route();
+            }
+        });
+        transferOut = t;
+        refreshTransfer();
+    }
+
+    function refreshTransfer() {
+        var box = document.getElementById('transfer');
+        if (box) renderTransfer(box);
+    }
+
+    function renderTransfer(box) {
+        var t = transferOut, active = t && !t.ended, open = active && (t.status === 'waiting' || t.status === 'offline');
+        var backup = readBackup();
+        box.innerHTML = '';
+        if (t) {
+            box.appendChild(el('p', { class: 'transfer-text', role: 'status', text: t.status === 'waiting'
+                ? 'Wartet auf das andere Gerät. Gültig bis ' + fmtTime(t.until, true) + ', für genau eine Übertragung.' : OUT_TEXT[t.status] }));
+        }
+        if (t && t.status === 'synced' && transferNote) {
+            if (transferNote.length) box.appendChild(changeList(transferNote));
+            else box.appendChild(el('p', { class: 'small muted transfer-text', text: 'Hier war schon alles auf dem neuesten Stand.' }));
+        }
+        if (open) {
+            var qr = el('div', { class: 'transfer-qr' });
+            var input = el('input', { type: 'text', readonly: true, 'aria-label': 'Einmal-Link', onfocus: function (e) { e.target.select(); } });
+            input.value = t.link;
+            box.appendChild(el('div', { class: 'transfer-link' }, [
+                qr,
+                el('div', { class: 'transfer-share' }, [
+                    el('p', { class: 'small muted', text: 'Link verschicken oder QR-Code scannen. Lass diese Seite offen, bis hier steht, dass es geklappt hat. ' +
+                        'Wer den Link zuerst öffnet, bekommt alle Daten, auch die Finanzierung' +
+                        (t.mode === 'sync' ? ', und kann deine ändern (der jetzige Stand bleibt wiederherstellbar).' : '.') }),
+                    input,
+                    el('div', { class: 'actions' }, [
+                        btn('Link kopieren', 'btn-primary', function (e) { copyText(t.link, e.currentTarget); }),
+                        navigator.share ? btn('Teilen …', 'btn-ghost', function () {
+                            navigator.share({ title: 'Wohnung', url: t.link }).catch(function () { /* abgebrochen */ });
+                        }) : null,
+                        btn('Abbrechen', 'btn-ghost', function () { t.cancel(); })
+                    ])
+                ])
+            ]));
+            TRANSFER.loadQr().then(function () {
+                if (qr.isConnected) new QRCode(qr, { text: t.link, width: 176, height: 176, colorDark: '#14121a', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.L });
+            }).catch(function () { qr.remove(); });
+        } else if (active) {
+            box.appendChild(el('div', { class: 'actions' }, [btn('Abbrechen', 'btn-ghost', function () { t.cancel(); })]));
+        } else {
+            box.appendChild(el('div', { class: 'transfer-start' }, [
+                fieldWrap('Richtung', selectBox([['sync', 'In beide Richtungen abgleichen'], ['send', 'Nur von hier senden']], transferMode, 'Richtung', function (v) { transferMode = v; })),
+                btn(t ? 'Neuen Einmal-Link erstellen' : 'Einmal-Link erstellen', 'btn-primary', startTransfer)
+            ]));
+        }
+        if (backup && !active) {
+            box.appendChild(el('div', { class: 'actions transfer-undo' }, [
+                btn('Stand vor der letzten Übertragung wiederherstellen (' + fmtTime(backup.at) + ')', 'btn-ghost', restoreBackup)
+            ]));
+        }
+    }
+
+    /* Empfangen */
+
+    var IN_TEXT = {
+        connecting: 'Verbinde mit dem anderen Gerät …',
+        replying: 'Schicke den gemeinsamen Stand zurück …',
+        done: 'Abgeglichen, beide Geräte haben jetzt denselben Stand.',
+        noAck: 'Hier ist alles übernommen, aber das andere Gerät hat den gemeinsamen Stand nicht bestätigt. Für den Rückweg kannst du hier unter „Daten übertragen“ einen neuen Einmal-Link erstellen.',
+        invalid: 'Dieser Link ist ungültig. Wurde er vollständig kopiert?',
+        denied: 'Der Schlüssel im Link passt nicht. Wurde er vollständig kopiert? Auf dem anderen Gerät gilt der Link weiter.',
+        version: 'Die beiden Geräte haben verschiedene Versionen dieser Seite. Bitte auf beiden neu laden und einen neuen Link erstellen.',
+        gone: 'Das andere Gerät ist nicht erreichbar. Entweder ist der Link schon benutzt oder abgelaufen, oder die Seite ist dort gerade nicht offen.',
+        offline: 'Keine Verbindung zum Vermittlungsdienst. Bist du online?',
+        unsupported: 'Das geht in diesem Browser nicht. Öffne den Link in einem aktuellen Browser, er gilt weiter.',
+        unreadable: 'Die Daten vom anderen Gerät sind nicht lesbar. Bitte auf beiden Geräten die Seite neu laden und einen neuen Link erstellen.',
+        taken: 'Übernommen.'
+    };
+
+    function leaveTransfer() {
+        if (transferIn && transferIn.close) transferIn.close();
+        transferIn = null;
+    }
+
+    function openTransfer(value) {
+        var r = TRANSFER.receive(value, function () {
+            if (r !== transferIn) return;
+            if (r.status === 'received' && !r.remote) {
+                try { r.remote = readTransfer(r.data); } catch (e) {
+                    console.warn('Wohnung: Daten nicht lesbar.', e);
+                    r.close();
+                    r.status = 'unreadable';
+                }
+            }
+            route();
+        });
+        return r;
+    }
+
+    function renderTransferIn(value) {
+        if (!transferIn || transferIn.value !== value) {
+            leaveTransfer();
+            transferIn = openTransfer(value);
+        }
+        var r = transferIn, body = [], again = r.status === 'gone' || r.status === 'offline';
+        document.title = 'Daten empfangen – Wohnung';
+        app.innerHTML = '';
+
+        /** Zur Übersicht, ohne den Link in der Adresse zu lassen. */
+        function leave() {
+            leaveTransfer();
+            history.replaceState(null, '', '#');
+            route();
+        }
+        function text(s, cls) { body.push(el('p', { class: 'transfer-text' + (cls ? ' ' + cls : ''), text: s })); }
+        function actions(list) { body.push(el('div', { class: 'actions' }, list)); }
+
+        if (r.status === 'ready') {
+            text('Jemand möchte dir die Daten aus „Wohnung“ schicken. Der Link gilt nur einmal, und auf dem anderen Gerät muss die Seite gerade offen sein.');
+            text('Alles landet in diesem Browser. Hat sich der Link innerhalb einer anderen App geöffnet (z. B. WhatsApp oder Telegram), öffne ihn erst im normalen Browser.', 'small muted');
+            actions([btn('Verbinden', 'btn-primary', r.start), btn('Abbrechen', 'btn-ghost', leave)]);
+        } else if (r.status === 'received') {
+            renderReceived(r, body, text, actions, leave);
+        } else {
+            text(IN_TEXT[r.status]);
+            if (r.changes && r.changes.length) body.push(changeList(r.changes));
+            if (r.status === 'connecting') actions([btn('Abbrechen', 'btn-ghost', leave)]);
+            else if (r.status !== 'replying') actions([
+                again ? btn('Erneut versuchen', 'btn-primary', r.start) : null,
+                btn('Zur Übersicht', again ? 'btn-ghost' : 'btn-primary', leave)
+            ]);
+        }
+        app.appendChild(panel('Daten empfangen', body));
+    }
+
+    function renderReceived(r, body, text, actions, leave) {
+        var mine = current(), fresh = SYNC.pristine(mine.data), sync = r.mode === 'sync';
+        var merged = SYNC.merge(r.remote, mine);
+        var changes = SYNC.diff(mine.data, SYNC.plain(normalizeState(merged.data)));
+        var count = r.remote.data.flats.length;
+
+        function take(next) {
+            return function () {
+                var done = applyTransfer(next);
+                r.changes = fresh ? null : done;
+                if (sync) r.reply(next);
+                else { r.close(); r.status = 'taken'; route(); }
+            };
+        }
+
+        text('Vom anderen Gerät: ' + (count === 1 ? '1 Wohnung' : count + ' Wohnungen') + ', Finanzierung, Personen und Wünsche.');
+        if (!fresh) {
+            if (changes.length) {
+                text('Das ändert sich hier:', 'small muted');
+                body.push(changeList(changes));
+                text('Je Angabe zählt die neuere Änderung. Den jetzigen Stand kannst du danach unter „Daten übertragen“ wiederherstellen.', 'small muted');
+            } else text('Hier ändert sich nichts.' + (sync && r.online ? ' Das andere Gerät bekommt, was dort noch fehlt.' : ''), 'small muted');
+        }
+        if (sync && !r.online) text('Die Verbindung ist inzwischen weg. Du kannst die Daten hier noch übernehmen, aber es geht nichts zurück.', 'small bad-text');
+        actions([
+            btn(fresh ? 'Übernehmen' : sync && r.online ? 'Abgleichen' : 'Zusammenführen', 'btn-primary', take(merged)),
+            fresh || sync ? null : btn('Alles hier ersetzen', 'btn-ghost', function () {
+                if (confirm('Alles auf diesem Gerät durch die empfangenen Daten ersetzen?')) take(r.remote)();
+            }),
+            btn('Verwerfen', 'btn-ghost', leave)
+        ]);
+    }
 
     /* ---------- Angebot per KI übernehmen ----------
        Prompt und Einlesen der Antwort stehen in offer.js (OFFER). */
@@ -1058,12 +1354,20 @@
         }));
         renderCostsEditor(costsBox);
 
+        var transferBox = el('div', { id: 'transfer', class: 'transfer' });
         app.appendChild(panel('Daten übertragen', [
+            el('h3', { class: 'group-title', text: 'Per Einmal-Link' }),
+            el('p', { class: 'muted small group-hint', text: 'Überträgt alles direkt auf ein anderes Gerät, deins oder das von jemandem, mit dem du suchst. Beide müssen gleichzeitig online sein, danach gilt der Link nicht mehr. ' +
+                'Beim Abgleich zählt je Angabe die neuere Änderung, auch Gelöschtes. Die Daten gehen verschlüsselt von Gerät zu Gerät, der öffentliche Dienst PeerJS vermittelt nur die Verbindung.' }),
+            transferBox,
+            el('h3', { class: 'group-title', text: 'Als Datei' }),
+            el('p', { class: 'muted small group-hint', text: 'Der Export enthält die Finanzierung, Personen & Wünsche und alle Wohnungen (Kauf und Miete). Eine Gesamt-Datei importieren ersetzt alles auf dem Zielgerät; eine einzelne Wohnung (exportiert oder von einer KI aus einem Angebot gelesen) wird nur hinzugefügt.' }),
             el('div', { class: 'actions' }, [
                 btn('Alles exportieren (JSON)', 'btn-ghost', exportAll),
                 btn('Importieren …', 'btn-ghost', function () { importInput.click(); })
             ])
-        ], { hint: 'Der Export enthält die Finanzierung, Personen & Wünsche und alle Wohnungen (Kauf und Miete). Eine Gesamt-Datei importieren ersetzt alles auf dem Zielgerät; eine einzelne Wohnung (exportiert oder von einer KI aus einem Angebot gelesen) wird nur hinzugefügt.' }));
+        ]));
+        renderTransfer(transferBox);
 
         currentUpdate = function () {
             updateIncludes(peopleBox);
@@ -2725,6 +3029,9 @@
     function route() {
         if (saveTimer) saveNow();
         currentUpdate = null;
+        var link = location.hash.match(/^#transfer=(.*)$/);
+        if (link) { renderTransferIn(link[1]); return; }
+        leaveTransfer();
         var m = location.hash.match(/^#w=(.+)$/);
         var id = m ? decodeURIComponent(m[1]) : null;
         var f = id ? state.flats.find(function (x) { return x.id === id; }) : null;
