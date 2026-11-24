@@ -383,6 +383,7 @@
 
     var app = document.getElementById('app');
     var currentUpdate = null;
+    var mapView = null;   // Karte der Übersicht (map.js)
 
     function esc(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -1192,6 +1193,57 @@
         p.places.splice(p.places.indexOf(x), 1);
     }
 
+    /* ---------- Karte (map.js) ---------- */
+
+    /** Wohnungen (Nummer wie in der Liste, Aussortierte zuletzt) und Orte mit Adresse. */
+    function mapItems() {
+        function away(near, name) {
+            return near.length ? el('dl', { class: 'card-facts' }, near.slice(0, 8).reduce(function (out, d) {
+                return out.concat([el('dt', { text: name(d.item) }), el('dd', { text: (d.rough ? 'ca. ' : '') + fmtKm(d.km) })]);
+            }, [])) : null;
+        }
+        function placeName(x) { return x.title + (x.sub ? ' (' + x.sub + ')' : ''); }
+
+        var flats = state.flats.filter(function (f) { return !DIARY.isOut(f); }).concat(state.flats.filter(DIARY.isOut));
+        var items = flats.map(function (f, i) {
+            var rent = f.kind === 'rent', cost = rent ? n(f.coldRent) + n(f.serviceCharges) + n(f.heatingCosts) : n(f.price);
+            var price = cost > 0 ? eur(cost) + (rent ? ' warm' : '') : '';
+            return {
+                id: f.id, kind: 'flat', mark: String(i + 1), title: f.name || 'Ohne Namen', out: DIARY.isOut(f), address: (f.address || '').trim(),
+                sub: (rent ? 'Miete' : 'Kauf') + (price ? ' · ' + price : '') + (DIARY.isOut(f) ? ' · ' + DIARY.label(f.status) : ''),
+                href: '#w=' + encodeURIComponent(f.id),
+                popup: function (near) {
+                    var a = WK.analyze(f, state.profile, state.flats);
+                    return el('div', null, [
+                        el('a', { class: 'map-title', href: this.href, text: this.title }),
+                        el('div', { class: 'card-sub', text: f.address }),
+                        f.status ? el('div', { html: statusTag(f.status) }) : null,
+                        el('div', { class: 'small', text: (rent ? 'Miete' : 'Kauf') + (price ? ' · ' + price : '') + (a.area ? ' · ' + fmtInput(a.area, 1) + ' m²' : '') }),
+                        started(a) ? el('div', { class: 'small' + (overLevel(a) ? ' ' + overLevel(a) + '-text' : ''), text: 'Netto-Wohnkosten ' + eur(a.netHousing) + ' / Monat' }) : null,
+                        near.length ? el('div', { class: 'map-away', text: 'Luftlinie' }) : null, away(near, placeName)
+                    ]);
+                }
+            };
+        });
+        state.people.forEach(function (p) {
+            filledPlaces(p).forEach(function (x) {
+                items.push({
+                    id: x.id, kind: 'place', mark: personName(p).charAt(0).toUpperCase(), title: x.name.trim() || 'Ort', out: false,
+                    sub: state.people.length > 1 ? personName(p) : '', address: x.address.trim(),
+                    popup: function (near) {
+                        return el('div', null, [
+                            el('div', { class: 'map-title', text: placeName(this) }),
+                            el('div', { class: 'card-sub', text: x.address }),
+                            near.length ? el('div', { class: 'map-away', text: 'Luftlinie' }) : null,
+                            away(near, function (f) { return f.mark + ' ' + f.title; })
+                        ]);
+                    }
+                });
+            });
+        });
+        return items;
+    }
+
     /* ---------- Übersicht ---------- */
 
     var TIER = { bad: 3, warn: 2, info: 1, ok: 0 };
@@ -1387,6 +1439,10 @@
         }));
         renderCostsEditor(costsBox);
 
+        var mapBox = el('div', { class: 'map-box' });
+        app.appendChild(panel('Karte', [mapBox], { key: 'map', hint: 'Wo die Wohnungen und die wichtigen Orte aus „Personen“ liegen.' }));
+        mapView = FLATMAP.create(mapBox, { el: el, btn: btn });
+
         var transferBox = el('div', { id: 'transfer', class: 'transfer' });
         app.appendChild(panel('Daten übertragen', [
             el('h3', { class: 'group-title', text: 'Per Einmal-Link' }),
@@ -1411,6 +1467,7 @@
             renderBudget(budgetBox);
             renderWishStatus(wishStatus);
             renderFlatList(listBox);
+            mapView.update(mapItems());
         };
         currentUpdate();
     }
@@ -3261,6 +3318,8 @@
     function route() {
         if (saveTimer) saveNow();
         currentUpdate = null;
+        if (mapView) mapView.destroy();
+        mapView = null;
         var link = location.hash.match(/^#transfer=(.*)$/);
         if (link) { renderTransferIn(link[1]); return; }
         leaveTransfer();
