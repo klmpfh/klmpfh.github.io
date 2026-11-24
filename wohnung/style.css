@@ -71,6 +71,7 @@ body {
 .muted { color: var(--muted); }
 .small { font-size: 12px; }
 .bad-text { color: var(--theme-danger); }
+.warn-text { color: var(--theme-warning-text); }
 
 /* ── Panels ── */
 
@@ -350,6 +351,9 @@ input[type="radio"] {
     margin-top: 2px;
 }
 
+.budget-note { margin-top: 10px; line-height: 1.5; }
+.budget-note .btn { margin-left: 4px; }
+
 .tile-warn { border-color: var(--theme-warning); background: var(--theme-warning-soft); }
 .tile-bad { border-color: var(--theme-danger); background: var(--theme-danger-soft); }
 
@@ -408,6 +412,7 @@ input[type="radio"] {
 }
 
 .card-facts dt { color: var(--muted); }
+.card-over { font-size: 11.5px; }
 .card-facts dd { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
 
 .badge {
@@ -482,6 +487,9 @@ table {
 }
 
 .compare td.best::before { content: "★ "; font-size: 10px; }
+
+.compare tr td.over-bad { background: var(--theme-danger-soft); color: var(--theme-danger); }
+.compare tr td.over-warn { background: var(--theme-warning-soft); color: var(--theme-warning-text); }
 
 /* ── Detailansicht ── */
 

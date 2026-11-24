@@ -115,8 +115,8 @@
     }
 
     /** self: das bin ich (genau eine Person). rent: was die Person höchstens im
-     *  Monat fürs Wohnen zahlen kann, alles zusammen (bei mir nur für Mietwohnungen,
-     *  beim Kauf zählt die Bank). includes: { Posten: false } = zahlt sie nicht über
+     *  Monat fürs Wohnen zahlen kann, alles zusammen (bei mir: wie hoch meine
+     *  Netto-Wohnkosten sein dürfen). includes: { Posten: false } = zahlt sie nicht über
      *  mich (running = Nebenkosten & Heizung bzw. Hausgeld, sonst privateCostId).
      *  places: wichtige Orte wie Arbeit oder Familie, siehe newPlace. */
     function newPerson() {
@@ -1217,6 +1217,11 @@
         return isRent(a) ? 'Miete' + (a.flat.rentType !== 'fixed' ? ' (' + RENT_TYPE[a.flat.rentType] + ')' : '') : 'Kauf';
     }
 
+    /** Über meinem Maximum: 'bad', 'warn' (mit kleinerer Rate machbar), sonst null. */
+    function overLevel(a) {
+        return started(a) && (a.ownLevel === 'bad' || a.ownLevel === 'warn') ? a.ownLevel : null;
+    }
+
     /** Werte, die erst mit der Rate der Bank etwas aussagen (a.rateMissing). */
     function withRate(get) {
         return buyOnly(function (a) { return a.rateMissing ? null : get(a); });
@@ -1257,7 +1262,8 @@
         { label: 'davon Heizung (mein Anteil)', get: function (a) { return started(a) ? a.privateInfo.heat : null; }, f: heatText },
         { label: 'Hausgeld pro m²', get: buyOnly(function (a) { return a.hoaPerSqm; }), f: perSqm, best: 'min' },
         { label: 'WG-Einnahmen', get: function (a) { return a.rentEff; }, f: eur, best: 'max' },
-        { label: 'Netto-Wohnkosten', get: function (a) { return a.netHousing; }, f: eur, best: 'min', strong: true },
+        { label: 'Netto-Wohnkosten', get: function (a) { return a.netHousing; }, f: eur, best: 'min', strong: true, level: overLevel },
+        { label: 'Abstand zu deinem Maximum', get: function (a) { return started(a) ? a.ownOver : null; }, f: function (v) { return v === null ? '–' : v > 0.5 ? eur(v) + ' darüber' : eur(-v) + ' Luft'; }, level: overLevel },
         { label: 'Echte Kosten', get: function (a) { return a.trueCost; }, f: eur, best: 'min', strong: true },
         { label: 'Kaltmiete in 5 Jahren', get: rentOnly(function (a) { return a.coldIn5; }), f: eur, best: 'min' },
         { label: 'Netto-Wohnkosten Ø 10 Jahre', get: rentOnly(function (a) { return a.avgNet10; }), f: eur, best: 'min' },
@@ -1286,7 +1292,7 @@
         document.title = 'Wohnung';
         app.innerHTML = '';
 
-        var budgetBox = el('div', { class: 'tiles' });
+        var budgetBox = el('div', { onclick: function (e) { if (e.target.closest('[data-enter-max]')) enterOwnMax(); } });
         var listBox = el('div');
         var costsBox = el('div', { class: 'costs' });
 
@@ -1304,7 +1310,7 @@
                 ['2. Grenze vom Netto', '35 % vom Nettoeinkommen. Dahinter steckt die übliche Faustregel von 30 % für die Warmmiete, dazu Strom und Internet. Nur sicheres Einkommen zählt: ohne Boni, Überstunden, Weihnachts- und Urlaubsgeld.'],
                 ['Beispiel', '2.200 € Netto − 900 € Lebenshaltung − 150 € Autokredit = 1.150 €. 35 % von 2.200 € = 770 €. Eintragen: 770 €.'],
                 ['Ohne festes Einkommen', 'Bei Studium oder Ausbildung zählt, was sicher jeden Monat kommt (BAföG, Unterhalt, Nebenjob). Zahlt jemand nichts, 0 eintragen.'],
-                ['Ich', 'Die Person, die kauft bzw. den Mietvertrag unterschreibt. Alle anderen zahlen an sie. Dein eigenes Maximum zählt nur bei Mietwohnungen; beim Kauf gilt, was die Bank sagt.'],
+                ['Ich', 'Die Person, die kauft bzw. den Mietvertrag unterschreibt. Alle anderen zahlen an sie. Dein eigenes Maximum ist die Grenze für deine Netto-Wohnkosten, also Kreditrate oder Miete + laufende Kosten − was die anderen dir zahlen. Liegt eine Wohnung darüber, warnt die Seite. Was die Bank zusagt, prüft sie beim Kauf zusätzlich.'],
                 ['Was die anderen wirklich zahlen', 'Die faire Miete der jeweiligen Wohnung (dort unter „WG & Untermieter“), höchstens ihr Maximum.'],
                 ['Wer zahlt welche Nebenkosten?', 'Mit Haken: Du bezahlst die Rechnung, und die Person gibt dir ihren Anteil mit der Miete. Ohne Haken: Die Person zahlt ihren Anteil selbst, z. B. direkt an den Anbieter. Bei den Nebenkosten der Wohnung heißt ohne Haken: Sie zahlt dir den Anteil zusätzlich zur Miete.'],
                 ['Wichtige Orte', 'Z. B. Arbeit, Uni oder Familie mit Adresse. Der KI-Prompt auf der Seite einer Wohnung enthält diese Adressen, damit die KI die Entfernungen ermittelt; sie stehen dann im Vergleich. Alternativ trägst du die Entfernungen in jeder Wohnung selbst ein. Wer die Adressen nicht an eine KI schicken will, lässt das Adressfeld leer.']
@@ -1345,7 +1351,7 @@
                 ]),
             el('h3', { class: 'group-title', text: 'Was ist drin?' }),
             budgetBox
-        ], { key: 'bank', hint: 'Hier steht nur, was die Bank dir zusagt. Es gilt für alle Kaufwohnungen und wird nur in diesem Browser gespeichert.' }));
+        ], { key: 'bank', hint: 'Hier trägst du nur ein, was die Bank dir zusagt. Es gilt für alle Kaufwohnungen und wird nur in diesem Browser gespeichert.' }));
 
         var costPeople = el('p', { class: 'small group-hint' });
         app.appendChild(panel('Private Nebenkosten', [
@@ -1507,17 +1513,42 @@
             '<div class="tile-value">' + esc(value) + '</div>' + (sub ? '<div class="tile-sub">' + esc(sub) + '</div>' : '') + '</div>';
     }
 
+    /** Aus der Finanzübersicht zum Feld für das eigene Maximum unter „Personen“. */
+    function enterOwnMax() {
+        var input = app.querySelector('[data-own-max]');
+        var toggle = input.closest('.panel').querySelector('.panel-toggle');
+        if (toggle.getAttribute('aria-expanded') === 'false') toggle.click();
+        input.focus();
+    }
+
+    /** Was vom eigenen Maximum für die Wohnung bleibt. */
+    function ownBudgetText(b) {
+        var rate = n(state.profile.bankMaxRate);
+        return 'Netto-Wohnkosten = Kreditrate oder Warmmiete + laufende Kosten − was Mitbewohner dir zahlen.' +
+            (b.fixed > 0.5 ? ' Nach deinem Anteil an den festen privaten Nebenkosten (' + eur(b.fixed) + ')' : ' Davon') +
+            ' bleiben ' + eur(Math.max(0, b.left)) + ' für Kreditrate, Hausgeld und Heizung bzw. für die Warmmiete.' +
+            (b.after === null ? ''
+                : b.after < -0.5 ? ' Die max. Monatsrate der Bank (' + eur(rate) + ') liegt ' + eur(-b.after) + ' darüber: Ohne Mieten von Mitbewohnern geht ein Kauf nur mit einer kleineren Rate.'
+                : ' Mit der max. Monatsrate der Bank (' + eur(rate) + ') bleiben ohne Mieten von Mitbewohnern noch ' + eur(b.after) + ' für Hausgeld, Grundsteuer, Rücklage und Heizung.');
+    }
+
     function renderBudget(box) {
         var p = state.profile;
-        var b = WK.budget(p);
+        var b = WK.budget(p), own = WK.ownBudget(p);
+        var ownTile = own ? tile('Max. Netto-Wohnkosten', eur(own.max), 'pro Monat, dein Maximum aus „Personen“')
+            : tile('Max. Netto-Wohnkosten', '–', 'dein Maximum fehlt noch', 'tile-warn');
+        var ownText = own ? '<p class="small muted budget-note">' + esc(ownBudgetText(own)) + '</p>'
+            : '<p class="small muted budget-note">Wie hoch deine Netto-Wohnkosten sein dürfen, trägst du unter „Personen“ ein. Danach warnt die Seite bei jeder Wohnung, die darüber liegt. <button type="button" class="btn btn-ghost btn-small" data-enter-max>Maximum eintragen</button></p>';
         if (!b) {
-            box.innerHTML = '<p class="muted">Trag die max. Monatsrate oder das max. Darlehen ein, dann steht hier dein Budget.</p>';
+            box.innerHTML = '<div class="tiles">' + ownTile + '</div>' + ownText +
+                '<p class="small muted budget-note">Für dein Budget beim Kauf trag oben die max. Monatsrate oder das max. Darlehen ein.</p>';
             return;
         }
-        box.innerHTML =
+        box.innerHTML = '<div class="tiles">' + ownTile +
             tile('Max. Monatsrate', n(p.bankMaxRate) > 0 ? eur(n(p.bankMaxRate)) : '–', n(p.bankMaxRate) > 0 ? 'laut Bank' : 'fehlt noch – ohne sie steht keine Laufzeit fest', n(p.bankMaxRate) > 0 ? '' : 'tile-warn') +
             tile('Max. Darlehen', eur(b.maxLoan), b.limit === 'loan' ? 'Kreditrahmen laut Bank' : 'aus der Monatsrate bei ' + fmtInput(n(p.defRate) + n(p.defRepay), 2) + ' % Zins + Mindesttilgung') +
-            tile('Kaufpreis-Budget', eur(b.maxPrice), eur(n(p.equity)) + ' Eigenkapital + Darlehen, abzgl. ~' + fmtInput(b.closingPct, 1) + ' % Nebenkosten');
+            tile('Kaufpreis-Budget', eur(b.maxPrice), eur(n(p.equity)) + ' Eigenkapital + Darlehen, abzgl. ~' + fmtInput(b.closingPct, 1) + ' % Nebenkosten') +
+            '</div>' + ownText;
     }
 
     /* ---------- Wünsche & Bedingungen ---------- */
@@ -1670,8 +1701,8 @@
             });
             var rent = numField(p, 'rent', '', { unit: '€' });
             rent._input.setAttribute('aria-label', 'Maximum im Monat von ' + personName(p));
-            if (p.self) rent._input.placeholder = 'nur Miete';
-            rent._input.title = p.self ? 'Zählt nur bei Mietwohnungen, beim Kauf gilt die Rate der Bank.' : '';
+            rent._input.title = p.self ? 'So hoch dürfen deine Netto-Wohnkosten sein, bei Kauf und Miete.' : '';
+            if (p.self) rent._input.setAttribute('data-own-max', '');
             // Ich bleibe immer in der Liste.
             var del = p.self ? null : el('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Person entfernen', title: 'Person entfernen', text: '×', onclick: function () {
                 if (!confirm(personName(p) + ' entfernen?\n\nDabei gehen alle Gewichtungen, Bewertungen, das Maximum und die Orte dieser Person verloren. Ein Zimmer mit Angaben bleibt in der Wohnung als „jemand anderes“ stehen. Die privaten Nebenkosten werden neu aufgeteilt.')) return;
@@ -2005,7 +2036,7 @@
         }
 
         function card(a) {
-            var f = a.flat, w = worst(a);
+            var f = a.flat, w = worst(a), over = overLevel(a);
             return '<a class="card' + (DIARY.isOut(f) ? ' card-out' : '') + '" href="#w=' + encodeURIComponent(f.id) + '">' +
                 '<div class="card-head"><span class="card-name"><span class="kind-tag kind-' + a.kind + '">' + (isRent(a) ? 'Miete' : 'Kauf') + '</span> ' + esc(f.name || 'Ohne Namen') + '</span>' +
                 (DIARY.isOut(f) ? '' : '<span class="badge badge-' + w + '" title="' + TIER_LABEL[w] + '">' + ICON[w] + ' ' + TIER_LABEL[w] + '</span>') + '</div>' +
@@ -2018,7 +2049,8 @@
                     : '<dt>Kaufpreis</dt><dd>' + eur(a.price) + (a.area ? ' · ' + fmtInput(a.area, 1) + ' m²' : '') + '</dd>' +
                         (a.hoaPerSqm ? '<dt>Hausgeld</dt><dd>' + perSqm(a.hoaPerSqm) + '</dd>' : '')) +
                 (!isRent(a) && a.price > 0 ? '<dt>Schuldenfrei nach</dt><dd>' + (a.rateMissing ? 'Rate der Bank fehlt' : WK.years(a.payoffYears)) + '</dd>' + (a.rateMissing ? '' : '<dt>Kreditrate</dt><dd>' + eur(a.payment) + ' / Monat</dd>') : '') +
-                '<dt>Netto-Wohnkosten</dt><dd>' + eur(a.netHousing) + ' / Monat</dd>' +
+                '<dt>Netto-Wohnkosten</dt><dd' + (over ? ' class="' + over + '-text"' : '') + '>' + eur(a.netHousing) + ' / Monat' +
+                (over ? '<div class="card-over">' + eur(a.ownOver) + ' über deinem Maximum' + (over === 'warn' ? ', mit kleinerer Rate machbar' : '') + '</div>' : '') + '</dd>' +
                 (hasWishes ? '<dt>Passt zu ' + (state.people.length > 1 ? 'uns' : esc(personName(state.people[0]))) + '</dt>' +
                     (a.wish.ko.length
                         ? '<dd class="bad-text" title="Muss nicht erfüllt: ' + esc(wishNames(a.wish.ko.map(function (k) { return k.wishId; }))) + '">✕ passt nicht</dd>'
@@ -2049,7 +2081,10 @@
                         vals.map(function (v, i) {
                             var isBest = best !== null && v === best;
                             var text = row.get.only && row.get.only !== results[i].kind ? '–' : row.f(v, results[i]);
-                            return '<td' + (isBest ? ' class="best" title="bester Wert"' : '') + '>' + esc(text) + '</td>';
+                            var level = row.level ? row.level(results[i]) : null;
+                            var cls = (isBest ? 'best' : '') + (level ? ' over-' + level : '');
+                            var hint = [isBest ? 'bester Wert' : '', level ? 'über deinem Maximum' : ''].filter(Boolean).join(', ');
+                            return '<td' + (cls ? ' class="' + cls.trim() + '" title="' + hint + '"' : '') + '>' + esc(text) + '</td>';
                         }).join('') + '</tr>';
                 }).join('') +
                 '<tr class="sep"><th>Einschätzung</th>' + results.map(function (a) {
@@ -2767,6 +2802,7 @@
         ['Kreditrate', 'Nur Kauf: was du der Bank überweist = Zinsen + Tilgung.'],
         ['Laufende Kosten', 'Beim Kauf Hausgeld, Grundsteuer, eigene Rücklage, feste Kosten und Heizung (wenn sie extra kommt). Bei Miete Nebenkosten, Heizung und feste Kosten, ohne Kaltmiete.'],
         ['Netto-Wohnkosten', 'Was im Monat unterm Strich von deinem Konto abgeht. Kauf: Kreditrate + laufende Kosten − WG-Einnahmen. Miete: Kaltmiete + laufende Kosten − WG-Einnahmen.'],
+        ['Abstand zu deinem Maximum', 'Dein Maximum aus „Personen“ minus Netto-Wohnkosten. Rot: passt nicht. Gelb: passt nur mit einer kleineren Kreditrate.'],
         ['Echte Kosten', 'Was davon wirklich weg ist. Kauf: Netto-Wohnkosten − Tilgung, denn die Tilgung gehört dir. Miete: gleich den Netto-Wohnkosten. Damit vergleichst du Kauf und Miete fair.'],
         ['Nicht zusammenzählen', 'Die Kreditrate steckt schon in den Netto-Wohnkosten, und die echten Kosten sind ein Teil davon. Den Rechenweg mit deinen Zahlen findest du auf der Seite jeder Wohnung.']
     ];
@@ -2786,6 +2822,15 @@
             '</table>';
     }
 
+    /** Netto-Wohnkosten mit meinem Maximum, ohne Maximum mit dem Rechenweg. */
+    function netTile(a) {
+        var over = overLevel(a);
+        return tile('Netto-Wohnkosten', eur(a.netHousing), a.ownMax === null
+            ? (isRent(a) ? 'Warmmiete + weitere Kosten' : 'Kreditrate + laufende Kosten') + (a.rentEff > 0.5 ? ' − WG-Einnahmen' : '')
+            : over ? eur(a.ownOver) + ' über deinem Maximum von ' + eur(a.ownMax)
+            : 'dein Maximum: ' + eur(a.ownMax) + ', noch ' + eur(-a.ownOver) + ' Luft', over ? 'tile-' + over : '');
+    }
+
     function renderDetailResults(box, a) {
         var p = state.profile;
         if (a.price <= 0) {
@@ -2797,7 +2842,7 @@
 
         html += '<div class="tiles tiles-2">' +
             tile('Kreditrate', eur(a.payment), a.rateMissing ? 'vorläufig, nur Mindesttilgung' : n(p.bankMaxRate) > 0 && a.payment > n(p.bankMaxRate) + 0.5 ? 'laut Bank höchstens ' + eur(n(p.bankMaxRate)) : rateParts(a), a.payment > n(p.bankMaxRate) + 0.5 && n(p.bankMaxRate) > 0 ? 'tile-bad' : '') +
-            tile('Netto-Wohnkosten', eur(a.netHousing), 'Kreditrate + laufende Kosten' + (a.rentEff > 0.5 ? ' − WG-Einnahmen' : '')) +
+            netTile(a) +
             tile('Echte Kosten', eur(a.trueCost), 'Netto-Wohnkosten − Tilgung') +
             (a.rateMissing ? tile('Schuldenfrei nach', '–', 'Rate der Bank fehlt', 'tile-warn')
                 : tile('Schuldenfrei nach', WK.years(a.payoffYears), 'Zinsen gesamt ' + eur(a.totalInterest))) +
@@ -2852,7 +2897,6 @@
 
     /** Auswertung einer Mietwohnung. */
     function renderRentResults(box, a) {
-        var p = state.profile;
         if (a.coldRent <= 0) {
             box.innerHTML = '<div class="panel results-panel"><p class="muted">Sobald eine Kaltmiete drin ist, steht hier die Auswertung: Monatsbilanz, Einzug, Mietentwicklung und Checks.</p></div>';
             return;
@@ -2861,8 +2905,8 @@
         var html = '<div class="panel results-panel">';
 
         html += '<div class="tiles tiles-2">' +
-            tile('Netto-Wohnkosten', eur(a.netHousing), 'Warmmiete + weitere Kosten' + (a.rentEff > 0.5 ? ' − WG-Einnahmen' : '')) +
-            tile('Warmmiete', eur(a.warmRent), WK.isSet(p.ownMax) ? 'dein Maximum: ' + eur(n(p.ownMax)) : 'pro Monat, für die ganze Wohnung', WK.isSet(p.ownMax) && a.netHousing > n(p.ownMax) + 0.5 ? 'tile-bad' : '') +
+            netTile(a) +
+            tile('Warmmiete', eur(a.warmRent), 'pro Monat, für die ganze Wohnung') +
             tile('Kaltmiete in 5 Jahren', eur(a.coldIn5), f.rentType === 'fixed' ? 'feste Miete, ohne Erhöhungen' : (a.rentIncrease5 > 0 ? '+ ' + pct(a.rentIncrease5) + ' (' + RENT_TYPE[f.rentType] + ')' : RENT_TYPE[f.rentType])) +
             tile('Kaution & Einzug', eur(a.moveIn), 'einmalig') +
             '</div>' + terms(box, 'Wie werden diese Zahlen gerechnet?', termsRent(a));

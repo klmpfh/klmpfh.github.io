@@ -64,7 +64,7 @@ relativ, über die eigene `src`-Angabe.
   (Schalter „Von mir“ / „An mich“): was, wann, an wen bzw. von wem, bis wann geplant.
   Status (offen/fällig/überfällig/zurück), Filter und Suche. Daten liegen nur im localStorage des Browsers,
   Backup als JSON-Datei herunterladen und wieder einlesen.
-- `/wohnung/` – Wohnung kaufen oder mieten: Personen (gelten für Kostenaufteilung, ein Maximum pro Monat je Person und Wünsche; faire Miete je Zimmer nach Größe, Lage und Ausstattung), Finanzierung laut Bank (max. Monatsrate, max. Darlehen, Eigenkapital, Konditionen – gilt für alle Kaufwohnungen, mit Anleitung zum Selberrechnen),
+- `/wohnung/` – Wohnung kaufen oder mieten: Personen (gelten für Kostenaufteilung, ein Maximum pro Monat je Person und Wünsche; faire Miete je Zimmer nach Größe, Lage und Ausstattung), Finanzierung laut Bank (max. Monatsrate, max. Darlehen, Eigenkapital, Konditionen – gilt für alle Kaufwohnungen, mit Anleitung zum Selberrechnen), dazu die Grenze für die eigenen Netto-Wohnkosten (das eigene Maximum; Kauf- und Mietwohnungen darüber werden auf Karte, im Vergleich und in den Checks markiert, beim Kauf mit der Rate, die noch passt),
   private Nebenkosten (Strom/Internet/Rundfunk, mit Zeitraum (Monat bis Jahr) und Aufteilung (gleichmäßig, Prozent, je Person,
   komplett), je Wohnung abwählbar, wenn schon in Warmmiete/Hausgeld enthalten; Heizung als eigener Posten, je Wohnung extra oder enthalten) auf der
   Übersicht. Mietwohnungen mit Kalt-/Warmmiete, Kaution und fester, Staffel- oder Indexmiete (Mietentwicklung über 10 Jahre),

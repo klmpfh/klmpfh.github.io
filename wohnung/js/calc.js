@@ -162,6 +162,11 @@ var WK = (function () {
         return Math.max(loanPayment(loan, amount), n(p.bankMaxRate) - others);
     }
 
+    /** Kleinste Rate des Hauptdarlehens, die die Bank mitmacht (Zins + Mindesttilgung). */
+    function minPayment(loan, amount, p) {
+        return loanPayment({ mode: 'repay', rate: loan.rate, repay: loan.mode === 'max' ? loan.repay : p.defRepay }, amount);
+    }
+
     /* ---------- WG / Untervermietung ---------- */
 
     function sum(list) {
@@ -504,6 +509,8 @@ var WK = (function () {
         }
         a.coldIn5 = coldRentInYear(flat, 6);
         a.avgNet10 = total / 10;
+        a.rateRoom = 0;
+        ownLimit(a, p);
         a.rentIncrease5 = a.coldRent > 0 ? a.coldIn5 / a.coldRent - 1 : null;
 
         checksRent(a, p, flat);
@@ -523,23 +530,57 @@ var WK = (function () {
         });
     }
 
-    /** Mein Teil einer Mietwohnung gegen mein Maximum (p.ownMax, "Personen"). */
-    function checksOwn(a, p) {
-        if (!isSet(p.ownMax)) {
-            warn(a, 'info', 'Für dich ist kein Maximum eingetragen (Übersicht, „Personen“) – ob die Miete passt, lässt sich so nicht prüfen.');
+    /** Meine Netto-Wohnkosten gegen mein Maximum (p.ownMax, "Personen").
+     *    ownMax    Maximum, null = keins eingetragen
+     *    ownOver   wie viel darüber, negativ = Luft (null ohne Maximum)
+     *    ownLevel  'ok', 'bad' oder beim Kauf 'warn': ginge mit einer kleineren
+     *              Rate, die noch die Mindesttilgung schafft (bis a.rateRoom weniger) */
+    function ownLimit(a, p) {
+        a.ownMax = isSet(p.ownMax) ? n(p.ownMax) : null;
+        a.ownOver = a.ownMax === null ? null : a.netHousing - a.ownMax;
+        a.ownLevel = a.ownMax === null ? null : a.ownOver <= 0.5 ? 'ok' : a.ownOver <= a.rateRoom + 0.5 ? 'warn' : 'bad';
+    }
+
+    function checksOwn(a) {
+        if (a.ownMax === null) {
+            warn(a, 'info', 'Für dich ist kein Maximum eingetragen (Übersicht, „Personen“) – ob die Netto-Wohnkosten passen, lässt sich so nicht prüfen.');
             return;
         }
-        var max = n(p.ownMax), text = 'Dein Teil mit allen Nebenkosten (' + eur(a.netHousing) + ')';
-        if (a.netHousing > max + 0.5) warn(a, 'bad', text + ' liegt ' + eur(a.netHousing - max) + ' über deinem Maximum von ' + eur(max) + '.');
-        else {
-            warn(a, 'ok', text + ' passt in dein Maximum von ' + eur(max) + '.');
-            if (a.netHousing + a.rentEff > max + 0.5) warn(a, 'info', 'Geht nur gemeinsam: Ohne die Mieten der anderen zahlst du ' + eur(a.netHousing + a.rentEff) + ' im Monat (Auszug einplanen).');
+        var rent = a.kind === 'rent', limit = 'deinem Maximum von ' + eur(a.ownMax);
+        var text = 'Deine Netto-Wohnkosten (' + eur(a.netHousing) + ')';
+        if (a.ownLevel === 'ok') {
+            if (a.rateMissing) warn(a, 'info', text + ' liegen ' + eur(-a.ownOver) + ' unter ' + limit + ', gerechnet nur mit der Mindesttilgung.');
+            else warn(a, 'ok', text + ' liegen ' + eur(-a.ownOver) + ' unter ' + limit + '.');
+            checksOwnLater(a, limit);
+            if (a.ownOver + a.rentEff > 0.5) warn(a, 'info', 'Geht nur gemeinsam: Ohne die Mieten der anderen zahlst du ' + eur(a.netHousing + a.rentEff) + ' im Monat (Auszug einplanen).');
+            return;
         }
+        text += ' liegen ' + eur(a.ownOver) + ' über ' + limit;
+        if (a.ownLevel === 'warn') {
+            var main = Math.floor(a.sims[0].payment - a.ownOver + 0.005);
+            var slow = simulateLoan(Object.assign({}, a.loans[0], { mode: 'payment', payment: main }), a.loanAmounts[0], MAX_YEARS);
+            var terms = a.sims.map(function (s, i) { return i ? s.payoffYears : slow.payoffYears; });
+            warn(a, 'warn', text + '. Mit einer Kreditrate von ' + eur(a.payment - a.sims[0].payment + main) + ' statt ' + eur(a.payment) + ' würde es passen' +
+                (terms.indexOf(null) === -1 ? ' (schuldenfrei dann nach ' + years(Math.max.apply(null, terms)) + ')' : '') + '. Die Rate stellst du beim Darlehen ein.');
+            return;
+        }
+        warn(a, 'bad', text + (rent || !(a.loanTotal > 0) ? '' : a.rateRoom > 0.5 ? ', selbst mit der Mindesttilgung noch ' + eur(a.ownOver - a.rateRoom) : ', eine kleinere Rate geht wegen der Mindesttilgung nicht') + '.');
+    }
+
+    /** Heute passt es – aber auch nach Mieterhöhungen bzw. nach der Zinsbindung? */
+    function checksOwnLater(a, limit) {
+        if (a.kind === 'rent') {
+            var row = a.rentTimeline.find(function (r) { return r.net > a.ownMax + 0.5; });
+            if (row) warn(a, 'warn', 'Ab dem ' + row.year + '. Mietjahr liegen deine Netto-Wohnkosten mit ' + eur(row.net) + ' über ' + limit + '.');
+            return;
+        }
+        var later = a.netHousing + sum(a.sims.map(function (s) { return s.raised ? s.followPayment - s.payment : 0; }));
+        if (later > a.ownMax + 0.5) warn(a, 'warn', 'Nach der Zinsbindung steigen deine Netto-Wohnkosten beim angenommenen Anschlusszins auf ' + eur(later) + ' – ' + eur(later - a.ownMax) + ' über ' + limit + '.');
     }
 
     function checksRent(a, p, flat) {
         if (a.coldRent <= 0) { warn(a, 'info', 'Kaltmiete eingeben, um die Wohnung durchzurechnen.'); return; }
-        checksOwn(a, p);
+        checksOwn(a);
         checksFair(a);
         if (a.deposit > 3 * a.coldRent + 0.5) warn(a, 'bad', 'Kaution über drei Nettokaltmieten (' + eur(3 * a.coldRent) + ') – das ist gesetzlich nicht zulässig (§ 551 BGB).');
         if (flat.rentType === 'staffel') {
@@ -671,6 +712,7 @@ var WK = (function () {
         a.rateMissing = !a.fromBank && !!loans[0] && loans[0].mode === 'max' && a.loanAmounts[0] > 0.005;
         if (a.fromBank) a.sims[0] = simulateLoan(Object.assign({}, loans[0], { mode: 'payment', payment: bankRate }), a.loanAmounts[0], MAX_YEARS);
         a.payment = a.sims.reduce(function (s, x) { return s + x.payment; }, 0);
+        a.rateRoom = a.sims.length ? Math.max(0, a.sims[0].payment - minPayment(loans[0], a.loanAmounts[0], p)) : 0;
         a.anyStuck = a.sims.some(function (x) { return x.stuck; });
         // null = nie (oder erst nach über MAX_YEARS Jahren)
         a.payoffYears = a.sims.some(function (x) { return x.payoffYears === null; }) ? null
@@ -696,6 +738,7 @@ var WK = (function () {
         // "Echte Kosten": was wirklich weg ist – Zinsen und laufende Kosten abzüglich
         // WG-Einnahmen, also die Netto-Wohnkosten ohne Tilgung (die ist Sparen).
         a.trueCost = a.netHousing - a.repayMonth;
+        ownLimit(a, p);
 
         // Schulden und Vermögen über die Zeit, ohne Wertsteigerung
         var horizon = a.payoffYears === null ? 30 : Math.ceil(a.payoffYears);
@@ -734,6 +777,7 @@ var WK = (function () {
             else warn(a, 'ok', 'Darlehen passt in den Kreditrahmen (' + eur(n(p.bankMaxLoan) - a.loanTotal) + ' Luft).');
         }
         checksRate(a, p);
+        checksOwn(a);
         if (a.anyStuck) warn(a, 'bad', 'Eine Darlehensrate deckt nicht einmal die Zinsen – das Darlehen würde nie getilgt.');
         if (n(p.equity) > 0 && a.equityPlanned > n(p.equity) + 0.5) warn(a, 'warn', 'Eigenkapital ist hier ' + eur(a.equityPlanned - n(p.equity)) + ' höher als unter „Finanzierung laut Bank“ angegeben.');
         if (a.equity < a.closing) warn(a, 'warn', 'Eigenkapital (' + eur(a.equity) + ') deckt die Kaufnebenkosten (' + eur(a.closing) + ') nicht – viele Banken erwarten das, sonst Zinsaufschlag oder Absage.');
@@ -1091,7 +1135,19 @@ var WK = (function () {
         };
     }
 
-    /* ---------- Budget laut Bank ---------- */
+    /* ---------- Budget ---------- */
+
+    /** Was mein Maximum im Monat hergibt, null = keins eingetragen.
+     *    fixed  mein Anteil an den festen privaten Nebenkosten
+     *    left   was danach für Kreditrate, Hausgeld und Heizung bzw. Warmmiete bleibt
+     *    after  was davon nach der max. Monatsrate der Bank bleibt, null = keine Rate */
+    function ownBudget(p) {
+        if (!isSet(p.ownMax)) return null;
+        var b = { max: n(p.ownMax), fixed: privateCosts(p, null).fixed };
+        b.left = b.max - b.fixed;
+        b.after = n(p.bankMaxRate) > 0 ? b.left - n(p.bankMaxRate) : null;
+        return b;
+    }
 
     /** Was mit den Zusagen der Bank drin ist, null = noch keine da.
      *    maxLoan  Kreditrahmen oder was die Rate mit Zins + Mindesttilgung hergibt
@@ -1165,6 +1221,7 @@ var WK = (function () {
         wishScore: wishScore,
         MUST: MUST,
         budget: budget,
+        ownBudget: ownBudget,
         LOAN_DEFAULTS: LOAN_DEFAULTS,
         n: n,
         isSet: isSet,
