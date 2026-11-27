@@ -11,6 +11,9 @@
  * und Ausgaben): am Griff ⠿ ziehen – mit Pointer-Events statt HTML-Drag & Drop,
  * damit es mit Maus und Finger gleich geht – oder Griff fokussieren und ↑/↓.
  * Am Anfang bzw. Ende einer Kategorie springt ↑/↓ in die Kategorie davor/danach.
+ *
+ * ⇉ an einer Zahlung übernimmt Betrag und Intervall in die anderen Szenarien
+ * (Zuordnung über Kategorie und Name wie im Vergleich, siehe spreadPlan in state.js).
  */
 'use strict';
 
@@ -65,9 +68,11 @@ function paymentRow(p) {
     interval.value = p.interval;
 
     const result = el('span', 'pay-monthly');
+    // Titel und Zustand setzt updateEditorNumbers, weil sie von den anderen Szenarien abhängen.
+    const all = iconBtn('icon-btn pay-all', 'In alle Szenarien übernehmen', '⇉');
     const del = iconBtn('icon-btn icon-del pay-del', 'Zahlung löschen', '✕');
 
-    row.append(handle, name, amountWrap, interval, result, del);
+    row.append(handle, name, amountWrap, interval, result, all, del);
     return row;
 }
 
@@ -144,7 +149,85 @@ function updateEditorNumbers() {
         const out = row.querySelector('.pay-monthly');
         out.textContent = '= ' + fmtEuro(monthly(p)) + ' / Monat';
         out.title = p.interval === 'month' ? '' : fmtPaymentOriginal(p) + ', ' + intervalExplain(p.interval);
+        updateSpreadButton(row.querySelector('.pay-all'), p, sc);
     });
+}
+
+/** Knopf ⇉: nur bei mehreren Szenarien, blass, wenn es nichts zu übernehmen gibt. */
+function updateSpreadButton(btn, p, sc) {
+    btn.hidden = store.scenarios.length < 2;
+    if (btn.hidden) return;
+    let label, done = false;
+    if (!p.name.trim()) {
+        label = 'In alle Szenarien übernehmen (braucht eine Bezeichnung)';
+        done = true;
+    } else {
+        const open = spreadPlan(p, sc).filter(s => s.kind !== 'same').length;
+        done = !open;
+        label = done ? 'Gilt schon in allen Szenarien so'
+            : 'Betrag und Intervall in alle Szenarien übernehmen – ' +
+              (open === 1 ? '1 Szenario weicht ab' : open + ' Szenarien weichen ab');
+    }
+    btn.classList.toggle('is-done', done);
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+}
+
+/** Rückfrage zu ⇉: welche Szenarien was bekommen, alle anderen vorausgewählt. */
+async function spreadDialog(id, anchor) {
+    const sc = activeScenario();
+    const p = findPayment(id);
+    if (!p) return;
+    if (!p.name.trim()) {
+        alertFlyover({
+            title: 'Erst eine Bezeichnung eingeben',
+            message: 'Über die Bezeichnung wird die Zahlung in den anderen Szenarien wiedergefunden.',
+            anchor: anchor
+        });
+        return;
+    }
+    const what = '„' + paymentName(p) + '“ mit ' + fmtPaymentOriginal(p);
+    const plan = spreadPlan(p, sc);
+    if (plan.every(s => s.kind === 'same')) {
+        alertFlyover({ title: 'Schon überall gleich', message: what + ' steht in allen Szenarien schon so.', anchor: anchor });
+        return;
+    }
+
+    const body = el('div', 'spread');
+    plan.forEach(step => {
+        const row = el('label', 'spread-row' + (step.kind === 'same' ? ' is-same' : ''));
+        const box = el('input');
+        box.type = 'checkbox';
+        box.value = step.sc.id;
+        box.checked = step.kind !== 'same';
+        box.disabled = step.kind === 'same';
+        const note = step.kind === 'same' ? 'schon gleich'
+            : step.kind === 'new' ? 'fehlt dort – wird angelegt'
+            : fmtPaymentOriginal(step.target) + ' → ' + fmtPaymentOriginal(p);
+        row.append(box, el('span', 'spread-name', scenarioName(step.sc)), el('span', 'spread-note', note));
+        body.appendChild(row);
+    });
+
+    const ok = await openFlyover({
+        title: 'In alle Szenarien übernehmen?',
+        message: what + ' gilt danach in allen ausgewählten Szenarien.',
+        body: body,
+        anchor: anchor,
+        buttons: [
+            { label: 'Abbrechen', value: false, kind: 'ghost' },
+            { label: 'Übernehmen', value: true, kind: 'primary', autofocus: true }
+        ]
+    });
+    if (!ok) return;
+    const chosen = new Set(Array.from(body.querySelectorAll('input:checked')).map(b => b.value));
+    // Neu berechnen: Der Stand kann sich währenddessen geändert haben (anderer Tab).
+    const fresh = findPayment(id);
+    if (!fresh || activeScenario() !== sc) return;
+    const steps = spreadPlan(fresh, sc).filter(s => s.kind !== 'same' && chosen.has(s.sc.id));
+    if (!steps.length) return;
+    spreadPayment(fresh, steps);
+    editorChange('soft');
+    revealItem(id, true);
 }
 
 function findPayment(id) {
@@ -223,6 +306,8 @@ function initEditor(onChange) {
 
         if (btn.classList.contains('btn-add-sub')) {
             addPayment(cat.id, null);
+        } else if (btn.classList.contains('pay-all')) {
+            spreadDialog(btn.closest('.pay-row').dataset.pay, btn);
         } else if (btn.classList.contains('pay-del')) {
             const id = btn.closest('.pay-row').dataset.pay;
             sc.payments = sc.payments.filter(p => p.id !== id);

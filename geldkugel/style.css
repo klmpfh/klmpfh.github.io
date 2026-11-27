@@ -610,7 +610,7 @@ button:focus-visible {
 
 .pay-row {
     display: grid;
-    grid-template-columns: 18px minmax(110px, 1fr) 112px 160px 150px 30px;
+    grid-template-columns: 18px minmax(110px, 1fr) 112px 160px 150px 30px 30px;
     align-items: center;
     gap: 8px;
     padding: 2px 4px 2px 12px;
@@ -711,6 +711,20 @@ body.is-dragging-payment * {
     white-space: nowrap;
 }
 
+/* ⇉ In alle Szenarien übernehmen – blass, wenn es überall schon so ist */
+.pay-all {
+    font-size: 15px;
+}
+
+.pay-all.is-done {
+    opacity: 0.3;
+}
+
+.pay-all.is-done:hover,
+.pay-all.is-done:focus-visible {
+    opacity: 0.7;
+}
+
 .btn-add-sub {
     display: block;
     margin: 6px 0 2px 38px;
@@ -746,7 +760,7 @@ body.is-dragging-payment * {
         grid-template-columns: 18px minmax(0, 1fr) 104px 30px;
         grid-template-areas:
             "handle name name del"
-            ". interval amount ."
+            ". interval amount all"
             ". monthly monthly .";
         row-gap: 4px;
         padding-left: 0;
@@ -763,6 +777,7 @@ body.is-dragging-payment * {
     .pay-amount-wrap { grid-area: amount; }
     .pay-interval { grid-area: interval; }
     .pay-monthly { grid-area: monthly; }
+    .pay-all { grid-area: all; }
     .pay-del { grid-area: del; }
 
     .btn-add-sub {
@@ -1743,6 +1758,56 @@ body.is-dragging-payment * {
 
 .flyover-wide {
     width: min(760px, calc(100vw - 32px));
+}
+
+/* Zahlung in alle Szenarien übernehmen – siehe spreadDialog in editor.js */
+.spread {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 12px;
+}
+
+.spread-row {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    align-items: center;
+    column-gap: 8px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    cursor: pointer;
+}
+
+.spread-row:hover {
+    background: var(--theme-surface-muted);
+}
+
+.spread-row input {
+    grid-row: span 2;
+    accent-color: var(--primary);
+}
+
+.spread-name {
+    font-weight: 700;
+    color: var(--theme-text-strong);
+    overflow-wrap: anywhere;
+}
+
+.spread-note {
+    grid-column: 2;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.spread-row.is-same {
+    opacity: 0.55;
+    cursor: default;
+}
+
+.spread-row.is-same:hover {
+    background: none;
 }
 
 /* ── Szenario aus Kontoumsätzen mit KI – siehe ai.js ── */

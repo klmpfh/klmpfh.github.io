@@ -299,6 +299,42 @@ function compareScenarios(A, B) {
     });
 }
 
+/* ── Eine Zahlung in andere Szenarien übernehmen ──
+ * Das Gegenstück wird wie im Vergleich gefunden: gleiche Kategorie, gleicher
+ * Name, bei gleichen Namen der Reihe nach. Übernommen werden Betrag und
+ * Intervall; fehlt die Zahlung im Szenario, wird sie dort angelegt. */
+
+/** Gegenstück der Zahlung p aus Szenario src in Szenario sc, oder null. */
+function counterpartIn(sc, p, src) {
+    const key = matchKey(p);
+    const nth = paymentsOf(src, p.categoryId).filter(x => matchKey(x) === key).indexOf(p);
+    return paymentsOf(sc, p.categoryId).filter(x => matchKey(x) === key)[nth] || null;
+}
+
+/** Für jedes andere Szenario: { sc, target, kind: 'same' | 'changed' | 'new' }. */
+function spreadPlan(p, src) {
+    return store.scenarios.filter(sc => sc !== src).map(sc => {
+        const target = counterpartIn(sc, p, src);
+        const same = target && Math.abs(target.amount - p.amount) < EPS && target.interval === p.interval;
+        return { sc: sc, target: target, kind: !target ? 'new' : same ? 'same' : 'changed' };
+    });
+}
+
+/** Schritte aus spreadPlan ausführen; neue Zahlungen kommen ans Ende ihrer Kategorie. */
+function spreadPayment(p, steps) {
+    steps.forEach(step => {
+        if (step.target) {
+            step.target.amount = p.amount;
+            step.target.interval = p.interval;
+            return;
+        }
+        const list = step.sc.payments;
+        let last = -1;
+        list.forEach((x, k) => { if (x.categoryId === p.categoryId) last = k; });
+        list.splice(last < 0 ? list.length : last + 1, 0, createPayment(p.categoryId, p.name, p.amount, p.interval));
+    });
+}
+
 /* ── Export / Import (JSON) ── */
 
 const EXPORT_APP = 'geldkugel';
