@@ -20,9 +20,11 @@ function renderScenarioBar() {
 function updateSummaries() {
     const sc = activeScenario();
     const n = sc.payments.length;
-    document.getElementById('sumEditor').textContent = store.categories.length +
-        (store.categories.length === 1 ? ' Kategorie' : ' Kategorien') + ' · ' + n + (n === 1 ? ' Zahlung' : ' Zahlungen') +
-        ' in „' + scenarioName(sc) + '“';
+    document.getElementById('sumEditor').textContent = n + (n === 1 ? ' Zahlung' : ' Zahlungen') + ' in „' + scenarioName(sc) + '“';
+    const inc = categoriesOf('income').length, exp = categoriesOf('expense').length, scs = store.scenarios.length;
+    document.getElementById('globalSub').textContent = scs + (scs === 1 ? ' Szenario' : ' Szenarien') + ' · ' +
+        inc + (inc === 1 ? ' Einnahmen-' : ' Einnahmen-') + ' und ' + exp + ' Ausgaben-Kategorie' + (exp === 1 ? '' : 'n');
+    document.getElementById('btnCategories').textContent = 'Kategorien (' + store.categories.length + ')';
 }
 
 function renderAll() {
@@ -269,6 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initScenarioBar();
     initImportExport();
     initEditor(onChange);
+    initCategories(onChange);
     initCompare(() => { saveStore(); renderCompare(); });
     initTooltip(['balance', 'donut', 'legend'], revealItem);
     initTooltip(['compareOut'], null);

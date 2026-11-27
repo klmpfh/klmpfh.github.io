@@ -61,7 +61,9 @@ relativ, über die eigene `src`-Angabe.
   Ohne Server: Daten liegen im Browser, Abgleich per Link oder live per WebRTC (`core.js` ist die Rechenlogik,
   `app.js` Oberfläche und Sync; PeerJS und QR-Code kommen aus `fileshare/vendor/`). Beim Öffnen einer Gruppe steht oben, was seit dem letzten Besuch neu ist (gebuchte Wiederholungen, Änderungen anderer). Beim Anlegen einer Gruppe lässt sich ein Excel-Export aus Splid (.xls) übernehmen.
 - `/geldkugel/` – Geldkugel: Monatsbudget aus Einnahmen und Ausgaben. Kategorien gelten global für alle Szenarien
-  (auch ihre Art: Einnahmen oder Ausgaben), je Szenario Zahlungen mit Betrag und Intervall (wöchentlich, zweiwöchentlich,
+  (auch ihre Art: Einnahmen oder Ausgaben) und werden nur im eigenen Dialog „Kategorien“ im Kasten „Für alle Szenarien“
+  angelegt, umbenannt, umgefärbt, sortiert und gelöscht (`js/categories.js`); dort stehen auch Export/Import, „Mit KI“ und
+  Einmal-Link. In der Eingabe eines Szenarios sind Kategorien nur Überschriften. Je Szenario Zahlungen mit Betrag und Intervall (wöchentlich, zweiwöchentlich,
   monatlich, vierteljährlich, halbjährlich, jährlich), alles auf den Monat heruntergerechnet (Betrag × Zahlungen pro Jahr ÷ 12).
   Zahlungen lassen sich am Griff ziehen (Pointer-Events, auch per Finger) oder mit ↑/↓ verschieben, auch in eine andere Kategorie.
   Bilanz je Szenario: Statuszeile (passt / reicht nicht, was offen bleibt bzw. fehlt) und gestapelte Balken Einnahmen gegen

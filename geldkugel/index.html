@@ -8,21 +8,22 @@
     <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="../assets/css/reset.css">
     <link rel="stylesheet" href="../assets/css/theme.css">
-    <link rel="stylesheet" href="style.css?v=1.4">
+    <link rel="stylesheet" href="style.css?v=1.6">
     <!-- ?v= immer zusammen mit den Versionsnummern unten ändern: Sonst läuft die neue Seite mit alten Dateien aus dem Browser-Cache. -->
     <!-- Klassische Skripte (keine ES-Module), damit die Seite auch per file:// läuft; Reihenfolge ist wichtig, main.js zuletzt. -->
-    <script src="js/state.js?v=1.4" defer></script>
-    <script src="../assets/js/sync-core.js?v=1.4" defer></script>
-    <script src="../assets/js/transfer.js?v=1.4" defer></script>
-    <script src="js/sync.js?v=1.4" defer></script>
-    <script src="js/colors.js?v=1.4" defer></script>
-    <script src="js/dialog.js?v=1.4" defer></script>
-    <script src="js/charts.js?v=1.4" defer></script>
-    <script src="js/compare.js?v=1.4" defer></script>
-    <script src="js/editor.js?v=1.4" defer></script>
-    <script src="js/transfer.js?v=1.4" defer></script>
-    <script src="js/ai.js?v=1.4" defer></script>
-    <script src="js/main.js?v=1.4" defer></script>
+    <script src="js/state.js?v=1.6" defer></script>
+    <script src="../assets/js/sync-core.js?v=1.6" defer></script>
+    <script src="../assets/js/transfer.js?v=1.6" defer></script>
+    <script src="js/sync.js?v=1.6" defer></script>
+    <script src="js/colors.js?v=1.6" defer></script>
+    <script src="js/dialog.js?v=1.6" defer></script>
+    <script src="js/charts.js?v=1.6" defer></script>
+    <script src="js/compare.js?v=1.6" defer></script>
+    <script src="js/editor.js?v=1.6" defer></script>
+    <script src="js/categories.js?v=1.6" defer></script>
+    <script src="js/transfer.js?v=1.6" defer></script>
+    <script src="js/ai.js?v=1.6" defer></script>
+    <script src="js/main.js?v=1.6" defer></script>
 </head>
 <body>
 <script src="../assets/js/nav.js"></script>
@@ -32,6 +33,23 @@
         <h1>Geldkugel</h1>
         <p>Sagt dir voraus, was dein Monat kostet – ganz ohne Hellseherei.</p>
     </header>
+
+    <section class="panel global-panel" aria-labelledby="globalTitle">
+        <div class="global-bar">
+            <div class="global-text">
+                <h2 class="panel-title" id="globalTitle">Für alle Szenarien</h2>
+                <p class="global-sub" id="globalSub"></p>
+            </div>
+            <div class="scenario-actions">
+                <button type="button" class="btn btn-primary" id="btnCategories" data-open-categories title="Kategorien anlegen, umbenennen, sortieren und löschen – gilt in allen Szenarien">Kategorien</button>
+                <button type="button" class="btn btn-ghost" id="btnExport" title="Alle Kategorien und Szenarien als JSON-Datei speichern">Export</button>
+                <button type="button" class="btn btn-ghost" id="btnImport" title="Kategorien und Szenarien aus einer JSON-Datei übernehmen">Import</button>
+                <input type="file" id="importFile" accept=".json,application/json" hidden>
+                <button type="button" class="btn btn-ghost" id="btnAi" title="Neues Szenario aus Kontoumsätzen mit einer KI erstellen">Mit KI</button>
+                <button type="button" class="btn btn-ghost" id="btnTransfer" title="Alle Szenarien und Kategorien direkt auf ein anderes Gerät übertragen oder abgleichen">Einmal-Link</button>
+            </div>
+        </div>
+    </section>
 
     <section class="panel scenario-panel">
         <div class="scenario-bar">
@@ -47,13 +65,6 @@
                 <button type="button" class="btn btn-primary" id="btnNew">+ Neu</button>
                 <button type="button" class="btn btn-ghost" id="btnDup" title="Kopie dieses Szenarios anlegen, um eine Änderung durchzuspielen">Duplizieren</button>
                 <button type="button" class="btn btn-ghost btn-danger" id="btnDel">Löschen</button>
-            </div>
-            <div class="scenario-actions scenario-io">
-                <button type="button" class="btn btn-ghost" id="btnExport" title="Alle Kategorien und Szenarien als JSON-Datei speichern">Export</button>
-                <button type="button" class="btn btn-ghost" id="btnImport" title="Kategorien und Szenarien aus einer JSON-Datei übernehmen">Import</button>
-                <input type="file" id="importFile" accept=".json,application/json" hidden>
-                <button type="button" class="btn btn-ghost" id="btnAi" title="Neues Szenario aus Kontoumsätzen mit einer KI erstellen">Mit KI</button>
-                <button type="button" class="btn btn-ghost" id="btnTransfer" title="Alle Szenarien und Kategorien direkt auf ein anderes Gerät übertragen oder abgleichen">Einmal-Link</button>
             </div>
         </div>
     </section>
@@ -76,10 +87,10 @@
         </aside>
         <section class="panel editor-panel">
             <h2 class="panel-title panel-title-row">
-                <span>Kategorien &amp; Zahlungen</span>
+                <span>Zahlungen</span>
                 <span class="panel-summary" id="sumEditor"></span>
             </h2>
-            <p class="panel-hint">Kategorien gelten für alle Szenarien – auch ob sie Einnahmen oder Ausgaben sind –, die Zahlungen nur für das gewählte. Jede Zahlung wird auf den Monat heruntergerechnet (z.&nbsp;B. wöchentlich: × 52 ÷ 12). Enter in einer Zahlung legt die nächste an; am Griff ⠿ lassen sich Zahlungen verschieben, auch in eine andere Kategorie.</p>
+            <p class="panel-hint">Die Zahlungen gelten nur für das gewählte Szenario, die Kategorien darüber für alle – sie werden unter <button type="button" class="link-btn" data-open-categories>„Kategorien“</button> verwaltet. Jede Zahlung wird auf den Monat heruntergerechnet (z.&nbsp;B. wöchentlich: × 52 ÷ 12). Enter in einer Zahlung legt die nächste an; am Griff ⠿ lassen sich Zahlungen verschieben, auch in eine andere Kategorie.</p>
             <div id="editor" class="editor"></div>
         </section>
     </div>

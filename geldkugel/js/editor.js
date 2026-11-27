@@ -1,8 +1,9 @@
 /* Geldkugel – Eingabe: Kategorien (global) mit den Zahlungen des gewählten Szenarios.
  *
- * Zwei Abschnitte: Einnahmen und Ausgaben. Name, Art (Einnahmen/Ausgaben),
- * Farbe, Reihenfolge und Löschen einer Kategorie wirken in allen Szenarien;
- * Zahlungen gehören nur zum gewählten Szenario.
+ * Zwei Abschnitte: Einnahmen und Ausgaben. Kategorien sind hier nur
+ * Überschriften für die Zahlungen des gewählten Szenarios; angelegt, geändert
+ * und gelöscht werden sie im Dialog „Kategorien“ (categories.js), weil sie für
+ * alle Szenarien gelten.
  * Tippen ändert nur Zahlen und Diagramme (onChange('soft')), der Fokus bleibt
  * im Feld. Hinzufügen, Löschen und Verschieben baut die Liste neu auf ('hard').
  *
@@ -70,38 +71,18 @@ function paymentRow(p) {
     return row;
 }
 
-function categoryBlock(cat, sc, catColors, index, count) {
+function categoryBlock(cat, sc, catColors) {
     const block = el('div', 'cat');
     block.dataset.cat = cat.id;
     block.style.setProperty('--cat-color', catColors.get(cat.id));
 
     const head = el('div', 'cat-head');
-    const swatch = iconBtn('cat-swatch', 'Farbe wählen', '');
-    const name = el('input', 'cat-name');
-    name.type = 'text';
-    name.value = cat.name;
-    name.placeholder = 'Kategorie';
-    name.autocomplete = 'off';
-    name.setAttribute('aria-label', 'Name der Kategorie (gilt in allen Szenarien)');
+    const title = el('h4', 'cat-title');
+    title.append(el('span', 'cat-dot'), el('span', 'cat-name', categoryName(cat)));
     const sum = el('span', 'cat-sum');
-    const kind = el('select', 'cat-kind');
-    kind.setAttribute('aria-label', 'Art der Kategorie (gilt in allen Szenarien)');
-    kind.title = 'Art der Kategorie – gilt in allen Szenarien';
-    [['expense', 'Ausgaben'], ['income', 'Einnahmen']].forEach(k => {
-        const o = document.createElement('option');
-        o.value = k[0];
-        o.textContent = k[1];
-        kind.appendChild(o);
-    });
-    kind.value = cat.kind;
-    const actions = el('div', 'cat-actions');
-    const up = iconBtn('icon-btn cat-up', 'Nach oben', '↑');
-    const down = iconBtn('icon-btn cat-down', 'Nach unten', '↓');
-    up.disabled = index === 0;
-    down.disabled = index === count - 1;
-    const del = iconBtn('icon-btn icon-del cat-del', 'Kategorie löschen (in allen Szenarien)', '✕');
-    actions.append(up, down, del);
-    head.append(swatch, name, sum, kind, actions);
+    const edit = iconBtn('icon-btn cat-edit', 'Kategorie „' + categoryName(cat) + '“ bearbeiten (gilt für alle Szenarien)', '✎');
+    edit.dataset.openCategories = cat.id;
+    head.append(title, sum, edit);
 
     const list = el('div', 'pay-list');
     paymentsOf(sc, cat.id).forEach(p => list.appendChild(paymentRow(p)));
@@ -114,8 +95,8 @@ function categoryBlock(cat, sc, catColors, index, count) {
 }
 
 const KIND_TEXT = {
-    income: { title: 'Einnahmen', add: '+ Einnahmen-Kategorie', empty: 'Noch keine Einnahmen-Kategorie – z. B. „Einkommen“ mit Gehalt, Nebenjob, Kindergeld.' },
-    expense: { title: 'Ausgaben', add: '+ Ausgaben-Kategorie', empty: 'Noch keine Ausgaben-Kategorie – z. B. „Wohnen“ mit Miete und Strom.' }
+    income: { title: 'Einnahmen', empty: 'Noch keine Einnahmen-Kategorie (z. B. „Einkommen“).' },
+    expense: { title: 'Ausgaben', empty: 'Noch keine Ausgaben-Kategorie (z. B. „Wohnen“).' }
 };
 
 function renderEditor() {
@@ -130,12 +111,15 @@ function renderEditor() {
         head.append(el('span', 'kind-title', KIND_TEXT[kind].title), el('span', 'kind-sum'));
         section.appendChild(head);
         const cats = categoriesOf(kind);
-        if (!cats.length) section.appendChild(el('p', 'editor-empty', KIND_TEXT[kind].empty));
-        cats.forEach((cat, i) => section.appendChild(categoryBlock(cat, sc, catColors, i, cats.length)));
-        const add = el('button', 'btn btn-add', KIND_TEXT[kind].add);
-        add.type = 'button';
-        add.dataset.addKind = kind;
-        section.appendChild(add);
+        if (!cats.length) {
+            const p = el('p', 'editor-empty', KIND_TEXT[kind].empty + ' ');
+            const open = el('button', 'link-btn', 'Unter „Kategorien“ anlegen');
+            open.type = 'button';
+            open.dataset.openCategories = '';
+            p.appendChild(open);
+            section.appendChild(p);
+        }
+        cats.forEach(cat => section.appendChild(categoryBlock(cat, sc, catColors)));
         root.appendChild(section);
     });
     updateEditorNumbers();
@@ -151,7 +135,7 @@ function updateEditorNumbers() {
         const id = block.dataset.cat;
         const n = paymentsOf(sc, id).length;
         const sum = categoryTotal(sc, id);
-        block.querySelector('.cat-sum').textContent = n ? fmtEuro(sum) + ' / Monat' : 'hier nicht genutzt';
+        block.querySelector('.cat-sum').textContent = n ? fmtEuro(sum) + ' / Monat' : 'noch keine Zahlung';
         block.classList.toggle('is-unused', !n);
     });
     document.querySelectorAll('#editor .pay-row').forEach(row => {
@@ -182,40 +166,6 @@ function revealItem(id, noScroll) {
     target.classList.add('flash');
 }
 
-/* ── Farbauswahl ── */
-
-let openPicker = null;
-
-function closeColorPicker() {
-    if (openPicker) { openPicker.remove(); openPicker = null; }
-}
-
-function openColorPicker(anchor, cat) {
-    closeColorPicker();
-    const palette = readPalette();
-    const box = el('div', 'color-picker');
-    box.setAttribute('role', 'dialog');
-    box.setAttribute('aria-label', 'Farbe für „' + categoryName(cat) + '“');
-    palette.forEach((c, i) => {
-        const b = iconBtn('color-option', 'Farbe ' + (i + 1), '');
-        b.style.background = c;
-        b.setAttribute('aria-pressed', String(cat.colorSlot === i));
-        b.addEventListener('click', () => {
-            cat.colorSlot = i;
-            closeColorPicker();
-            editorChange('hard');
-            focusIn('#editor [data-cat="' + cat.id + '"] .cat-swatch');
-        });
-        box.appendChild(b);
-    });
-    document.body.appendChild(box);
-    const r = anchor.getBoundingClientRect();
-    box.style.left = Math.max(8, Math.min(r.left + window.scrollX, window.scrollX + document.documentElement.clientWidth - box.offsetWidth - 8)) + 'px';
-    box.style.top = (r.bottom + window.scrollY + 6) + 'px';
-    openPicker = box;
-    box.querySelector('[aria-pressed="true"], .color-option').focus();
-}
-
 /* ── Ereignisse ── */
 
 function initEditor(onChange) {
@@ -226,22 +176,6 @@ function initEditor(onChange) {
     root.addEventListener('input', e => {
         const t = e.target;
         const row = t.closest('.pay-row');
-        if (t.classList.contains('cat-name')) {
-            const cat = categoryById(t.closest('.cat').dataset.cat);
-            if (cat) { cat.name = t.value; onChange('soft'); }
-            return;
-        }
-        if (t.classList.contains('cat-kind')) {
-            const cat = categoryById(t.closest('.cat').dataset.cat);
-            if (!cat) return;
-            // An das Ende des anderen Abschnitts
-            cat.kind = t.value === 'income' ? 'income' : 'expense';
-            store.categories = store.categories.filter(c => c !== cat).concat(cat);
-            onChange('hard');
-            revealItem(cat.id);
-            focusIn('#editor [data-cat="' + cat.id + '"] .cat-kind');
-            return;
-        }
         if (!row) return;
         const p = findPayment(row.dataset.pay);
         if (!p) return;
@@ -279,16 +213,9 @@ function initEditor(onChange) {
         addPayment(row.closest('.cat').dataset.cat, row.dataset.pay);
     });
 
-    root.addEventListener('click', async e => {
+    root.addEventListener('click', e => {
         const btn = e.target.closest('button');
         if (!btn) return;
-        if (btn.dataset.addKind) {
-            const cat = createCategory('', nextFreeSlot(), btn.dataset.addKind);
-            store.categories.push(cat);
-            onChange('hard');
-            focusIn('#editor [data-cat="' + cat.id + '"] .cat-name');
-            return;
-        }
         const block = btn.closest('.cat');
         const cat = block && categoryById(block.dataset.cat);
         if (!cat) return;
@@ -301,29 +228,7 @@ function initEditor(onChange) {
             sc.payments = sc.payments.filter(p => p.id !== id);
             onChange('hard');
             focusIn('#editor [data-cat="' + cat.id + '"] .btn-add-sub');
-        } else if (btn.classList.contains('cat-swatch')) {
-            e.stopPropagation();
-            openColorPicker(btn, cat);
-        } else if (btn.classList.contains('cat-up') || btn.classList.contains('cat-down')) {
-            // Mit dem Nachbarn derselben Art tauschen
-            const same = categoriesOf(cat.kind);
-            const k = same.indexOf(cat) + (btn.classList.contains('cat-up') ? -1 : 1);
-            if (k < 0 || k >= same.length) return;
-            const i = store.categories.indexOf(cat), j = store.categories.indexOf(same[k]);
-            store.categories[i] = same[k];
-            store.categories[j] = cat;
-            onChange('hard');
-            focusIn('#editor [data-cat="' + cat.id + '"] .' + (btn.classList.contains('cat-up') ? 'cat-up' : 'cat-down') + ':not(:disabled)');
-        } else if (btn.classList.contains('cat-del')) {
-            await deleteCategory(cat, btn);
         }
-    });
-
-    document.addEventListener('pointerdown', e => {
-        if (openPicker && !openPicker.contains(e.target)) closeColorPicker();
-    });
-    document.addEventListener('keydown', e => {
-        if (e.key === 'Escape' && openPicker) closeColorPicker();
     });
 
 }
@@ -518,24 +423,4 @@ function addPayment(categoryId, afterId) {
     else sc.payments.push(p);
     editorChange('hard');
     focusIn('#editor [data-pay="' + p.id + '"] .pay-name');
-}
-
-async function deleteCategory(cat, anchor) {
-    const users = store.scenarios.filter(s => paymentsOf(s, cat.id).length);
-    const count = users.reduce((n, s) => n + paymentsOf(s, cat.id).length, 0);
-    if (count) {
-        const ok = await confirmFlyover({
-            title: 'Kategorie „' + categoryName(cat) + '“ löschen?',
-            message: 'Die Kategorie gilt in allen Szenarien. Mit ihr verschwinden ' + count +
-                (count === 1 ? ' Zahlung' : ' Zahlungen') + ' aus ' +
-                users.map(s => '„' + scenarioName(s) + '“').join(', ') + '.',
-            confirmLabel: 'Löschen',
-            danger: true,
-            anchor: anchor
-        });
-        if (!ok) return;
-    }
-    store.categories = store.categories.filter(c => c !== cat);
-    store.scenarios.forEach(s => { s.payments = s.payments.filter(p => p.categoryId !== cat.id); });
-    editorChange('hard');
 }

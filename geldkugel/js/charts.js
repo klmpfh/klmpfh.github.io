@@ -84,7 +84,7 @@ function renderBalance(el, sc, catColors) {
         status.classList.add('is-none');
         icon.textContent = 'ℹ';
         text.append(strong('Noch keine Einnahmen. '),
-            'Leg unten eine Einnahmen-Kategorie an (z. B. Gehalt) – dann sagt dir die Geldkugel, ob es reicht.');
+            'Trag unten bei den Einnahmen z. B. dein Gehalt ein – dann sagt dir die Geldkugel, ob es reicht.');
     } else if (bal >= -0.5) {
         status.classList.add('is-ok');
         icon.textContent = '✓';

@@ -62,61 +62,18 @@ function createScenario(name) {
     return { id: uid(), name: name, payments: [] };
 }
 
+/** Startstand beim ersten Besuch: nur Beispielkategorien, keine Beträge. */
 function createExampleStore() {
-    const names = ['Wohnen', 'Lebensmittel', 'Mobilität', 'Versicherungen', 'Abos & Verträge', 'Freizeit'];
-    const cats = names.map((n, i) => createCategory(n, i));
-    const c = {};
-    names.forEach((n, i) => { c[n] = cats[i].id; });
-    const job = createCategory('Einkommen', 6, 'income');
-    cats.unshift(job);
-
-    const now = createScenario('Jetzt');
-    now.payments = [
-        createPayment(job.id, 'Gehalt (netto)', 1950, 'month'),
-        createPayment(job.id, 'Weihnachtsgeld', 1200, 'year'),
-        createPayment(job.id, 'Nebenjob', 200, 'month'),
-        createPayment(c.Wohnen, 'Miete (warm)', 720, 'month'),
-        createPayment(c.Wohnen, 'Strom', 45, 'month'),
-        createPayment(c.Wohnen, 'Internet', 35, 'month'),
-        createPayment(c.Lebensmittel, 'Wocheneinkauf', 75, 'week'),
-        createPayment(c.Lebensmittel, 'Kaffee unterwegs', 12, 'week'),
-        createPayment(c['Mobilität'], 'Deutschlandticket', 63, 'month'),
-        createPayment(c['Mobilität'], 'Fahrrad-Inspektion', 120, 'year'),
-        createPayment(c.Versicherungen, 'Haftpflicht', 60, 'year'),
-        createPayment(c.Versicherungen, 'Hausrat', 90, 'year'),
-        createPayment(c['Abos & Verträge'], 'Handy', 15, 'month'),
-        createPayment(c['Abos & Verträge'], 'Streaming', 13, 'month'),
-        createPayment(c['Abos & Verträge'], 'Rundfunkbeitrag', 55.08, 'quarter'),
-        createPayment(c.Freizeit, 'Sportverein', 30, 'month'),
-        createPayment(c.Freizeit, 'Ausgehen', 40, 'biweek')
-    ];
-
-    const next = createScenario('Nach dem Umzug');
-    next.payments = [
-        createPayment(job.id, 'Gehalt (netto)', 1950, 'month'),
-        createPayment(job.id, 'Weihnachtsgeld', 1200, 'year'),
-        createPayment(c.Wohnen, 'Miete (warm)', 950, 'month'),
-        createPayment(c.Wohnen, 'Strom', 55, 'month'),
-        createPayment(c.Wohnen, 'Internet', 35, 'month'),
-        createPayment(c.Lebensmittel, 'Wocheneinkauf', 75, 'week'),
-        createPayment(c.Lebensmittel, 'Kaffee unterwegs', 6, 'week'),
-        createPayment(c['Mobilität'], 'Carsharing', 60, 'month'),
-        createPayment(c['Mobilität'], 'Fahrrad-Inspektion', 120, 'year'),
-        createPayment(c.Versicherungen, 'Haftpflicht', 60, 'year'),
-        createPayment(c.Versicherungen, 'Hausrat', 120, 'year'),
-        createPayment(c['Abos & Verträge'], 'Handy', 15, 'month'),
-        createPayment(c['Abos & Verträge'], 'Streaming', 13, 'month'),
-        createPayment(c['Abos & Verträge'], 'Rundfunkbeitrag', 55.08, 'quarter'),
-        createPayment(c.Freizeit, 'Sportverein', 30, 'month'),
-        createPayment(c.Freizeit, 'Ausgehen', 30, 'biweek')
-    ];
-
+    const cats = [createCategory('Einkommen', 6, 'income')].concat(
+        ['Wohnen', 'Lebensmittel', 'Mobilität', 'Versicherungen', 'Abos & Verträge', 'Freizeit']
+            .map((n, i) => createCategory(n, i)));
+    const sc = createScenario('Mein Monat');
     return {
         version: 1,
-        activeId: now.id,
-        compare: { a: now.id, b: next.id },
+        activeId: sc.id,
+        compare: { a: sc.id, b: sc.id },
         categories: cats,
-        scenarios: [now, next]
+        scenarios: [sc]
     };
 }
 
