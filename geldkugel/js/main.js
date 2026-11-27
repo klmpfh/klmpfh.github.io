@@ -277,4 +277,5 @@ document.addEventListener('DOMContentLoaded', () => {
     initStickyCharts();
     watchOtherTabs();
     initTransfer();
+    initAiImport();
 });

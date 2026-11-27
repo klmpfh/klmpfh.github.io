@@ -63,6 +63,7 @@ relativ, über die eigene `src`-Angabe.
 - `/geldkugel/` – Geldkugel: Monatsbudget aus Einnahmen und Ausgaben. Kategorien gelten global für alle Szenarien
   (auch ihre Art: Einnahmen oder Ausgaben), je Szenario Zahlungen mit Betrag und Intervall (wöchentlich, zweiwöchentlich,
   monatlich, vierteljährlich, halbjährlich, jährlich), alles auf den Monat heruntergerechnet (Betrag × Zahlungen pro Jahr ÷ 12).
+  Zahlungen lassen sich am Griff ziehen (Pointer-Events, auch per Finger) oder mit ↑/↓ verschieben, auch in eine andere Kategorie.
   Bilanz je Szenario: Statuszeile (passt / reicht nicht, was offen bleibt bzw. fehlt) und gestapelte Balken Einnahmen gegen
   Ausgaben. Geschichteter Donut der Ausgaben (innen Kategorien, außen Zahlungen; ganzer Kreis = Einnahmen, Offenes schraffiert,
   Fehlbetrag als rote Kante) mit Legende. „Deutung“ vergleicht zwei Szenarien: Wasserfall von A nach B über die Änderung je
@@ -72,6 +73,8 @@ relativ, über die eigene `src`-Angabe.
   (hinzufügen mit Zusammenlegen gleichnamiger Kategorien oder alles ersetzen) und Übertragung zwischen Geräten per Einmal-Link
   wie in Zeitfresser und Wohnung (`js/sync.js` mit `assets/js/sync-core.js` führt zusammen – je Feld gewinnt die neuere Änderung,
   gleichnamige Kategorien beider Geräte werden eins –, `js/transfer.js` mit `assets/js/transfer.js` verbindet).
+  Neues Szenario aus Kontoumsätzen per KI: Prompt kopieren (mit den vorhandenen Kategorien, ohne Beträge), mit CSV/PDF der Bank in eine KI geben,
+  Antwort einfügen oder als Datei importieren (`js/ai.js`; der Import verträgt Text um den JSON-Block, englische Intervalle, Beträge mit Minus).
   `js/state.js` Datenmodell und Rechnen, `js/editor.js` Eingabe, `js/charts.js` Bilanz und Donut, `js/compare.js` Vergleich,
   `js/dialog.js` wie im Zeitfresser.
 - `/gone/` – gone: Verleih-Liste in beide Richtungen

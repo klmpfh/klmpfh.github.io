@@ -120,28 +120,56 @@ function createExampleStore() {
     };
 }
 
-/* ── Bereinigen (Laden, Import) ── */
+/* ── Bereinigen (Laden, Import) ──
+ * Bewusst nachsichtig, weil auch Antworten einer KI hier landen (siehe ai.js):
+ * Kennungen als Zahl, Beträge als Text oder mit Minus, Intervalle auf Englisch
+ * oder Deutsch werden verstanden. */
+
+function idOf(v) {
+    return (typeof v === 'string' && v) || (typeof v === 'number' && isFinite(v)) ? String(v) : null;
+}
+
+const INTERVAL_ALIASES = {
+    week: 'week', weekly: 'week', 'wöchentlich': 'week',
+    biweek: 'biweek', biweekly: 'biweek', fortnightly: 'biweek', 'zweiwöchentlich': 'biweek', 'alle 2 wochen': 'biweek', '14-tägig': 'biweek',
+    month: 'month', monthly: 'month', monatlich: 'month',
+    quarter: 'quarter', quarterly: 'quarter', 'vierteljährlich': 'quarter', quartal: 'quarter', 'quartalsweise': 'quarter',
+    halfyear: 'halfyear', halfyearly: 'halfyear', semiannual: 'halfyear', semiannually: 'halfyear', 'halbjährlich': 'halfyear',
+    year: 'year', yearly: 'year', annual: 'year', annually: 'year', 'jährlich': 'year'
+};
+
+function intervalOf(v) {
+    return INTERVAL_ALIASES[String(v == null ? '' : v).trim().toLowerCase()] || 'month';
+}
+
+function kindOf(v) {
+    return /^(income|einnahme|einnahmen)$/i.test(String(v == null ? '' : v).trim()) ? 'income' : 'expense';
+}
+
+function amountOf(v) {
+    const n = typeof v === 'number' ? v : typeof v === 'string' ? parseAmount(v.replace(/^[-−]/, '')) : NaN;
+    return n != null && isFinite(n) ? Math.abs(n) : 0;
+}
 
 function sanitizeCategory(raw, index) {
     if (!isObj(raw)) return null;
     return {
-        id: typeof raw.id === 'string' && raw.id ? raw.id : uid(),
+        id: idOf(raw.id) || uid(),
         name: typeof raw.name === 'string' ? raw.name : '',
         colorSlot: Number.isInteger(raw.colorSlot) ? ((raw.colorSlot % SLOT_COUNT) + SLOT_COUNT) % SLOT_COUNT : index % SLOT_COUNT,
-        kind: raw.kind === 'income' ? 'income' : 'expense',
+        kind: kindOf(raw.kind),
         pos: Number.isFinite(raw.pos) ? raw.pos : null
     };
 }
 
 function sanitizePayment(raw, catIds) {
-    if (!isObj(raw) || !catIds.has(raw.categoryId)) return null;
-    const amount = Number(raw.amount);
+    if (!isObj(raw) || !catIds.has(idOf(raw.categoryId))) return null;
     return {
-        id: typeof raw.id === 'string' && raw.id ? raw.id : uid(),
-        categoryId: raw.categoryId,
+        id: idOf(raw.id) || uid(),
+        categoryId: idOf(raw.categoryId),
         name: typeof raw.name === 'string' ? raw.name : '',
-        amount: isFinite(amount) && amount >= 0 ? amount : 0,
-        interval: INTERVAL[raw.interval] ? raw.interval : 'month',
+        amount: amountOf(raw.amount),
+        interval: intervalOf(raw.interval),
         pos: Number.isFinite(raw.pos) ? raw.pos : null
     };
 }
@@ -149,7 +177,7 @@ function sanitizePayment(raw, catIds) {
 function sanitizeScenario(raw, catIds) {
     if (!isObj(raw)) return null;
     return {
-        id: typeof raw.id === 'string' && raw.id ? raw.id : uid(),
+        id: idOf(raw.id) || uid(),
         name: typeof raw.name === 'string' ? raw.name : 'Szenario',
         pos: Number.isFinite(raw.pos) ? raw.pos : null,
         payments: Array.isArray(raw.payments) ? raw.payments.map(p => sanitizePayment(p, catIds)).filter(Boolean) : []
@@ -164,7 +192,11 @@ function sanitizeData(data) {
     const catIds = new Set(categories.map(c => c.id));
     const scenarios = (Array.isArray(data.scenarios) ? data.scenarios : []).map(s => sanitizeScenario(s, catIds)).filter(Boolean).map(fresh);
     scenarios.forEach(s => s.payments.forEach(fresh));
-    return { categories: categories, scenarios: scenarios };
+    // Zahlungen ohne gültige Kategorie fallen weg – zum Melden beim Import mitzählen.
+    const raw = (Array.isArray(data.scenarios) ? data.scenarios : [])
+        .reduce((n, s) => n + (isObj(s) && Array.isArray(s.payments) ? s.payments.length : 0), 0);
+    const kept = scenarios.reduce((n, s) => n + s.payments.length, 0);
+    return { categories: categories, scenarios: scenarios, skipped: raw - kept };
 }
 
 function loadStore() {
@@ -325,9 +357,18 @@ function storeToExport() {
 }
 
 /** Liest eine Export-Datei; liefert { categories, scenarios } oder wirft einen Error mit verständlicher Meldung. */
+/** Der JSON-Teil eines Textes: ein ```json-Block oder alles von der ersten { bis zur letzten }. */
+function extractJson(text) {
+    const s = String(text || '');
+    const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fence && fence[1].trim().charAt(0) === '{') return fence[1];
+    const a = s.indexOf('{'), b = s.lastIndexOf('}');
+    return a >= 0 && b > a ? s.slice(a, b + 1) : s;
+}
+
 function readImport(text) {
     let data;
-    try { data = JSON.parse(text); } catch (e) { throw new Error('Die Datei ist kein gültiges JSON.'); }
+    try { data = JSON.parse(extractJson(text)); } catch (e) { throw new Error('Darin steht kein gültiges JSON.'); }
     if (!isObj(data) || !Array.isArray(data.categories) || !Array.isArray(data.scenarios)) {
         throw new Error('In der Datei wurden keine Geldkugel-Daten gefunden.');
     }
@@ -344,7 +385,9 @@ function addImported(imp) {
     imp.categories.forEach(c => {
         const key = keyOf(c);
         if (byName.has(key)) { map[c.id] = byName.get(key); return; }
-        const copy = createCategory(c.name, c.colorSlot, c.kind);
+        // Farbe behalten, außer eine vorhandene Kategorie hat sie schon.
+        const slot = store.categories.some(x => x.colorSlot === c.colorSlot) ? nextFreeSlot() : c.colorSlot;
+        const copy = createCategory(c.name, slot, c.kind);
         store.categories.push(copy);
         byName.set(key, copy.id);
         map[c.id] = copy.id;
