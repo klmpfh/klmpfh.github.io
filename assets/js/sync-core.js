@@ -1,4 +1,4 @@
-/* Abgleich zweier Datenstände, gemeinsamer Kern für Wohnung und Zeitfresser
+/* Abgleich zweier Datenstände, gemeinsamer Kern für Wohnung, Zeitfresser und Geldkugel
    (ohne Oberfläche und ohne Netz).
    Jede Änderung bekommt beim Speichern einen Zeitstempel je Feld:
    stamps = { 'flats/<id>/coldRent': ms, … }. Eine Liste mit Kennungen zählt als

@@ -1,4 +1,4 @@
-/* Übertragung per Einmal-Link (PeerJS/WebRTC, ohne Oberfläche), für Wohnung und
+/* Übertragung per Einmal-Link (PeerJS/WebRTC, ohne Oberfläche), für Wohnung, Geldkugel und
    Zeitfresser: createTransfer(Kennung der Seite, Name). Beide Geräte brauchen dieselbe Seite.
    Das sendende Gerät meldet sich unter einer zufälligen Sitzungs-ID bei PeerJS an.
    Der Link enthält Sitzung und Schlüssel hinter dem #, beides geht nie an einen

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Sagt dir voraus, was dein Monat kostet: Zahlungen nach Kategorien auf ein Monatsbudget heruntergerechnet, Szenarien miteinander verglichen.">
+    <title>Geldkugel</title>
+    <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="../assets/css/reset.css">
+    <link rel="stylesheet" href="../assets/css/theme.css">
+    <link rel="stylesheet" href="style.css?v=1.2">
+    <!-- ?v= immer zusammen mit den Versionsnummern unten ändern: Sonst läuft die neue Seite mit alten Dateien aus dem Browser-Cache. -->
+    <!-- Klassische Skripte (keine ES-Module), damit die Seite auch per file:// läuft; Reihenfolge ist wichtig, main.js zuletzt. -->
+    <script src="js/state.js?v=1.2" defer></script>
+    <script src="../assets/js/sync-core.js?v=1.2" defer></script>
+    <script src="../assets/js/transfer.js?v=1.2" defer></script>
+    <script src="js/sync.js?v=1.2" defer></script>
+    <script src="js/colors.js?v=1.2" defer></script>
+    <script src="js/dialog.js?v=1.2" defer></script>
+    <script src="js/charts.js?v=1.2" defer></script>
+    <script src="js/compare.js?v=1.2" defer></script>
+    <script src="js/editor.js?v=1.2" defer></script>
+    <script src="js/transfer.js?v=1.2" defer></script>
+    <script src="js/main.js?v=1.2" defer></script>
+</head>
+<body>
+<script src="../assets/js/nav.js"></script>
+
+<div class="container">
+    <header>
+        <h1>Geldkugel</h1>
+        <p>Sagt dir voraus, was dein Monat kostet – ganz ohne Hellseherei.</p>
+    </header>
+
+    <section class="panel scenario-panel">
+        <div class="scenario-bar">
+            <div class="field">
+                <label for="scenarioSelect">Szenario</label>
+                <select id="scenarioSelect"></select>
+            </div>
+            <div class="field field-grow">
+                <label for="scenarioName">Name</label>
+                <input type="text" id="scenarioName" autocomplete="off">
+            </div>
+            <div class="scenario-actions">
+                <button type="button" class="btn btn-primary" id="btnNew">+ Neu</button>
+                <button type="button" class="btn btn-ghost" id="btnDup" title="Kopie dieses Szenarios anlegen, um eine Änderung durchzuspielen">Duplizieren</button>
+                <button type="button" class="btn btn-ghost btn-danger" id="btnDel">Löschen</button>
+            </div>
+            <div class="scenario-actions scenario-io">
+                <button type="button" class="btn btn-ghost" id="btnExport" title="Alle Kategorien und Szenarien als JSON-Datei speichern">Export</button>
+                <button type="button" class="btn btn-ghost" id="btnImport" title="Kategorien und Szenarien aus einer JSON-Datei übernehmen">Import</button>
+                <input type="file" id="importFile" accept=".json,application/json" hidden>
+                <button type="button" class="btn btn-ghost" id="btnTransfer" title="Alle Szenarien und Kategorien direkt auf ein anderes Gerät übertragen oder abgleichen">Einmal-Link</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="panel balance-panel">
+        <h2 class="panel-title">Bilanz pro Monat</h2>
+        <div id="balance" class="balance"></div>
+    </section>
+
+    <div class="layout">
+        <aside class="chart-panel">
+            <section class="panel">
+                <h2 class="panel-title">Ausgaben</h2>
+                <div class="donut-wrap">
+                    <svg id="donut" viewBox="0 0 320 320" role="img"></svg>
+                </div>
+                <p class="donut-key" id="donutKey"></p>
+                <div id="legend" class="legend"></div>
+            </section>
+        </aside>
+        <section class="panel editor-panel">
+            <h2 class="panel-title panel-title-row">
+                <span>Kategorien &amp; Zahlungen</span>
+                <span class="panel-summary" id="sumEditor"></span>
+            </h2>
+            <p class="panel-hint">Kategorien gelten für alle Szenarien – auch ob sie Einnahmen oder Ausgaben sind –, die Zahlungen nur für das gewählte. Jede Zahlung wird auf den Monat heruntergerechnet (z.&nbsp;B. wöchentlich: × 52 ÷ 12). Enter in einer Zahlung legt die nächste an.</p>
+            <div id="editor" class="editor"></div>
+        </section>
+    </div>
+
+    <section class="panel compare-panel">
+        <h2 class="panel-title">Deutung – zwei Szenarien im Vergleich</h2>
+        <div class="compare-bar">
+            <div class="field">
+                <label for="cmpA">Von</label>
+                <select id="cmpA"></select>
+            </div>
+            <button type="button" class="btn btn-ghost cmp-swap" id="cmpSwap" title="Richtung umkehren" aria-label="Richtung umkehren">⇄</button>
+            <div class="field">
+                <label for="cmpB">Nach</label>
+                <select id="cmpB"></select>
+            </div>
+        </div>
+        <div id="compareOut" class="compare-out"></div>
+    </section>
+</div>
+
+<div id="tooltip" class="tooltip" hidden></div>
+</body>
+</html>

@@ -74,6 +74,7 @@
         { key: 'abz',           href: 'abz/',           label: 'Arbeitszeit-Tracker', letter: 'a' },
         { key: 'choose',        href: 'choose/',        label: 'Choose Wisely',      letter: 'c' },
         { key: 'fileshare',     href: 'fileshare/',     label: 'Fileshare',          letter: 'f' },
+        { key: 'geldkugel',     href: 'geldkugel/',     label: 'Geldkugel',          letter: '€' },
         { key: 'gone',          href: 'gone/',          label: 'gone',               letter: 'g' },
         { key: 'ical',          href: 'ical/',          label: 'iCal Terminsuche',   letter: 'i' },
         { key: 'knallbum',      href: 'knallbum/',      label: 'Knall Bumm',         letter: 'k' },

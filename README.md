@@ -60,6 +60,20 @@ relativ, über die eigene `src`-Angabe.
 - `/kwidt/` – Kwidt: Teilt gemeinsame Ausgaben in Gruppen auf (gleich, Beträge, Prozent, Anteile, Korrektur).
   Ohne Server: Daten liegen im Browser, Abgleich per Link oder live per WebRTC (`core.js` ist die Rechenlogik,
   `app.js` Oberfläche und Sync; PeerJS und QR-Code kommen aus `fileshare/vendor/`). Beim Öffnen einer Gruppe steht oben, was seit dem letzten Besuch neu ist (gebuchte Wiederholungen, Änderungen anderer). Beim Anlegen einer Gruppe lässt sich ein Excel-Export aus Splid (.xls) übernehmen.
+- `/geldkugel/` – Geldkugel: Monatsbudget aus Einnahmen und Ausgaben. Kategorien gelten global für alle Szenarien
+  (auch ihre Art: Einnahmen oder Ausgaben), je Szenario Zahlungen mit Betrag und Intervall (wöchentlich, zweiwöchentlich,
+  monatlich, vierteljährlich, halbjährlich, jährlich), alles auf den Monat heruntergerechnet (Betrag × Zahlungen pro Jahr ÷ 12).
+  Bilanz je Szenario: Statuszeile (passt / reicht nicht, was offen bleibt bzw. fehlt) und gestapelte Balken Einnahmen gegen
+  Ausgaben. Geschichteter Donut der Ausgaben (innen Kategorien, außen Zahlungen; ganzer Kreis = Einnahmen, Offenes schraffiert,
+  Fehlbetrag als rote Kante) mit Legende. „Deutung“ vergleicht zwei Szenarien: Wasserfall von A nach B über die Änderung je
+  Kategorie – mit Einnahmen für das, was am Monatsende bleibt, sonst für die Ausgaben (rot = weniger übrig, blau = mehr übrig) –,
+  dazu Tabelle getrennt nach Einnahmen und Ausgaben mit Differenzbalken und den Zahlungen, die dazukommen, wegfallen oder sich ändern
+  (Zuordnung über den Namen innerhalb der Kategorie). Daten im localStorage, Export/Import aller Szenarien samt Kategorien als JSON
+  (hinzufügen mit Zusammenlegen gleichnamiger Kategorien oder alles ersetzen) und Übertragung zwischen Geräten per Einmal-Link
+  wie in Zeitfresser und Wohnung (`js/sync.js` mit `assets/js/sync-core.js` führt zusammen – je Feld gewinnt die neuere Änderung,
+  gleichnamige Kategorien beider Geräte werden eins –, `js/transfer.js` mit `assets/js/transfer.js` verbindet).
+  `js/state.js` Datenmodell und Rechnen, `js/editor.js` Eingabe, `js/charts.js` Bilanz und Donut, `js/compare.js` Vergleich,
+  `js/dialog.js` wie im Zeitfresser.
 - `/gone/` – gone: Verleih-Liste in beide Richtungen
   (Schalter „Von mir“ / „An mich“): was, wann, an wen bzw. von wem, bis wann geplant.
   Status (offen/fällig/überfällig/zurück), Filter und Suche. Daten liegen nur im localStorage des Browsers,
